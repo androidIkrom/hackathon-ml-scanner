@@ -18,14 +18,40 @@ class ItemEnrollmentTest {
         val g = ItemEnrollmentGuide()
         assertEquals(12, g.total)
         assertEquals(ItemStep.STILL, g.step)
-        repeat(3) { assertFalse(g.add()) }
-        assertTrue(g.add())
+        repeat(3) { assertFalse(g.add(0.5f)) }
+        assertTrue(g.add(0.5f))
         assertEquals(ItemStep.LEFT, g.step)
-        repeat(8) { g.add() }
+        repeat(4) { g.add(0.6f) }
+        assertEquals(ItemStep.RIGHT, g.step)
+        repeat(4) { g.add(0.4f) }
         assertTrue(g.isDone)
         assertNull(g.step)
         assertEquals(100, g.percent())
-        assertFalse(g.add())
+        assertFalse(g.add(0.5f))
+    }
+
+    @Test fun standingStillNeverFinishes() {
+        val g = ItemEnrollmentGuide()
+        repeat(4) { g.add(0.5f) }
+        repeat(20) { assertFalse(g.add(0.53f)) } // within 0.08 of where it was held
+        assertEquals(ItemStep.LEFT, g.step)
+        assertEquals(4, g.taken)
+    }
+
+    @Test fun leftAndRightNeedTheItemToShiftTheRightWay() {
+        val g = ItemEnrollmentGuide()
+        g.add(0.4f); g.add(0.5f); g.add(0.5f); g.add(0.6f)
+        assertEquals(0.5f, g.stillCenterX!!, 1e-6f)
+        // Phone moved left: the item moves right in the image.
+        assertFalse(g.accepts(0.42f))
+        assertFalse(g.accepts(0.57f))
+        assertTrue(g.accepts(0.59f))
+        repeat(4) { assertTrue(g.accepts(0.6f)); g.add(0.6f) }
+        // Phone moved right: the item moves left.
+        assertEquals(ItemStep.RIGHT, g.step)
+        assertFalse(g.accepts(0.6f))
+        assertTrue(g.accepts(0.41f))
+        assertEquals(0.08f, ItemEnrollmentGuide.MIN_SHIFT, 0f)
     }
 
     @Test fun centerPickPrefersTheMiddleAndIgnoresTinyBoxes() {
