@@ -253,15 +253,16 @@ object VoiceCommandParser {
 
     // 6 ------------------------------------------------------------------------------------------------
     private fun action(s: Said): VoiceCommand? = when {
-        s.has("stop", "cancel", "pause", "enough", "quiet") ||
-            s.ko("멈춰", "멈춤", "정지", "그만", "중지", "스톱", "취소") -> VoiceCommand.Stop
+        s.has("stop", "cancel", "pause", "enough", "quiet", "halt", "silence", "shut", "finish") ||
+            s.ko("멈춰", "멈춤", "정지", "그만", "중지", "스톱", "취소", "조용", "끝") -> VoiceCommand.Stop
         s.seq("switch", "camera") || s.seq("flip", "camera") || s.seq("change", "camera") ||
             s.seq("front", "camera") || s.seq("back", "camera") || s.seq("rear", "camera") || s.has("selfie") ||
             s.ko("카메라전환", "카메라바꿔", "카메라바꾸", "전면카메라", "후면카메라", "셀카") -> VoiceCommand.SwitchCamera
         s.has("read", "text", "qr", "barcode", "code") ||
             s.ko("글자", "읽어", "텍스트", "큐알", "바코드") -> VoiceCommand.ReadText
         s.has("delete", "remove", "erase") || s.ko("삭제", "지워", "지우") -> VoiceCommand.Delete
-        s.has("back", "previous") || s.ko("뒤로", "이전", "돌아가") -> VoiceCommand.Back
+        s.has("back", "previous", "exit", "close", "leave") ||
+            s.ko("뒤로", "이전", "돌아가", "나가", "닫아") -> VoiceCommand.Back
         else -> null
     }
 

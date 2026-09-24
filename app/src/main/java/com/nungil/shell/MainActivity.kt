@@ -11,6 +11,7 @@ import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -174,6 +175,19 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             onHeard = ::onHeard,
             onProblem = ::onVoiceProblem,
         )
+        // Leaving a screen by any back (toolbar, gesture, button) silences what it was still saying.
+        binding.toolbar.setNavigationOnClickListener {
+            silenceAll()
+            navController.navigateUp()
+        }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                silenceAll()
+                isEnabled = false
+                onBackPressedDispatcher.onBackPressed()
+                isEnabled = true
+            }
+        })
         prefs.takePendingAnnouncement()?.let { tts.say(it) }
         navController.addOnDestinationChangedListener { _, destination, _ ->
             if (prefs.learnerOn) tts.say(ScreenHelp.forScreen(resources.getResourceEntryName(destination.id), lang))
@@ -331,19 +345,26 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     private fun perform(route: Route) {
         when (route) {
-            is Route.Open -> open(route.dest)
-            Route.GoBack -> back()
+            is Route.Open -> {
+                silenceAll()
+                open(route.dest)
+            }
+            Route.GoBack -> {
+                silenceAll()
+                back()
+            }
             Route.RepeatLast -> if (!tts.repeatLast()) say(Phrase.NOTHING_TO_REPEAT)
             is Route.SpeakHelp -> tts.sayNow(helpText(route.topic))
             is Route.SetLearner -> setLearner(route.on)
             Route.StopListening -> setVoiceOn(false)
             is Route.SwitchLanguage -> setLanguage(AppLanguage.forLang(route.lang))
             is Route.OpenAndSay -> {
+                silenceAll()
                 open(route.dest)
                 say(route.phrase)
             }
             is Route.Say -> say(route.phrase)
-            Route.StopSpeaking -> tts.stop()
+            Route.StopSpeaking -> silenceAll()
         }
     }
 
@@ -463,6 +484,8 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     /** "Eye stop": every sound stops and only the wake word is answered until it is said again. */
     private fun goToSleep() {
         Log.i(TAG, "Asleep")
+        // Whatever the screen is doing (a scan, a search) stops too, then every sound.
+        (currentScreen() as? VoiceHandler)?.onVoiceCommand(VoiceCommand.Stop)
         awakeState.value = false
         dictation = null
         dictationOwner = null
