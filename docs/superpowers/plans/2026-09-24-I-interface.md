@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status (2026-09-25):** all tasks I1–I10 are done and merged. After they ran, the voice input, the
+> mic buttons, the coverage ring and the caption bar were changed from device testing. For those parts
+> **the code in the repository is the source of truth**, not the code blocks below. The changes are
+> listed in "Changes after execution" at the end of this file.
+
 **Goal:** Everything the user sees and hears in Nungil: a Korean-style design system with light, dark and high-contrast themes, the Home/Settings/History/Onboarding screens, one speech queue, haptics and beeps, and English + Korean voice commands with an always-on microphone.
 
 **Architecture:** Pure rules live in `core/ui` and `core/voice` (no Android imports, JVM-tested); Android code in `speech/` (TTS, vibration, tones, recognizer, voice guide), `design/` (components) and `shell/` (activity, screens, prefs). `MainActivity` implements the frozen `AppServices`/`AppNavigator` contract that A and Y call.
@@ -7233,3 +7238,40 @@ Open a pull request into `main`; wait for CI (`check`) to pass and one review, t
 5. Every icon-only control has a content description; every touch target is at least 64 dp.
 6. Speech goes through `services().speaker`; no screen creates its own `TextToSpeech` or `SpeechRecognizer`.
 7. Screenshot in the PR for light, dark and high contrast, and one at the largest font size.
+
+---
+
+## Changes after execution
+
+Found on real phones (Infinix X6880 on Android 15, Galaxy S10+ on Android 12) after I1–I10 were merged.
+Each row names the change, why it was needed and where it lives. Every change has unit tests where the
+logic is pure.
+
+| Change | Why | Files | Merged in |
+|---|---|---|---|
+| **The microphone listens the whole time the app is open**, including while the app talks. It listens again 100–250 ms after each phrase, silence no longer counts as an error, and voice is on by default. | Before, the microphone waited up to 15 s for the app to stop speaking and then cut the app off, so it felt "not always on". | `core/ui/RecognizerPolicy.kt`, `speech/VoiceInput.kt`, `shell/AppPrefs.kt` | commit `5329791` |
+| **The app goes quiet when the user talks** (barge-in). Any word the app is not saying stops speech and beeps until the phrase ends. The app's own voice heard by the microphone is ignored (`VoiceBargeIn.isEcho`). | "When the user speaks, every other sound must stop, and the user must never be cut off." | `core/ui/VoiceBargeIn.kt`, `speech/TtsSpeaker.kt` (`holdForUser`, `resumeAfterUser`, `recentSpeech`), `speech/ToneBeeper.kt` | `5329791` |
+| **The system beep is replaced by the app's own chime**: two soft notes, rising for on and falling for off. The recognizer's start and end beeps are muted for at most 2 s. | The recognizer beeped on every restart. | `core/ui/ChimeSynth.kt`, `speech/MicChime.kt`, `speech/EarconMuter.kt` | `5329791` |
+| "I did not understand" is said **at most once every 10 s**. | An always-on microphone also hears people nearby. | `shell/MainActivity.kt`, `RecognizerPolicy.NOT_UNDERSTOOD_GAP_MS` | `5329791` |
+| **Any microphone button silences every sound** and keeps it quiet for up to 6 s while the user talks. The spoken "voice on/off" is replaced by the chime. Home: a tap means "speak", a long press turns voice off. | Pressing the mic did not stop the onboarding instructions. | `MainActivity.talkNow`, `VoiceInput.talkNow`, `shell/HomeFragment.kt`, `home_mic_speak` string | commit `85f90ff` |
+| **Wake word**: "Eye" (Korean "눈길" / "눈길아") wakes the app and "Eye stop" puts it to sleep. "Eye, saved" wakes it and runs the command. While asleep only the wake word is answered, and both words work in both languages. | Requested so the app acts only when addressed, like a smart speaker. | `core/voice/WakeWord.kt`, `MainActivity.onHeard`, `home_mic_asleep`, onboarding strings, `OnboardingText.intro` | commit `a1de0ff` |
+| **Stop and back also silence the app.** Back (by voice, toolbar or gesture), opening another screen and "stop" all stop speech and beeps. "Eye stop" also sends Stop to the current screen. There are more stop and back words (cancel, exit, close, 조용히 해, 나가, 닫아). | "Stop" or "back" during a scan left announcements running. | `shell/MainActivity.kt`, `core/voice/VoiceCommandParser.kt` | PR #4 |
+| **Figma plugin** that builds the `Nungil UI` file from the app's tokens. | I1 step 2 without hand-drawing every screen. | `docs/design/figma-plugin/`, `docs/design/ui-guide.md` | PR #6 |
+| **The coverage ring sits on a card-coloured disc.** The caption bar hides when empty and shows at most 3 lines. Home's button row is not baseline-aligned. | The percent was unreadable over the camera image; a long intro pushed the screen content away; a two-line label was cut off. | `design/CoverageRingView.kt`, `res-i/layout/activity_main.xml`, `res-i/layout/home_fragment.xml` | PR #8 |
+| **Demo script** and `DemoCommandsTest`. | Pins every demo phrase in English and Korean. | `docs/design/demo-script.md`, `app/src/test/java/com/nungil/core/voice/DemoCommandsTest.kt` | PR #10 |
+
+Numbers added after execution, each pinned by a test:
+
+| Name | Value |
+|---|---|
+| `DELAY_AFTER_ENABLE_MS` | 400 ms |
+| `DELAY_AFTER_COMMAND_MS` | 250 ms |
+| `DELAY_AFTER_SILENCE_MS` | 100 ms |
+| `HOLD_SAFETY_MS` | 10 s |
+| `TALK_WINDOW_MS` | 6 s |
+| `MUTE_TAIL_MS` | 300 ms |
+| `MUTE_MAX_MS` | 2 s |
+| `NOT_UNDERSTOOD_GAP_MS` | 10 s |
+| `VoiceBargeIn.MIN_ECHO_WORDS` | 3 |
+| `VoiceBargeIn.ECHO_SHARE` | 0.7 |
+| `ChimeSynth` notes | 660 and 990 Hz, 90 ms each, amplitude 0.35 |
