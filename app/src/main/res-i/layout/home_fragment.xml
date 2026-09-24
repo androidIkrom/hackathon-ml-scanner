@@ -20,10 +20,16 @@
             android:orientation="vertical"
             android:paddingBottom="@dimen/ng_gap_large">
 
+            <!-- Y's clock above the greeting; tap to hear the time and date. -->
+            <com.nungil.weather.ClockLabel
+                android:id="@+id/home_clock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ng_gap" />
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/ng_gap"
                 android:text="@string/home_greeting"
                 android:textAppearance="@style/TextAppearance.Nungil.Body"
                 android:textColor="?attr/ngTextSub" />

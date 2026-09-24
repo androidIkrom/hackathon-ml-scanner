@@ -11,9 +11,18 @@
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
+        android:layout_height="wrap_content"
+        android:minHeight="?attr/actionBarSize"
         android:background="?attr/ngBackground"
-        app:titleTextAppearance="@style/TextAppearance.Nungil.Headline" />
+        app:titleTextAppearance="@style/TextAppearance.Nungil.Headline">
+
+        <!-- Y's weather and today's date, top right on every screen; tap to hear the full report. -->
+        <com.nungil.weather.WeatherLabel
+            android:id="@+id/app_weather"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|center_vertical" />
+    </com.google.android.material.appbar.MaterialToolbar>
 
     <androidx.fragment.app.FragmentContainerView
         android:id="@+id/nav_host"
