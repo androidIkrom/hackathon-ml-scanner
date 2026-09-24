@@ -23,8 +23,8 @@
     <string name="person_rename_speak">말하기</string>
     <string name="person_ok">저장</string>
     <string name="person_cancel">취소</string>
-    <string name="person_delete_title">%1$s 님을 지울까요?</string>
-    <string name="person_delete_body">이 휴대폰에서 얼굴 정보가 지워져요.</string>
+    <string name="person_delete_confirm">한 번 더 누르면 삭제돼요</string>
+    <string name="person_delete_tap_again">지우려면 삭제를 한 번 더 눌러 주세요.</string>
     <string name="person_deleted">지웠어요.</string>
     <string name="person_renamed">새 이름: %1$s.</string>
     <string name="person_delete_again">지우려면 한 번 더 삭제라고 말해 주세요.</string>

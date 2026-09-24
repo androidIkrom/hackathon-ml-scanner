@@ -24,8 +24,8 @@
     <string name="item_rename_speak">Say it</string>
     <string name="item_ok">Save</string>
     <string name="item_cancel">Cancel</string>
-    <string name="item_delete_title">Delete %1$s?</string>
-    <string name="item_delete_body">Its samples are removed from this phone.</string>
+    <string name="item_delete_confirm">Press again to delete</string>
+    <string name="item_delete_tap_again">Press delete again to confirm.</string>
     <string name="item_deleted">Deleted.</string>
     <string name="item_renamed">New name: %1$s.</string>
     <string name="item_delete_again">Say delete again to confirm.</string>

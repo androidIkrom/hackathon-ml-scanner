@@ -23,8 +23,8 @@
     <string name="person_rename_speak">Say it</string>
     <string name="person_ok">Save</string>
     <string name="person_cancel">Cancel</string>
-    <string name="person_delete_title">Delete %1$s?</string>
-    <string name="person_delete_body">Their face samples are removed from this phone.</string>
+    <string name="person_delete_confirm">Press again to delete</string>
+    <string name="person_delete_tap_again">Press delete again to confirm.</string>
     <string name="person_deleted">Deleted.</string>
     <string name="person_renamed">New name: %1$s.</string>
     <string name="person_delete_again">Say delete again to confirm.</string>

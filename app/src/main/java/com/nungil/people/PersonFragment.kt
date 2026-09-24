@@ -126,14 +126,17 @@ class PersonFragment : Fragment(), VoiceHandler {
         services.speaker.say(getString(R.string.person_renamed, name))
     }
 
+    /** The Delete button, like the voice command, deletes only when pressed twice within ConfirmWindow's 5 s. */
     private fun askDelete() {
-        val p = person ?: return
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle(getString(R.string.person_delete_title, p.name))
-            .setMessage(R.string.person_delete_body)
-            .setPositiveButton(R.string.person_delete) { _, _ -> delete() }
-            .setNegativeButton(R.string.person_cancel, null)
-            .show()
+        if (person == null) return
+        if (confirm.press(SystemClock.elapsedRealtime())) {
+            delete()
+            return
+        }
+        val button = binding.personDelete
+        button.setText(R.string.person_delete_confirm)
+        button.postDelayed({ _binding?.personDelete?.setText(R.string.person_delete) }, ConfirmWindow.WINDOW_MS)
+        services.speaker.say(getString(R.string.person_delete_tap_again))
     }
 
     private fun delete() {
