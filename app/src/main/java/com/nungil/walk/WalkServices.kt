@@ -148,8 +148,17 @@ class OrsRouteSource(private val key: String) : RouteSource {
         return OrsJson.parseGeocode(body, near)
     }
 
-    /** (HTTP code, body), or null on a network failure. */
-    private fun request(url: String, method: String, body: String?): Pair<Int, String>? = try {
+    /**
+     * (HTTP code, body), or null on a network failure. One retry after [RETRY_MS]: walking outdoors the
+     * phone hops between Wi-Fi networks and a request in the gap fails with UnknownHostException.
+     */
+    private fun request(url: String, method: String, body: String?): Pair<Int, String>? =
+        requestOnce(url, method, body) ?: run {
+            Thread.sleep(RETRY_MS)
+            requestOnce(url, method, body)
+        }
+
+    private fun requestOnce(url: String, method: String, body: String?): Pair<Int, String>? = try {
         val c = URL(url).openConnection() as HttpURLConnection
         try {
             c.requestMethod = method
@@ -176,6 +185,7 @@ class OrsRouteSource(private val key: String) : RouteSource {
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
     companion object {
+        const val RETRY_MS = 2_000L
         const val TAG = "Nungil"
         const val DIRECTIONS_URL = "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson"
         const val GEOCODE_URL = "https://api.heigit.org/openrouteservice/geocode/search"

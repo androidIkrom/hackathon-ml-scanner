@@ -237,7 +237,10 @@ class WalkVision(
             // Nothing behind a close wall can be seen: a "floor change" beyond it is the wall's own noise.
             val wallAt = if (aheadBlocked) beep else null
             if (floor != null && wallAt != null && floor.distanceM > wallAt - BEHIND_WALL_MARGIN_M) floor = null
-            floor?.let { alerts.add(Alert(AlertKind.FLOOR, "floor:${it.change}", WalkPhrases.floor(it.change, it.distanceM, stepM, l))) }
+            floor?.let {
+                val text = WalkPhrases.floor(it.change, it.distanceM, stepM, l)
+                alerts.add(Alert(AlertKind.FLOOR, "floor:${it.change}", text, topic = "floor", level = WalkPhrases.distanceLevel(it.distanceM, stepM)))
+            }
         } else if (depthExpected) {
             if (loggedFrames % LOG_EVERY == 0) Log.i(TAG, "Walk depth: none this frame (not tracking or not ready)")
             // Right in front of a plain wall ARCore loses tracking and depth: that is "could not measure", not "clear".
@@ -263,7 +266,8 @@ class WalkVision(
                 hazardAhead = true
                 if (d != null) beep = minOf(beep ?: d, d)
             }
-            alerts.add(Alert(AlertKind.HAZARD, "hazard:$label:$zone", WalkPhrases.hazard(label, zone, d, stepM, l)))
+            val level = d?.let { WalkPhrases.distanceLevel(it, stepM) } ?: Alert.FAR
+            alerts.add(Alert(AlertKind.HAZARD, "hazard:$label:$zone", WalkPhrases.hazard(label, zone, d, stepM, l), topic = "hazard:$label", level = level))
         }
 
         if (!aheadBlocked) wallLevel = Int.MAX_VALUE
