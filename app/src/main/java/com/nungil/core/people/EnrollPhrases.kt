@@ -37,6 +37,27 @@ object EnrollPhrases {
         Lang.KO -> "다 됐어요. ${Josa.eulReul(name)} 기억할게요."
     }
 
+    /** What to change when a seen face was not taken for [pose]; REPEAT says the pose's prompt again. */
+    fun hint(hint: PoseHint, pose: Pose, lang: Lang): String {
+        val tilt = pose == Pose.UP || pose == Pose.DOWN
+        return when (lang) {
+            Lang.EN -> when (hint) {
+                PoseHint.CLOSER -> "Come a little closer."
+                PoseHint.MORE -> if (tilt) "Tilt a little more." else "Turn a little more."
+                PoseHint.LESS -> if (tilt) "Too far. Tilt back a little." else "Too far. Turn back a little."
+                PoseHint.OTHER_SIDE -> "The other side, please."
+                PoseHint.REPEAT -> prompt(pose, lang)
+            }
+            Lang.KO -> when (hint) {
+                PoseHint.CLOSER -> "조금 더 가까이 와 주세요."
+                PoseHint.MORE -> if (tilt) "조금 더 기울여 주세요." else "조금 더 돌려 주세요."
+                PoseHint.LESS -> if (tilt) "너무 많이 기울였어요. 조금만 돌아와 주세요." else "너무 많이 돌렸어요. 조금만 돌아와 주세요."
+                PoseHint.OTHER_SIDE -> "반대쪽으로 돌려 주세요."
+                PoseHint.REPEAT -> prompt(pose, lang)
+            }
+        }
+    }
+
     fun noFace(lang: Lang): String = when (lang) {
         Lang.EN -> "I can't see a face. Hold the phone at face height."
         Lang.KO -> "얼굴이 보이지 않아요. 휴대폰을 얼굴 높이로 들어 주세요."

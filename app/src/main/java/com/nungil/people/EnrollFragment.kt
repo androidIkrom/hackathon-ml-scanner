@@ -27,7 +27,6 @@ import com.nungil.contract.app.VoiceHandler
 import com.nungil.contract.app.services
 import com.nungil.core.people.EnrollPhrases
 import com.nungil.core.people.EnrollmentGuide
-import com.nungil.core.people.FaceQuality
 import com.nungil.core.people.Pose
 import com.nungil.core.people.VectorBytes
 import com.nungil.data.AppDatabase
@@ -223,7 +222,16 @@ class EnrollFragment : Fragment(), VoiceHandler {
         val yaw = face.headEulerAngleY
         val pitch = face.headEulerAngleX
         val box = face.boundingBox
-        if (!FaceQuality.usable(min(box.width(), box.height()), yaw, pitch) || !guide.accepts(yaw, pitch)) return
+        val hint = guide.hint(min(box.width(), box.height()), yaw, pitch)
+        if (hint != null) {
+            // Seen but not taken: after a quiet spell, say what to change (and log it for tuning).
+            if (now - lastSampleMs > NO_FACE_HINT_MS && now - lastHintMs > NO_FACE_HINT_MS) {
+                lastHintMs = now
+                Log.i(TAG, "Enrol ${guide.pose}: $hint (yaw=$yaw pitch=$pitch size=${min(box.width(), box.height())})")
+                guide.pose?.let { services.speaker.say(EnrollPhrases.hint(hint, it, lang)) }
+            }
+            return
+        }
         val vector = embedder.embed(bitmap, face) ?: return
         lastSampleMs = now
         if (photo == null && guide.pose == Pose.STRAIGHT) photo = FaceCrops.crop(bitmap, face)

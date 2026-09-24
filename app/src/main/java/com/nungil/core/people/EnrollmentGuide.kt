@@ -5,6 +5,9 @@ import kotlin.math.abs
 /** The five head poses of face enrolment, in the order they are collected. */
 enum class Pose { STRAIGHT, LEFT, RIGHT, UP, DOWN }
 
+/** Why a seen face was not taken, so the user can be told what to change. */
+enum class PoseHint { CLOSER, MORE, LESS, OTHER_SIDE, REPEAT }
+
 /**
  * Collects [samplesPerPose] samples for each of the five poses (20 by default), gating each pose on ML Kit's
  * head angles: straight |yaw| and |pitch| < 10; left/right |yaw| > 20; up pitch > 12; down pitch < -12.
@@ -41,6 +44,34 @@ class EnrollmentGuide(val samplesPerPose: Int = SAMPLES_PER_POSE) {
         if (current == Pose.LEFT && firstSideSign == 0) firstSideSign = sign(yawDeg)
         counts[current.ordinal]++
         return pose != current
+    }
+
+    /**
+     * Why a face of [sizePx] at these angles is not taken for the current pose, or null when it is (it passes
+     * both [FaceQuality.usable] and [accepts]). A pose turned past FaceQuality's limit gives LESS, not enough MORE.
+     */
+    fun hint(sizePx: Int, yawDeg: Float, pitchDeg: Float): PoseHint? {
+        val current = pose ?: return null
+        if (FaceQuality.usable(sizePx, yawDeg, pitchDeg) && accepts(yawDeg, pitchDeg)) return null
+        if (sizePx < FaceQuality.MIN_SIZE_PX) return PoseHint.CLOSER
+        val yaw = abs(yawDeg)
+        return when (current) {
+            Pose.STRAIGHT -> PoseHint.REPEAT
+            Pose.LEFT, Pose.RIGHT -> when {
+                yaw > FaceQuality.MAX_YAW_DEG -> PoseHint.LESS
+                current == Pose.RIGHT && yaw > SIDE_MIN_YAW_DEG && sign(yawDeg) != -firstSideSign -> PoseHint.OTHER_SIDE
+                yaw <= SIDE_MIN_YAW_DEG -> PoseHint.MORE
+                else -> PoseHint.REPEAT
+            }
+            Pose.UP, Pose.DOWN -> {
+                val toward = if (current == Pose.UP) pitchDeg else -pitchDeg
+                when {
+                    abs(pitchDeg) > FaceQuality.MAX_PITCH_DEG && toward > 0f -> PoseHint.LESS
+                    toward <= TILT_MIN_PITCH_DEG -> PoseHint.MORE
+                    else -> PoseHint.REPEAT
+                }
+            }
+        }
     }
 
     /** 0..100, for the progress bar and the spoken percent. */

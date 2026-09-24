@@ -78,4 +78,37 @@ class EnrollmentGuideTest {
         assertEquals("다 됐어요. 민준을 기억할게요.", EnrollPhrases.done("민준", Lang.KO))
         assertEquals("다 됐어요. 지아를 기억할게요.", EnrollPhrases.done("지아", Lang.KO))
     }
+
+    @Test fun hintsSayWhatToChange() {
+        assertNull(g.hint(100, 0f, 0f))
+        assertEquals(PoseHint.CLOSER, g.hint(40, 0f, 0f))
+        assertEquals(PoseHint.REPEAT, g.hint(100, 15f, 0f))
+        fill(0f, 0f)
+        // One side: 20 < |yaw| <= 35 is taken.
+        assertEquals(PoseHint.MORE, g.hint(100, 15f, 0f))
+        assertEquals(PoseHint.LESS, g.hint(100, -50f, 0f))
+        assertNull(g.hint(100, -30f, 0f))
+        fill(-30f, 0f)
+        // The other side must have the opposite sign.
+        assertEquals(PoseHint.OTHER_SIDE, g.hint(100, -30f, 0f))
+        assertEquals(PoseHint.LESS, g.hint(100, 45f, 0f))
+        assertNull(g.hint(100, 30f, 0f))
+        fill(30f, 0f)
+        // Up: 12 < pitch <= 25.
+        assertEquals(PoseHint.MORE, g.hint(100, 0f, 5f))
+        assertEquals(PoseHint.LESS, g.hint(100, 0f, 30f))
+        assertEquals(PoseHint.MORE, g.hint(100, 0f, -20f))
+        fill(0f, 20f)
+        // Down: -25 <= pitch < -12.
+        assertEquals(PoseHint.MORE, g.hint(100, 0f, -5f))
+        assertEquals(PoseHint.LESS, g.hint(100, 0f, -30f))
+        assertNull(g.hint(100, 0f, -20f))
+    }
+
+    @Test fun hintPhrases() {
+        assertEquals("Turn a little more.", EnrollPhrases.hint(PoseHint.MORE, Pose.LEFT, Lang.EN))
+        assertEquals("Too far. Tilt back a little.", EnrollPhrases.hint(PoseHint.LESS, Pose.UP, Lang.EN))
+        assertEquals("너무 많이 돌렸어요. 조금만 돌아와 주세요.", EnrollPhrases.hint(PoseHint.LESS, Pose.RIGHT, Lang.KO))
+        assertEquals(EnrollPhrases.prompt(Pose.DOWN, Lang.KO), EnrollPhrases.hint(PoseHint.REPEAT, Pose.DOWN, Lang.KO))
+    }
 }
