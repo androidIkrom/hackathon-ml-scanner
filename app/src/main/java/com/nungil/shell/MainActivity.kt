@@ -282,8 +282,9 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         }
     }
 
+    /** Through the dispatcher, so a screen's own back step (Go mode: route back to search) comes first. */
     override fun back() {
-        if (!navController.popBackStack()) finish()
+        onBackPressedDispatcher.onBackPressed()
     }
 
     /** popUpTo the same destination, so "full scan" said twice never stacks two scan screens. */

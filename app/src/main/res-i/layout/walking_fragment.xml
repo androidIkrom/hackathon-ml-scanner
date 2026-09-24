@@ -29,6 +29,7 @@
         android:textColor="?attr/ngTextSub" />
 
     <com.google.android.material.card.MaterialCardView
+        android:id="@+id/walking_camera_card"
         style="@style/Widget.Nungil.Card"
         android:layout_width="match_parent"
         android:layout_height="0dp"
