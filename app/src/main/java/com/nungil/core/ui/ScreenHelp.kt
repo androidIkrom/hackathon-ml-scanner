@@ -36,8 +36,10 @@ object ScreenHelp {
             "주변 둘러보기 화면이에요. 휴대폰을 세우고 천천히 한 바퀴 돌면 주변을 알려드려요.",
         ),
         "walk" to Text(
-            "Walk mode. Hold the phone in front of you while walking. I warn about obstacles, steps and walls.",
-            "걷기 모드예요. 걸을 때 휴대폰을 앞으로 들면 장애물, 계단, 벽을 알려드려요.",
+            "Walk mode. Hold the phone at chest height with the camera forward. I warn about walls, steps, stairs and people. " +
+                "Say save this place as home to remember a place, and take me home to be guided there. Say stop to pause.",
+            "걷기 모드예요. 휴대폰을 가슴 높이에서 앞을 보게 들어 주세요. 벽, 턱, 계단, 사람을 알려 드려요. " +
+                "여기를 집으로 저장해 줘라고 하면 장소를 기억하고, 집까지 안내해 줘라고 하면 안내해 드려요. 멈추려면 멈춰라고 말해 주세요.",
         ),
         "search" to Text(
             "Find. Say or type what to look for, for example my bag.",

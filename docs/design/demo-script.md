@@ -56,6 +56,22 @@ Speaking tips:
   works.
 - Speak at normal volume, facing the phone, about 30 cm away.
 
+## Optional: walk mode (only if it went well in every rehearsal)
+
+Walk mode needs ARCore depth, good light and a clear walkway. Rehearse it in the hall itself. If a
+rehearsal goes wrong, show it from the recorded clip instead.
+
+| Say or do | The audience hears |
+|---|---|
+| "Eye, walk mode" | "Walk mode. I will tell you about obstacles, steps and stairs." |
+| Walk slowly towards a wall from about 3 m | "Wall ahead, 3 steps." then "2 steps", "1 step", "very close", with the beeps getting faster and a vibration under 1 m |
+| Step back | "Nothing close ahead." |
+| "save this place as stage" | "Saved this place as stage." |
+| "stop" | "Walk mode stopped." |
+
+Navigation ("take me to stage") needs GPS outdoors. In airplane mode it uses the offline direction
+beacon, so keep it out of the stage demo.
+
 ## If something fails on stage
 
 1. **The app did not react.** Say the command once more, a little slower.

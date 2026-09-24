@@ -41,5 +41,14 @@ class DemoCommandsTest {
         assertEquals(VoiceCommand.Back, heard("뒤로 가", awake = true))
     }
 
+    @Test fun walkModeSegment() {
+        assertEquals(VoiceCommand.Go(Dest.Walk), heard("walk mode", awake = true))
+        assertEquals(VoiceCommand.Go(Dest.Walk), heard("걷기 모드", awake = true))
+        assertEquals(com.nungil.core.walk.WalkCommand.SavePlace("stage"), com.nungil.core.walk.WalkCommands.parse("save this place as stage"))
+        assertEquals(com.nungil.core.walk.WalkCommand.GoTo("stage"), com.nungil.core.walk.WalkCommands.parse("take me to stage"))
+        assertEquals(com.nungil.core.walk.WalkCommand.SavePlace("무대"), com.nungil.core.walk.WalkCommands.parse("여기를 무대로 저장해 줘"))
+        assertEquals(com.nungil.core.walk.WalkCommand.GoTo("무대"), com.nungil.core.walk.WalkCommands.parse("무대까지 안내해 줘"))
+    }
+
     @Test fun savedTabIsUnset() = assertEquals(null, (VoiceCommandParser.parse("saved") as VoiceCommand.Go).dest.let { (it as Dest.Saved).tab as SavedTab? })
 }
