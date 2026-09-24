@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Owner Y. Item detail: photo, name, what it looks like, Find (main action), Rename and Delete. -->
+<!-- Owner Y. Item detail: name, what it looks like, a big photo, Rename and Delete side by side, Find as the main action. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -27,8 +27,8 @@
 
     <com.google.android.material.card.MaterialCardView
         style="@style/Widget.Nungil.Card"
-        android:layout_width="160dp"
-        android:layout_height="160dp"
+        android:layout_width="match_parent"
+        android:layout_height="260dp"
         android:layout_marginTop="@dimen/ng_gap_large"
         app:contentPadding="0dp">
 
@@ -44,20 +44,30 @@
         android:layout_height="0dp"
         android:layout_weight="1" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/item_rename"
-        style="@style/Widget.Nungil.Button.Tonal"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/item_rename" />
+        android:baselineAligned="false"
+        android:orientation="horizontal">
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/item_delete"
-        style="@style/Widget.Nungil.Button.Danger"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="@dimen/ng_gap"
-        android:text="@string/item_delete" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/item_rename"
+            style="@style/Widget.Nungil.Button.Tonal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:text="@string/item_rename" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/item_delete"
+            style="@style/Widget.Nungil.Button.Danger"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:text="@string/item_delete" />
+    </LinearLayout>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/item_find"
