@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Owner I. Content of BigCardView: icon, title, subtitle, chevron. The card itself is the one
-     accessible element; the children are hidden from TalkBack. -->
+<!-- Owner I. Content of BigCardView: icon in a soft badge, title, subtitle, chevron. The card itself is
+     the one accessible element; the children are hidden from TalkBack. -->
 <merge xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
@@ -11,17 +11,25 @@
         android:minHeight="72dp"
         android:orientation="horizontal">
 
-        <ImageView
-            android:id="@+id/ng_big_card_icon"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:importantForAccessibility="no"
-            app:tint="?attr/ngPrimary" />
+        <FrameLayout
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:background="@drawable/ng_badge_soft"
+            android:importantForAccessibility="no">
+
+            <ImageView
+                android:id="@+id/ng_big_card_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                app:tint="?attr/ngPrimary" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
+            android:layout_marginStart="14dp"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:orientation="vertical">
@@ -37,7 +45,7 @@
                 android:id="@+id/ng_big_card_subtitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="2dp"
                 android:importantForAccessibility="no"
                 android:textAppearance="@style/TextAppearance.Nungil.Body"
                 android:textColor="?attr/ngTextSub" />
