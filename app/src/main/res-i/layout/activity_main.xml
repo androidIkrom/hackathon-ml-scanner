@@ -27,6 +27,9 @@
     <!-- Everything spoken appears here for sighted helpers and judges. Not read by TalkBack: it was already spoken. -->
     <TextView
         android:id="@+id/caption"
+        android:visibility="gone"
+        android:ellipsize="end"
+        android:maxLines="3"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?attr/ngCard"

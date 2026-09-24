@@ -7,6 +7,7 @@ import android.content.res.Resources
 import android.graphics.Color
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.View
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.MotionEvent
@@ -156,7 +157,10 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         tts = TtsSpeaker(
             context = this,
             wanted = { uiLang },
-            onCaption = { text -> binding.caption.text = text },
+            onCaption = { text ->
+                binding.caption.text = text
+                binding.caption.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
+            },
             onVoiceChoice = ::onVoiceChoice,
         )
         voice = VoiceInput(
