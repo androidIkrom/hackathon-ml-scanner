@@ -19,6 +19,18 @@ class ToneBeeper : Beeper {
     @Volatile
     private var intervalMs = 0L
 
+    /** True while the user is talking: beeps are skipped, the pulse keeps its rhythm. */
+    @Volatile
+    private var held = false
+
+    fun holdForUser() {
+        held = true
+    }
+
+    fun resumeAfterUser() {
+        held = false
+    }
+
     private val tick = object : Runnable {
         override fun run() {
             val interval = intervalMs
@@ -62,6 +74,7 @@ class ToneBeeper : Beeper {
 
     /** Runs on the beeper thread. */
     private fun play() {
+        if (held) return
         val generator = tone ?: runCatching { ToneGenerator(AudioManager.STREAM_MUSIC, VOLUME) }
             .getOrNull()
             ?.also { tone = it }

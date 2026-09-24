@@ -10,9 +10,9 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_HIGH_CONTRAST, false)
         set(value) = prefs.edit().putBoolean(KEY_HIGH_CONTRAST, value).apply()
 
-    /** Always-on voice commands. */
+    /** Always-on voice commands: on unless the user turned them off. */
     var voiceOn: Boolean
-        get() = prefs.getBoolean(KEY_VOICE_ON, false)
+        get() = prefs.getBoolean(KEY_VOICE_ON, true)
         set(value) = prefs.edit().putBoolean(KEY_VOICE_ON, value).apply()
 
     /** Speak each screen's help when it opens. */

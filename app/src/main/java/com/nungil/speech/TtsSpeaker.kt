@@ -39,11 +39,33 @@ class TtsSpeaker(
     private var finalCallback: (() -> Unit)? = null
     private var closed = false
 
+    /** True while the user is talking: nothing is spoken until [resumeAfterUser]. */
+    private var held = false
+    private var currentText: String? = null
+    private var lastEndText: String? = null
+    private var lastEndAt = 0L
+
     /** The last phrase spoken, for "repeat". Main thread. */
     val lastSpoken: String? get() = queue.lastSpoken
 
-    /** Speaking now or about to. The microphone waits for this to become false. Main thread. */
-    val isBusy: Boolean get() = queue.isSpeaking || queue.pendingCount > 0
+    /**
+     * What the microphone may be hearing of the app's own voice: the sentence being spoken, or the one
+     * that ended less than [ECHO_WINDOW_MS] ago. Main thread.
+     */
+    fun recentSpeech(): String? =
+        currentText ?: lastEndText?.takeIf { SystemClock.elapsedRealtime() - lastEndAt < ECHO_WINDOW_MS }
+
+    /** The user started talking: stop at once, drop what was queued and stay quiet. Main thread. */
+    fun holdForUser() {
+        held = true
+        stop()
+    }
+
+    /** The user finished: speak again (answers to their command come next). Main thread. */
+    fun resumeAfterUser() {
+        held = false
+        pump()
+    }
 
     private val poll = object : Runnable {
         override fun run() {
@@ -98,7 +120,7 @@ class TtsSpeaker(
     }
 
     override fun sayNow(text: String) = onMain {
-        if (state == State.STARTING) {
+        if (state == State.STARTING || held) {
             queue.clear()
             queue.add(text)
         } else {
@@ -108,8 +130,8 @@ class TtsSpeaker(
 
     override fun sayFinal(text: String, onDone: () -> Unit) = onMain {
         finishFinal()
-        if (state == State.STARTING) {
-            // The engine is still starting: the sentence is spoken as soon as it is ready.
+        if (state == State.STARTING || held) {
+            // The engine is still starting, or the user is talking: the sentence waits its turn.
             queue.clear()
             queue.add(text)
             main.post(onDone)
@@ -127,6 +149,7 @@ class TtsSpeaker(
     override fun stop() = onMain {
         queue.clear()
         currentId = null
+        currentText = null
         runCatching { tts.stop() }
         finishFinal()
     }
@@ -149,7 +172,7 @@ class TtsSpeaker(
     }
 
     private fun pump() {
-        if (state == State.STARTING) return
+        if (state == State.STARTING || held) return
         queue.next()?.let { speak(it, TextToSpeech.QUEUE_ADD) }
     }
 
@@ -162,6 +185,7 @@ class TtsSpeaker(
         }
         val id = "nungil-${counter++}"
         currentId = id
+        currentText = text
         if (tts.speak(text, mode, null, id) != TextToSpeech.SUCCESS) {
             currentId = null
             queue.done()
@@ -172,6 +196,9 @@ class TtsSpeaker(
         main.post {
             if (utteranceId != null && utteranceId == currentId) {
                 currentId = null
+                lastEndText = currentText
+                lastEndAt = SystemClock.elapsedRealtime()
+                currentText = null
                 queue.done()
             }
         }
@@ -181,6 +208,11 @@ class TtsSpeaker(
         val callback = finalCallback ?: return
         finalCallback = null
         callback()
+    }
+
+    private companion object {
+        /** How long after a sentence ends the microphone may still be hearing it. */
+        const val ECHO_WINDOW_MS = 1_500L
     }
 
     private fun onMain(block: () -> Unit) {

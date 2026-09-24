@@ -7,9 +7,10 @@ enum class ListenAction { RETRY, STOP_NO_PERMISSION, FALL_BACK_TO_ENGLISH }
 data class ListenDecision(val action: ListenAction, val delayMs: Long, val rebuild: Boolean)
 
 /**
- * Keeps the always-on microphone alive (build guide §10.3): restart after every result and error with
- * the guide's delays, rebuild a stuck recognizer after 3 errors in a row, stop on a permission error,
- * and fall back to English once when Korean recognition is not installed.
+ * Keeps the always-on microphone alive the whole time the app is open: listen again almost at once
+ * after every phrase and every silence (the app never waits for its own speech to end; barge-in and
+ * echo filtering in [VoiceBargeIn] handle that), rebuild a stuck recognizer after 3 real errors in a
+ * row, stop on a permission error, and fall back to English once when Korean recognition is missing.
  */
 class RecognizerPolicy {
     private var errorsInARow = 0
@@ -31,6 +32,10 @@ class RecognizerPolicy {
             errorsInARow = 0
             return ListenDecision(ListenAction.FALL_BACK_TO_ENGLISH, DELAY_AFTER_ERROR_MS, rebuild = true)
         }
+        // Silence is the normal state of an always-on microphone, not a fault.
+        if (code == ERROR_NO_MATCH || code == ERROR_SPEECH_TIMEOUT) {
+            return ListenDecision(ListenAction.RETRY, DELAY_AFTER_SILENCE_MS, rebuild = false)
+        }
         errorsInARow++
         val rebuild = errorsInARow >= REBUILD_AFTER_ERRORS
         if (rebuild) errorsInARow = 0
@@ -40,21 +45,32 @@ class RecognizerPolicy {
     /** Recognition language: what the user chose, unless Korean recognition turned out to be missing. */
     fun language(wanted: Lang): Lang = if (englishFallback) Lang.EN else wanted
 
-    /** Let the app finish speaking before opening the microphone, but never wait longer than the limit. */
-    fun shouldWait(speaking: Boolean, waitedMs: Long): Boolean = speaking && waitedMs < MAX_WAIT_FOR_SPEECH_MS
 
     companion object {
-        const val DELAY_AFTER_ENABLE_MS = 1_500L
-        const val DELAY_AFTER_COMMAND_MS = 2_500L
+        /** After the "microphone on" chime has played. */
+        const val DELAY_AFTER_ENABLE_MS = 400L
+        const val DELAY_AFTER_COMMAND_MS = 250L
+        const val DELAY_AFTER_SILENCE_MS = 100L
         const val DELAY_AFTER_ERROR_MS = 700L
         const val REBUILD_AFTER_ERRORS = 3
-        const val WAIT_POLL_MS = 500L
-        const val MAX_WAIT_FOR_SPEECH_MS = SpeechQueue.SHUTDOWN_SAFETY_MS
+
+        /** App sound held for the user's speech is released after this even if the recognizer never answers. */
+        const val HOLD_SAFETY_MS = 10_000L
+
+        /** The recognizer's own start/stop tones are muted from its start until this long after it is ready. */
+        const val MUTE_TAIL_MS = 300L
+
+        /** "I did not understand" is said at most once in this long (people nearby are heard too). */
+        const val NOT_UNDERSTOOD_GAP_MS = 10_000L
+
+        /** Streams are never kept muted longer than this. */
+        const val MUTE_MAX_MS = 2_000L
 
         // android.speech.SpeechRecognizer error codes, copied so this stays pure Kotlin.
         const val ERROR_SPEECH_TIMEOUT = 6
         const val ERROR_NO_MATCH = 7
         const val ERROR_CLIENT = 5
+        const val ERROR_RECOGNIZER_BUSY = 8
         const val ERROR_INSUFFICIENT_PERMISSIONS = 9
         const val ERROR_LANGUAGE_NOT_SUPPORTED = 12
         const val ERROR_LANGUAGE_UNAVAILABLE = 13

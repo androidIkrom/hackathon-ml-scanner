@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.content.res.Resources
 import android.graphics.Color
 import android.os.Bundle
+import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.MotionEvent
@@ -46,6 +47,7 @@ import com.nungil.core.ui.CommandRouter
 import com.nungil.core.ui.LanguageChoice
 import com.nungil.core.ui.PermissionOutcome
 import com.nungil.core.ui.Phrase
+import com.nungil.core.ui.RecognizerPolicy
 import com.nungil.core.ui.Route
 import com.nungil.core.ui.ScreenHelp
 import com.nungil.core.ui.ShellPhrases
@@ -83,6 +85,8 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     private val tones = ToneBeeper()
     private var voiceChoice: VoiceChoice? = null
     private lateinit var voice: VoiceInput
+    private var askedMicThisRun = false
+    private var lastNotUnderstoodAt = -RecognizerPolicy.NOT_UNDERSTOOD_GAP_MS
     private val voiceOnState = MutableStateFlow(false)
 
     /** A screen waiting for words (askForWords) while the always-on listener runs. */
@@ -152,8 +156,15 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         voice = VoiceInput(
             context = this,
             language = { uiLang },
-            isSpeaking = { tts.isBusy },
-            stopSpeaking = { tts.stop() },
+            appSaying = { tts.recentSpeech() },
+            holdSound = {
+                tts.holdForUser()
+                tones.holdForUser()
+            },
+            releaseSound = {
+                tts.resumeAfterUser()
+                tones.resumeAfterUser()
+            },
             onHeard = ::onHeard,
             onProblem = ::onVoiceProblem,
         )
@@ -169,8 +180,18 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     override fun onResume() {
         super.onResume()
-        // Listen only while the app is in front; the user's choice survives in AppPrefs.
-        if (prefs.voiceOn && hasMic()) voice.start()
+        // Listen the whole time the app is in front (never in the background); on by default.
+        if (prefs.voiceOn) {
+            if (hasMic()) {
+                voice.start()
+            } else if (!askedMicThisRun) {
+                askedMicThisRun = true
+                ensureMic {
+                    voice.start()
+                    voiceOnState.value = true
+                }
+            }
+        }
         voiceOnState.value = voice.isOn
     }
 
@@ -254,6 +275,12 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             dictationOwner = null
             claim(command.text)
             return
+        }
+        // An always-on microphone also hears people nearby: say "I did not understand" only now and then.
+        if (command is VoiceCommand.Unknown) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastNotUnderstoodAt < RecognizerPolicy.NOT_UNDERSTOOD_GAP_MS) return
+            lastNotUnderstoodAt = now
         }
         handleCommand(command)
     }
@@ -372,7 +399,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     fun setVoiceOn(on: Boolean) {
         if (!on) {
             prefs.voiceOn = false
-            voice.stop()
+            voice.stop(chime = true)
             voiceOnState.value = false
             say(Phrase.VOICE_OFF)
             return

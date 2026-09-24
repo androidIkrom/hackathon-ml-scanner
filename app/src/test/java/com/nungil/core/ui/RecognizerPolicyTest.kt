@@ -9,24 +9,33 @@ import org.junit.Test
 class RecognizerPolicyTest {
     private val policy = RecognizerPolicy()
 
-    @Test fun delaysFromTheGuide() {
-        assertEquals(1_500L, RecognizerPolicy.DELAY_AFTER_ENABLE_MS)
-        assertEquals(2_500L, policy.afterResult())
-        assertEquals(700L, policy.afterError(RecognizerPolicy.ERROR_NO_MATCH, Lang.EN).delayMs)
+    @Test fun listensAgainAlmostAtOnce() {
+        assertEquals(400L, RecognizerPolicy.DELAY_AFTER_ENABLE_MS)
+        assertEquals(250L, policy.afterResult())
+        assertEquals(100L, policy.afterError(RecognizerPolicy.ERROR_NO_MATCH, Lang.EN).delayMs)
+        assertEquals(100L, policy.afterError(RecognizerPolicy.ERROR_SPEECH_TIMEOUT, Lang.EN).delayMs)
+        assertEquals(700L, policy.afterError(RecognizerPolicy.ERROR_CLIENT, Lang.EN).delayMs)
     }
 
-    @Test fun rebuildsAfterThreeErrorsInARow() {
-        assertFalse(policy.afterError(RecognizerPolicy.ERROR_SPEECH_TIMEOUT, Lang.EN).rebuild)
-        assertFalse(policy.afterError(RecognizerPolicy.ERROR_NO_MATCH, Lang.EN).rebuild)
+    @Test fun silenceIsNotAnError() {
+        repeat(10) {
+            assertFalse(policy.afterError(RecognizerPolicy.ERROR_SPEECH_TIMEOUT, Lang.EN).rebuild)
+            assertFalse(policy.afterError(RecognizerPolicy.ERROR_NO_MATCH, Lang.EN).rebuild)
+        }
+    }
+
+    @Test fun rebuildsAfterThreeRealErrorsInARow() {
+        assertFalse(policy.afterError(RecognizerPolicy.ERROR_CLIENT, Lang.EN).rebuild)
+        assertFalse(policy.afterError(RecognizerPolicy.ERROR_RECOGNIZER_BUSY, Lang.EN).rebuild)
         assertTrue(policy.afterError(RecognizerPolicy.ERROR_CLIENT, Lang.EN).rebuild)
-        assertFalse(policy.afterError(RecognizerPolicy.ERROR_NO_MATCH, Lang.EN).rebuild)
+        assertFalse(policy.afterError(RecognizerPolicy.ERROR_CLIENT, Lang.EN).rebuild)
     }
 
     @Test fun aResultResetsTheErrorCount() {
-        policy.afterError(RecognizerPolicy.ERROR_NO_MATCH, Lang.EN)
-        policy.afterError(RecognizerPolicy.ERROR_NO_MATCH, Lang.EN)
+        policy.afterError(RecognizerPolicy.ERROR_CLIENT, Lang.EN)
+        policy.afterError(RecognizerPolicy.ERROR_CLIENT, Lang.EN)
         policy.afterResult()
-        assertFalse(policy.afterError(RecognizerPolicy.ERROR_NO_MATCH, Lang.EN).rebuild)
+        assertFalse(policy.afterError(RecognizerPolicy.ERROR_CLIENT, Lang.EN).rebuild)
     }
 
     @Test fun missingPermissionStopsTheLoop() =
@@ -45,10 +54,11 @@ class RecognizerPolicyTest {
         assertEquals(Lang.KO, RecognizerPolicy().language(Lang.KO))
     }
 
-    @Test fun waitsForTheAppToFinishSpeakingButNotForever() {
-        assertTrue(policy.shouldWait(speaking = true, waitedMs = 0))
-        assertFalse(policy.shouldWait(speaking = false, waitedMs = 0))
-        assertFalse(policy.shouldWait(speaking = true, waitedMs = RecognizerPolicy.MAX_WAIT_FOR_SPEECH_MS))
+    @Test fun safetyLimits() {
+        assertEquals(10_000L, RecognizerPolicy.HOLD_SAFETY_MS)
+        assertEquals(300L, RecognizerPolicy.MUTE_TAIL_MS)
+        assertEquals(2_000L, RecognizerPolicy.MUTE_MAX_MS)
+        assertEquals(10_000L, RecognizerPolicy.NOT_UNDERSTOOD_GAP_MS)
     }
 
     @Test fun permissionOutcomes() {

@@ -13,59 +13,82 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.core.content.ContextCompat
 import com.nungil.contract.Lang
+import com.nungil.core.ui.BargeIn
 import com.nungil.core.ui.ListenAction
 import com.nungil.core.ui.Phrase
 import com.nungil.core.ui.RecognizerPolicy
+import com.nungil.core.ui.VoiceBargeIn
 
 /**
  * The app's only microphone. Main thread only.
  *
- * Always-on mode ([start]/[stop]) restarts the recognizer after every result and error; [listenOnce]
- * hears one phrase for a screen while always-on is off. Every rule from build guide §10 lives here or
- * in [RecognizerPolicy].
+ * Always-on mode ([start]/[stop]) listens the whole time the app is open, also while the app is
+ * talking. As soon as the user's words appear, every app sound stops and stays stopped until the
+ * phrase is finished ([holdSound]/[releaseSound]), so the user is never talked over or cut off.
+ * The app's own voice picked up by the microphone is recognised and ignored ([VoiceBargeIn]).
+ * The recognizer's system beeps are muted ([EarconMuter]); the app plays its own chime instead.
+ * [listenOnce] hears one phrase for a screen while always-on is off.
+ *
+ * @param appSaying what the app is saying now or has just said (for echo detection).
  */
 class VoiceInput(
     private val context: Context,
     private val language: () -> Lang,
-    private val isSpeaking: () -> Boolean,
-    private val stopSpeaking: () -> Unit,
+    private val appSaying: () -> String?,
+    private val holdSound: () -> Unit,
+    private val releaseSound: () -> Unit,
     private val onHeard: (String) -> Unit,
     private val onProblem: (Phrase) -> Unit,
 ) : RecognitionListener {
 
     private val main = Handler(Looper.getMainLooper())
     private val policy = RecognizerPolicy()
+    private val muter = EarconMuter(context)
+    private val chime = MicChime()
     private var recognizer: SpeechRecognizer? = null
     private var alwaysOn = false
     private var oneShot: ((String) -> Unit)? = null
     private var lastPartial = ""
-    private var waitedMs = 0L
+    private var holding = false
     private val listenNow = Runnable { listen() }
+    private val holdSafety = Runnable { endHold() }
 
     val isOn: Boolean get() = alwaysOn
 
+    /** Turns the always-on microphone on (a no-op when it already is) and plays the "on" chime. */
     fun start() {
+        if (alwaysOn) return
         alwaysOn = true
+        chime.playOn()
         schedule(RecognizerPolicy.DELAY_AFTER_ENABLE_MS)
     }
 
-    fun stop() {
+    /** [chime] plays the "off" sound: true when the user turned voice off, false when the app pauses. */
+    fun stop(chime: Boolean = false) {
+        val wasOn = alwaysOn
         alwaysOn = false
         oneShot = null
         main.removeCallbacks(listenNow)
         recognizer?.cancel()
+        endHold()
+        muter.unmuteAll()
+        if (chime && wasOn) this.chime.playOff()
     }
 
     /** One phrase for a screen (always-on is off). */
     fun listenOnce(onText: (String) -> Unit) {
         oneShot = onText
-        if (!alwaysOn) schedule(0)
+        if (!alwaysOn) {
+            chime.playOn()
+            schedule(RecognizerPolicy.DELAY_AFTER_ENABLE_MS)
+        }
     }
 
     fun destroy() {
         stop()
         recognizer?.destroy()
         recognizer = null
+        chime.release()
     }
 
     private fun schedule(delayMs: Long) {
@@ -80,20 +103,14 @@ class VoiceInput(
             onProblem(Phrase.MIC_NEEDED)
             return
         }
-        // The app must not hear itself: wait until it stops talking (up to the limit), then silence it.
-        if (policy.shouldWait(isSpeaking(), waitedMs)) {
-            waitedMs += RecognizerPolicy.WAIT_POLL_MS
-            schedule(RecognizerPolicy.WAIT_POLL_MS)
-            return
-        }
-        waitedMs = 0
         val r = recognizer ?: create() ?: run {
             stop()
             onProblem(Phrase.VOICE_UNAVAILABLE)
             return
         }
-        stopSpeaking()
         lastPartial = ""
+        // Hide the recognizer's start beep. Music stays on while the app is talking.
+        muter.mute(includeMusic = appSaying() == null)
         r.startListening(intent())
     }
 
@@ -123,7 +140,21 @@ class VoiceInput(
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
 
+    override fun onReadyForSpeech(params: Bundle?) = muter.unmuteSoon()
+
+    override fun onPartialResults(partialResults: Bundle?) {
+        val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
+        if (text.isNullOrEmpty()) return
+        lastPartial = text
+        if (!holding && VoiceBargeIn.onPartial(text, appSaying()) == BargeIn.STOP_ALL_SOUND) beginHold()
+    }
+
+    /** Hide the recognizer's end beep; the app is silent while the user speaks, so music may go too. */
+    override fun onEndOfSpeech() = muter.mute(includeMusic = holding || appSaying() == null)
+
     override fun onResults(results: Bundle?) {
+        muter.unmuteMusicNow()
+        muter.unmuteSoon()
         val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
             .orEmpty()
             .ifEmpty { lastPartial }
@@ -131,7 +162,13 @@ class VoiceInput(
             onError(SpeechRecognizer.ERROR_NO_MATCH)
             return
         }
+        // The app heard only itself: carry on as if it were silence.
+        if (!holding && VoiceBargeIn.isEcho(text, appSaying())) {
+            onError(SpeechRecognizer.ERROR_NO_MATCH)
+            return
+        }
         val delay = policy.afterResult()
+        endHold()
         val once = oneShot
         if (once != null) {
             oneShot = null
@@ -142,13 +179,9 @@ class VoiceInput(
         if (alwaysOn) schedule(delay)
     }
 
-    override fun onPartialResults(partialResults: Bundle?) {
-        partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
-            ?.takeIf { it.isNotEmpty() }
-            ?.let { lastPartial = it }
-    }
-
     override fun onError(error: Int) {
+        muter.unmuteSoon()
+        endHold()
         val decision = policy.afterError(error, language())
         when (decision.action) {
             ListenAction.STOP_NO_PERMISSION -> {
@@ -166,10 +199,22 @@ class VoiceInput(
         if (alwaysOn || oneShot != null) schedule(decision.delayMs)
     }
 
-    override fun onReadyForSpeech(params: Bundle?) = Unit
+    private fun beginHold() {
+        holding = true
+        holdSound()
+        main.removeCallbacks(holdSafety)
+        main.postDelayed(holdSafety, RecognizerPolicy.HOLD_SAFETY_MS)
+    }
+
+    private fun endHold() {
+        if (!holding) return
+        holding = false
+        main.removeCallbacks(holdSafety)
+        releaseSound()
+    }
+
     override fun onBeginningOfSpeech() = Unit
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
-    override fun onEndOfSpeech() = Unit
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
 }
