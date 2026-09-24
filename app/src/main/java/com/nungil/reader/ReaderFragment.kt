@@ -56,6 +56,10 @@ class ReaderFragment : Fragment(), VoiceHandler {
     @Volatile
     private var running = true
 
+    /** Set while the view is gone, so a read still in flight does not speak. */
+    @Volatile
+    private var leaving = false
+
     @Volatile
     private var lastRunMs = 0L
 
@@ -65,6 +69,7 @@ class ReaderFragment : Fragment(), VoiceHandler {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        leaving = false
         services = services()
         lang = services.lang
         ViewCompat.setAccessibilityHeading(binding.readerTitle, true)
@@ -80,12 +85,14 @@ class ReaderFragment : Fragment(), VoiceHandler {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        leaving = true
         camera?.stop()
         camera = null
         gate.detach()
         extras?.let { executor ->
+            // No waiting here: blocking the main thread froze the screen while leaving. A read still in flight
+            // finishes on the extras thread without speaking (leaving), and shutdown() lets nothing new in.
             executor.shutdown()
-            executor.awaitTermination(2, TimeUnit.SECONDS)
         }
         extras = null
         main.removeCallbacksAndMessages(null)
@@ -165,7 +172,7 @@ class ReaderFragment : Fragment(), VoiceHandler {
             Log.i("Nungil", "Reader failed: ${e.message}")
             null
         } ?: return
-        if (!policy.shouldSpeak(spoken, SystemClock.elapsedRealtime())) return
+        if (leaving || !policy.shouldSpeak(spoken, SystemClock.elapsedRealtime())) return
         services.speaker.say(spoken)
         main.post { _binding?.readerText?.text = spoken }
     }
