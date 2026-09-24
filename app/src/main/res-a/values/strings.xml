@@ -17,6 +17,4 @@
     <string name="scan_permission_allow">Allow camera</string>
     <string name="scan_open_settings">Open settings</string>
 
-    <string name="walk_title">Walk mode</string>
-    <string name="walk_body">Walk mode is not ready yet.</string>
 </resources>

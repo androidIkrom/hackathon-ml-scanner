@@ -17,6 +17,4 @@
     <string name="scan_permission_allow">카메라 허용</string>
     <string name="scan_open_settings">설정 열기</string>
 
-    <string name="walk_title">걷기 모드</string>
-    <string name="walk_body">걷기 모드는 아직 준비 중이에요.</string>
 </resources>
