@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.view.ViewCompat
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -38,12 +40,23 @@ class HomeFragment : Fragment() {
         binding.homeSettings.setOnClickListener { nav.open(Dest.Settings) }
 
         val main = requireActivity() as MainActivity
-        binding.homeMic.setOnClickListener { main.setVoiceOn(!main.voiceOn.value) }
+        // Tap: stop every sound and listen. Long press: turn always-on voice off (or on again).
+        binding.homeMic.setOnClickListener { main.talkNow() }
+        binding.homeMic.setOnLongClickListener {
+            main.setVoiceOn(!main.voiceOn.value)
+            true
+        }
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 main.voiceOn.collect { on ->
-                    binding.homeMic.setText(if (on) R.string.home_mic_turn_off else R.string.home_mic_turn_on)
-                    binding.homeMic.setIconResource(if (on) R.drawable.ng_ic_mic_off else R.drawable.ng_ic_mic)
+                    binding.homeMic.setText(if (on) R.string.home_mic_speak else R.string.home_mic_turn_on)
+                    binding.homeMic.setIconResource(R.drawable.ng_ic_mic)
+                    ViewCompat.replaceAccessibilityAction(
+                        binding.homeMic,
+                        AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_LONG_CLICK,
+                        getString(if (on) R.string.home_mic_turn_off else R.string.home_mic_turn_on),
+                        null,
+                    )
                 }
             }
         }

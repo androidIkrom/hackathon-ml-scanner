@@ -59,6 +59,8 @@ class RecognizerPolicyTest {
         assertEquals(300L, RecognizerPolicy.MUTE_TAIL_MS)
         assertEquals(2_000L, RecognizerPolicy.MUTE_MAX_MS)
         assertEquals(10_000L, RecognizerPolicy.NOT_UNDERSTOOD_GAP_MS)
+        assertEquals(6_000L, RecognizerPolicy.TALK_WINDOW_MS)
+        assertTrue(RecognizerPolicy.TALK_WINDOW_MS < RecognizerPolicy.HOLD_SAFETY_MS)
     }
 
     @Test fun permissionOutcomes() {

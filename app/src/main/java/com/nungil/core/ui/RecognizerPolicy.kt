@@ -60,6 +60,9 @@ class RecognizerPolicy {
         /** The recognizer's own start/stop tones are muted from its start until this long after it is ready. */
         const val MUTE_TAIL_MS = 300L
 
+        /** After a microphone button press, app sound stays off this long even if the user is still silent. */
+        const val TALK_WINDOW_MS = 6_000L
+
         /** "I did not understand" is said at most once in this long (people nearby are heard too). */
         const val NOT_UNDERSTOOD_GAP_MS = 10_000L
 

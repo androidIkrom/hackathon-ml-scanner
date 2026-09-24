@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -50,6 +51,9 @@ class VoiceInput(
     private var oneShot: ((String) -> Unit)? = null
     private var lastPartial = ""
     private var holding = false
+
+    /** Set by a microphone button: app sound stays off until then, even through silence. */
+    private var talkUntil = 0L
     private val listenNow = Runnable { listen() }
     private val holdSafety = Runnable { endHold() }
 
@@ -63,6 +67,12 @@ class VoiceInput(
         schedule(RecognizerPolicy.DELAY_AFTER_ENABLE_MS)
     }
 
+    /** A microphone button was pressed: every app sound stops and stays off while the user talks. */
+    fun talkNow() {
+        if (alwaysOn) chime.playOn() else start()
+        holdForTalk()
+    }
+
     /** [chime] plays the "off" sound: true when the user turned voice off, false when the app pauses. */
     fun stop(chime: Boolean = false) {
         val wasOn = alwaysOn
@@ -70,7 +80,7 @@ class VoiceInput(
         oneShot = null
         main.removeCallbacks(listenNow)
         recognizer?.cancel()
-        endHold()
+        endHold(force = true)
         muter.unmuteAll()
         if (chime && wasOn) this.chime.playOff()
     }
@@ -82,6 +92,7 @@ class VoiceInput(
             chime.playOn()
             schedule(RecognizerPolicy.DELAY_AFTER_ENABLE_MS)
         }
+        holdForTalk()
     }
 
     fun destroy() {
@@ -168,7 +179,7 @@ class VoiceInput(
             return
         }
         val delay = policy.afterResult()
-        endHold()
+        endHold(force = true)
         val once = oneShot
         if (once != null) {
             oneShot = null
@@ -206,8 +217,21 @@ class VoiceInput(
         main.postDelayed(holdSafety, RecognizerPolicy.HOLD_SAFETY_MS)
     }
 
-    private fun endHold() {
+    private fun holdForTalk() {
+        talkUntil = SystemClock.elapsedRealtime() + RecognizerPolicy.TALK_WINDOW_MS
+        beginHold()
+    }
+
+    /** Silence or an error ends the hold only after a button's talk window; a heard phrase always does. */
+    private fun endHold(force: Boolean = false) {
         if (!holding) return
+        val left = talkUntil - SystemClock.elapsedRealtime()
+        if (!force && left > 0) {
+            main.removeCallbacks(holdSafety)
+            main.postDelayed(holdSafety, left)
+            return
+        }
+        talkUntil = 0
         holding = false
         main.removeCallbacks(holdSafety)
         releaseSound()

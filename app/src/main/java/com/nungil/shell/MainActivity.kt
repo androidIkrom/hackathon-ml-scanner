@@ -209,7 +209,9 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     override fun askForWords(owner: LifecycleOwner, onText: (String) -> Unit) {
         if (owner.lifecycle.currentState == Lifecycle.State.DESTROYED) return
+        silenceAll()
         if (voice.isOn) {
+            voice.talkNow()
             // One microphone, one owner: the always-on listener hands the next non-command words over.
             dictation = onText
             dictationOwner = owner
@@ -396,20 +398,34 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     /** Always-on voice commands, for the Home microphone button. */
     val voiceOn: StateFlow<Boolean> get() = voiceOnState.asStateFlow()
 
+    /** Turns always-on voice on (the same as pressing the microphone) or off. The chime confirms it. */
     fun setVoiceOn(on: Boolean) {
-        if (!on) {
-            prefs.voiceOn = false
-            voice.stop(chime = true)
-            voiceOnState.value = false
-            say(Phrase.VOICE_OFF)
+        if (on) {
+            talkNow()
             return
         }
+        silenceAll()
+        prefs.voiceOn = false
+        voice.stop(chime = true)
+        voiceOnState.value = false
+    }
+
+    /**
+     * A microphone button: every app sound (instructions, announcements, beeps) stops at once and
+     * stays off while the user talks; the microphone is turned on if it was off.
+     */
+    fun talkNow() {
+        silenceAll()
         ensureMic {
             prefs.voiceOn = true
-            say(Phrase.VOICE_ON)
-            voice.start()
+            voice.talkNow()
             voiceOnState.value = true
         }
+    }
+
+    private fun silenceAll() {
+        tts.stop()
+        tones.stop()
     }
 
     private fun hasMic(): Boolean =
