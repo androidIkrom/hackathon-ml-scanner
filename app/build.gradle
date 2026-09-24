@@ -6,6 +6,11 @@ plugins {
     id 'de.undercouch.download'
 }
 
+// Walk-mode routing key (openrouteservice). Read from the git-ignored local.properties; empty = beacon only.
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) localPropsFile.withInputStream { localProps.load(it) }
+
 android {
     namespace 'com.nungil'
     compileSdk 35
@@ -17,6 +22,7 @@ android {
         versionCode 1
         versionName '1.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        buildConfigField 'String', 'ORS_API_KEY', "\"${localProps.getProperty('ORS_API_KEY', '')}\""
     }
 
     buildTypes {
@@ -104,6 +110,8 @@ dependencies {
     kapt 'androidx.room:room-compiler:2.7.2'
 
     testImplementation 'junit:junit:4.13.2'
+    // Android's org.json is a stub on the JVM; route parsing tests need the real one.
+    testImplementation 'org.json:json:20240303'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test:core:1.6.1'
     androidTestImplementation 'androidx.test:runner:1.6.2'
