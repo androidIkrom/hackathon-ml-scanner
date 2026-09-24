@@ -164,7 +164,14 @@ class ScanFragment : Fragment(), VoiceHandler {
             true
         }
         VoiceCommand.Stop -> {
-            if (state == State.SCANNING) stopScan()
+            if (state == State.SCANNING) {
+                stopScan()
+            } else if (state == State.IDLE) {
+                // "Stop" right after opening must also cancel the automatic start.
+                autoStart?.let(main::removeCallbacks)
+                autoStart = null
+                speakNow(ScanPhrases.stopped(lang))
+            }
             true
         }
         VoiceCommand.SwitchCamera -> {
