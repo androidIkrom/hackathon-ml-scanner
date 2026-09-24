@@ -52,9 +52,11 @@ app/src/main/res-i/                                   I
 app/src/main/java/com/nungil/core/search/             Y
 app/src/main/java/com/nungil/core/people/             Y
 app/src/main/java/com/nungil/core/items/              Y
+app/src/main/java/com/nungil/core/weather/            Y
 app/src/main/java/com/nungil/search/                  Y
 app/src/main/java/com/nungil/people/                  Y
 app/src/main/java/com/nungil/items/                   Y
 app/src/main/java/com/nungil/saved/                   Y
 app/src/main/java/com/nungil/reader/                  Y
+app/src/main/java/com/nungil/weather/                 Y
 app/src/main/res-y/                                   Y
