@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Themed-icon shape (Android 13+): the eye with its pupil cut out, since only the alpha is used. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M26,54 Q54,26 82,54 Q54,82 26,54 Z M43,54 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 Z" />
+</vector>
