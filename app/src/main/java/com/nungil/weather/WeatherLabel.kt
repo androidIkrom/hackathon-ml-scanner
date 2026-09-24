@@ -4,11 +4,14 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.os.SystemClock
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
 import android.util.AttributeSet
 import android.util.Log
 import android.util.TypedValue
@@ -20,15 +23,18 @@ import androidx.core.widget.TextViewCompat
 import com.nungil.R
 import com.nungil.contract.Lang
 import com.nungil.contract.app.AppServices
+import com.nungil.core.weather.Clock
 import com.nungil.core.weather.Today
 import com.nungil.core.weather.Weather
 import com.nungil.core.weather.WeatherPhrases
+import com.nungil.design.resolveColorAttr
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
 
 /**
- * Small "18° Cloudy" label for the top right of the app bar. It shows the last stored report at once, fetches a
+ * Small "18° Cloudy" label for the top right of the app bar, with today's date under it ("Thu, Sep 25" /
+ * "9월 25일 (목)", updated at midnight). It shows the last stored report at once, fetches a
  * new one from Open-Meteo when that is over 30 minutes old (the only network use besides walk routes), and speaks
  * the full report when tapped. Without the location permission it reads "Weather" and asks for it on tap.
  * Put it in the toolbar: `<com.nungil.weather.WeatherLabel android:layout_gravity="end" … />`.
@@ -41,6 +47,7 @@ class WeatherLabel @JvmOverloads constructor(
     private var today: Today? = null
     private var fetchedAtMs: Long? = null
     private var fetching = false
+    private val ticker = MinuteTicker { show() }
 
     init {
         TextViewCompat.setTextAppearance(this, R.style.TextAppearance_Nungil_Label)
@@ -56,7 +63,14 @@ class WeatherLabel @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        ticker.register(context)
+        show()
         refreshIfStale()
+    }
+
+    override fun onDetachedFromWindow() {
+        ticker.unregister(context)
+        super.onDetachedFromWindow()
     }
 
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
@@ -65,16 +79,9 @@ class WeatherLabel @JvmOverloads constructor(
         if (hasWindowFocus) refreshIfStale()
     }
 
-    private fun services(): AppServices? {
-        var c: Context? = context
-        while (c is ContextWrapper) {
-            if (c is AppServices) return c
-            c = c.baseContext
-        }
-        return null
-    }
+    private fun services(): AppServices? = context.appServices()
 
-    private fun lang(): Lang = services()?.lang ?: Lang.EN
+    private fun lang(): Lang = context.appLang()
 
     private fun hasLocation(): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
@@ -84,7 +91,7 @@ class WeatherLabel @JvmOverloads constructor(
         val t = today
         val speaker = services()?.speaker
         when {
-            t != null -> speaker?.say(WeatherPhrases.spoken(t, lang(), ageMs()))
+            t != null -> speaker?.say(dateSpoken() + " " + WeatherPhrases.spoken(t, lang(), ageMs()))
             !hasLocation() -> (services() as? Activity)?.let {
                 speaker?.say(context.getString(R.string.weather_needs_location))
                 ActivityCompat.requestPermissions(it, arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION), 0)
@@ -98,9 +105,24 @@ class WeatherLabel @JvmOverloads constructor(
 
     private fun show() {
         val t = today
-        text = t?.let { WeatherPhrases.label(it, lang()) } ?: context.getString(R.string.weather_title)
-        contentDescription = t?.let { WeatherPhrases.spoken(it, lang(), ageMs()) }
-            ?: context.getString(R.string.weather_title)
+        val now = Now.read()
+        val weather = t?.let { WeatherPhrases.label(it, lang()) } ?: context.getString(R.string.weather_title)
+        val date = Clock.dateLabel(now.month, now.day, now.dayOfWeek, lang())
+        // Two lines, right-aligned: the weather, and the date under it in the smaller, softer caption style.
+        text = SpannableStringBuilder(weather).append('\n').apply {
+            val start = length
+            append(date)
+            setSpan(RelativeSizeSpan(DATE_SCALE), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val soft = ForegroundColorSpan(context.resolveColorAttr(R.attr.ngTextSub))
+            setSpan(soft, start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        contentDescription = dateSpoken() + " " +
+            (t?.let { WeatherPhrases.spoken(it, lang(), ageMs()) } ?: context.getString(R.string.weather_title))
+    }
+
+    private fun dateSpoken(): String {
+        val now = Now.read()
+        return Clock.dateSpoken(now.month, now.day, now.dayOfWeek, lang())
     }
 
     private fun loadStored() {
@@ -180,6 +202,9 @@ class WeatherLabel @JvmOverloads constructor(
         const val KEY_RAIN = "rain"
         const val KEY_AT = "fetched_at"
         const val TIMEOUT_MS = 8_000
+
+        /** The date line is caption-sized (15sp) under the 18sp label. */
+        const val DATE_SCALE = 15f / 18f
 
         /** One background thread for the whole app; a fetch is a single small request. */
         val worker = Executors.newSingleThreadExecutor()
