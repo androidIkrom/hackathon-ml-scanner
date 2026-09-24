@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Walk mode screen text; spoken sentences live in core/walk. -->
+<resources>
+    <string name="walking_title">Walk mode</string>
+    <string name="walking_subtitle">Hold the phone at chest height with the camera facing forward.</string>
+    <string name="walking_status_depth">Measuring distance with the camera.</string>
+    <string name="walking_status_no_depth">This phone cannot measure distance: people, vehicles and things I recognise only.</string>
+    <string name="walking_status_paused">Paused. Press Start or say “start”.</string>
+    <string name="walking_status_navigating">Guiding you to %1$s. Routing by openrouteservice, map data from OpenStreetMap contributors.</string>
+    <string name="walking_status_beacon">Guiding you by direction to %1$s.</string>
+    <string name="walking_camera_description">Camera view for walk mode</string>
+    <string name="walking_stop">Stop</string>
+    <string name="walking_start">Start</string>
+</resources>
