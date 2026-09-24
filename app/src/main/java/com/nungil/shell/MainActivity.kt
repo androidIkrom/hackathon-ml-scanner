@@ -53,6 +53,8 @@ import com.nungil.core.ui.ScreenHelp
 import com.nungil.core.ui.ShellPhrases
 import com.nungil.core.ui.VoiceChoice
 import com.nungil.core.voice.VoiceCommandParser
+import com.nungil.core.voice.WakeResult
+import com.nungil.core.voice.WakeWord
 import com.nungil.databinding.ActivityMainBinding
 import com.nungil.design.isTalkBackOn
 import com.nungil.design.openAppSettings
@@ -88,6 +90,9 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     private var askedMicThisRun = false
     private var lastNotUnderstoodAt = -RecognizerPolicy.NOT_UNDERSTOOD_GAP_MS
     private val voiceOnState = MutableStateFlow(false)
+
+    /** Taking commands: between the wake word ("Eye" / "눈길") and "Eye stop". Starts asleep. */
+    private val awakeState = MutableStateFlow(false)
 
     /** A screen waiting for words (askForWords) while the always-on listener runs. */
     private var dictation: ((String) -> Unit)? = null
@@ -157,6 +162,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             context = this,
             language = { uiLang },
             appSaying = { tts.recentSpeech() },
+            isAwake = { awakeState.value },
             holdSound = {
                 tts.holdForUser()
                 tones.holdForUser()
@@ -268,7 +274,26 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     // ---- Voice commands ---------------------------------------------------------------------------
 
-    private fun onHeard(text: String) {
+    private fun onHeard(heard: String) {
+        val wake = WakeWord.decide(heard, awakeState.value) { VoiceCommandParser.parse(it) !is VoiceCommand.Unknown }
+        val text = when (wake) {
+            WakeResult.Ignore -> {
+                Log.i(TAG, "Asleep, ignored \"$heard\"")
+                return
+            }
+            WakeResult.Wake -> {
+                wakeUp()
+                return
+            }
+            WakeResult.Sleep -> {
+                goToSleep()
+                return
+            }
+            is WakeResult.Command -> {
+                if (wake.wake) wakeUp()
+                wake.text
+            }
+        }
         val command = VoiceCommandParser.parse(text)
         Log.i(TAG, "Heard \"$text\" -> $command")
         val claim = dictation
@@ -405,6 +430,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             return
         }
         silenceAll()
+        awakeState.value = false
         prefs.voiceOn = false
         voice.stop(chime = true)
         voiceOnState.value = false
@@ -418,9 +444,30 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         silenceAll()
         ensureMic {
             prefs.voiceOn = true
+            awakeState.value = true
             voice.talkNow()
             voiceOnState.value = true
         }
+    }
+
+    /** Taking commands (true) or waiting for the wake word (false), for the Home microphone button. */
+    val awake: StateFlow<Boolean> get() = awakeState.asStateFlow()
+
+    private fun wakeUp() {
+        Log.i(TAG, "Awake")
+        awakeState.value = true
+        voice.chimeOn()
+        haptics.buzz(Buzz.TAP)
+    }
+
+    /** "Eye stop": every sound stops and only the wake word is answered until it is said again. */
+    private fun goToSleep() {
+        Log.i(TAG, "Asleep")
+        awakeState.value = false
+        dictation = null
+        dictationOwner = null
+        silenceAll()
+        voice.chimeOff()
     }
 
     private fun silenceAll() {

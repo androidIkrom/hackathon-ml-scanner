@@ -19,6 +19,7 @@ import com.nungil.core.ui.ListenAction
 import com.nungil.core.ui.Phrase
 import com.nungil.core.ui.RecognizerPolicy
 import com.nungil.core.ui.VoiceBargeIn
+import com.nungil.core.voice.WakeWord
 
 /**
  * The app's only microphone. Main thread only.
@@ -30,12 +31,16 @@ import com.nungil.core.ui.VoiceBargeIn
  * The recognizer's system beeps are muted ([EarconMuter]); the app plays its own chime instead.
  * [listenOnce] hears one phrase for a screen while always-on is off.
  *
+ * While the app is asleep (see WakeWord) only the wake word stops app sound.
+ *
  * @param appSaying what the app is saying now or has just said (for echo detection).
+ * @param isAwake true between the wake word and "Eye stop".
  */
 class VoiceInput(
     private val context: Context,
     private val language: () -> Lang,
     private val appSaying: () -> String?,
+    private val isAwake: () -> Boolean,
     private val holdSound: () -> Unit,
     private val releaseSound: () -> Unit,
     private val onHeard: (String) -> Unit,
@@ -66,6 +71,10 @@ class VoiceInput(
         chime.playOn()
         schedule(RecognizerPolicy.DELAY_AFTER_ENABLE_MS)
     }
+
+    fun chimeOn() = chime.playOn()
+
+    fun chimeOff() = chime.playOff()
 
     /** A microphone button was pressed: every app sound stops and stays off while the user talks. */
     fun talkNow() {
@@ -157,7 +166,13 @@ class VoiceInput(
         val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
         if (text.isNullOrEmpty()) return
         lastPartial = text
-        if (!holding && VoiceBargeIn.onPartial(text, appSaying()) == BargeIn.STOP_ALL_SOUND) beginHold()
+        if (holding) return
+        val userTalking = if (isAwake()) {
+            VoiceBargeIn.onPartial(text, appSaying()) == BargeIn.STOP_ALL_SOUND
+        } else {
+            WakeWord.addressed(text)
+        }
+        if (userTalking) beginHold()
     }
 
     /** Hide the recognizer's end beep; the app is silent while the user speaks, so music may go too. */

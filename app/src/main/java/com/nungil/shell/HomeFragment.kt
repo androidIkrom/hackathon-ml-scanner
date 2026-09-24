@@ -16,6 +16,7 @@ import com.nungil.contract.ScanMode
 import com.nungil.contract.app.services
 import com.nungil.databinding.HomeFragmentBinding
 import com.nungil.design.setHeading
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /** Owner I. Voice-first Home: one card per job and the microphone button within thumb reach. */
@@ -48,8 +49,14 @@ class HomeFragment : Fragment() {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                main.voiceOn.collect { on ->
-                    binding.homeMic.setText(if (on) R.string.home_mic_speak else R.string.home_mic_turn_on)
+                combine(main.voiceOn, main.awake) { on, awake -> on to awake }.collect { (on, awake) ->
+                    binding.homeMic.setText(
+                        when {
+                            !on -> R.string.home_mic_turn_on
+                            awake -> R.string.home_mic_speak
+                            else -> R.string.home_mic_asleep
+                        },
+                    )
                     binding.homeMic.setIconResource(R.drawable.ng_ic_mic)
                     ViewCompat.replaceAccessibilityAction(
                         binding.homeMic,

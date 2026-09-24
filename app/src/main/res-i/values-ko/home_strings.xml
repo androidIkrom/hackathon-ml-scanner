@@ -16,6 +16,7 @@
     <string name="home_history">기록</string>
     <string name="home_settings">설정</string>
     <string name="home_mic_speak">말하기</string>
+    <string name="home_mic_asleep">“눈길”이라고 불러 주세요</string>
     <string name="home_mic_turn_on">음성 명령 켜기</string>
     <string name="home_mic_turn_off">음성 명령 끄기</string>
 

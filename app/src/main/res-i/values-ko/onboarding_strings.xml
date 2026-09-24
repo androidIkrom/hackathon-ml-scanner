@@ -4,8 +4,8 @@
     <string name="onboarding_headline">안녕하세요, 눈길이에요</string>
     <string name="onboarding_body">인터넷 없이 이 휴대폰만으로 주변에 무엇이 있는지 알려드려요.</string>
     <string name="onboarding_try_saying">이렇게 말해 보세요</string>
-    <string name="onboarding_command_scan">“주변 둘러보기”</string>
+    <string name="onboarding_command_scan">“눈길아, 주변 둘러보기”</string>
     <string name="onboarding_command_find">“가방 찾아줘”</string>
-    <string name="onboarding_command_saved">“저장한 것”</string>
+    <string name="onboarding_command_saved">“눈길아, 그만”</string>
     <string name="onboarding_start">시작하기</string>
 </resources>

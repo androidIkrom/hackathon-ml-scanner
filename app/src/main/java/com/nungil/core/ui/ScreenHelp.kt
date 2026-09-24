@@ -153,12 +153,14 @@ object ScreenHelp {
 object OnboardingText {
     fun intro(lang: Lang): String = if (lang == Lang.KO) {
         "안녕하세요, 눈길이에요. 인터넷 없이 이 휴대폰만으로 주변에 무엇이 있는지 알려드려요. " +
+            "저를 부를 때는 눈길아 라고 말해 주세요. 그만하려면 눈길아 그만 이라고 말해 주세요. " +
             "주변 둘러보기라고 말하거나 홈의 첫 번째 카드를 누른 뒤 천천히 한 바퀴 돌아 보세요. " +
             "가방 찾아줘처럼 말하면 소리를 따라 찾을 수 있어요. " +
             "저장한 것이라고 말하면 사람과 물건을 알려 줄 수 있어요. " +
             "아래의 시작하기를 눌러 시작해 주세요."
     } else {
         "Hello, I am Nungil. I tell you what is around you, using only this phone, even without internet. " +
+            "Say Eye to wake me, then say what you need. Say Eye stop when you are done. " +
             "Say look around, or tap the first card on the home screen, then turn slowly in a circle. " +
             "Say find and a thing, like find my bag, and follow the beeps. " +
             "Say saved to teach me people and things. " +

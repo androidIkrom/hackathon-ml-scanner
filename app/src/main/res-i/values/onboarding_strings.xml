@@ -4,8 +4,8 @@
     <string name="onboarding_headline">Hello, I am Nungil</string>
     <string name="onboarding_body">I tell you what is around you using only this phone, even without internet.</string>
     <string name="onboarding_try_saying">Try saying</string>
-    <string name="onboarding_command_scan">“Look around”</string>
+    <string name="onboarding_command_scan">“Eye, look around”</string>
     <string name="onboarding_command_find">“Find my bag”</string>
-    <string name="onboarding_command_saved">“Saved”</string>
+    <string name="onboarding_command_saved">“Eye stop”</string>
     <string name="onboarding_start">Start</string>
 </resources>
