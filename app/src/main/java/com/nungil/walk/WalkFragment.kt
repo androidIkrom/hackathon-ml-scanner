@@ -22,6 +22,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
+import com.google.ar.core.TrackingFailureReason
 import com.nungil.BuildConfig
 import com.nungil.R
 import com.nungil.contract.Buzz
@@ -42,6 +43,7 @@ import com.nungil.core.walk.Place
 import com.nungil.core.walk.RerouteGate
 import com.nungil.core.walk.RoutePhrases
 import com.nungil.core.walk.StepLength
+import com.nungil.core.walk.TrackingRestart
 import com.nungil.core.walk.WalkAlerts
 import com.nungil.core.walk.WalkBeep
 import com.nungil.core.walk.WalkCommand
@@ -82,7 +84,8 @@ class WalkFragment : Fragment(), VoiceHandler {
     private var noDepthSaid = false
     private var lastReportAt = 0L
     private var lastBuzzAt = 0L
-    private var lastRestartAt = 0L
+    private val restart = TrackingRestart()
+    private var cameraStartedAt = 0L
 
     // Go mode: search a place, then an arrow and distances on screen while the warnings keep running.
     private var goMode = false
@@ -97,16 +100,22 @@ class WalkFragment : Fragment(), VoiceHandler {
 
     /**
      * After a system dialog, ARCore sometimes stops tracking and never recovers on its own (seen on an
-     * Infinix X6880 for over a minute). If it has not tracked for [RESTART_AFTER_MS], restart the session.
+     * Infinix X6880 for over a minute). Then restart the session, but only as [TrackingRestart] allows:
+     * restarting in the dark crashed ARCore natively.
      */
     private val trackingWatchdog = object : Runnable {
         override fun run() {
             if (_binding == null) return
             val now = SystemClock.elapsedRealtime()
-            val stale = now - renderer.lastTrackingAt >= RESTART_AFTER_MS
-            if (glRunning && stale && now - lastRestartAt >= RESTART_GAP_MS) {
-                lastRestartAt = now
-                android.util.Log.i("Nungil", "ARCore not tracking for ${RESTART_AFTER_MS / 1000} s: restarting the session")
+            val reason = renderer.failureReason
+            val selfRecovers = reason == TrackingFailureReason.INSUFFICIENT_LIGHT ||
+                reason == TrackingFailureReason.INSUFFICIENT_FEATURES ||
+                reason == TrackingFailureReason.EXCESSIVE_MOTION
+            // The Go search step hides the camera: no frames, nothing to restart.
+            val visible = binding.walkingCameraCard.isShown
+            if (!visible) cameraStartedAt = now
+            if (glRunning && visible && restart.shouldRestart(now, renderer.lastTrackingAt, cameraStartedAt, selfRecovers)) {
+                android.util.Log.i("Nungil", "ARCore not tracking ($reason): restarting the session")
                 stopCamera()
                 startCamera()
             }
@@ -250,7 +259,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         }
         renderer.depthEnabled = a.depthSupported
         renderer.semanticsEnabled = a.semanticsSupported
-        renderer.lastTrackingAt = SystemClock.elapsedRealtime()
+        cameraStartedAt = SystemClock.elapsedRealtime()
         renderer.session = a.session
         renderer.closing = false
         main.removeCallbacks(trackingWatchdog)
@@ -484,6 +493,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         (activity as? MainActivity)?.setScreenTitle(getString(R.string.walking_go_title))
         binding.walkingTitle.setText(R.string.walking_go_where)
         binding.walkingStatus.visibility = View.GONE
+        binding.walkingAnnouncement.visibility = View.GONE
         binding.walkingCameraCard.visibility = View.GONE
         binding.walkingMain.setText(R.string.walking_go_start)
         tintMain(R.attr.ngPrimary, R.attr.ngOnPrimary)
@@ -499,6 +509,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         (activity as? MainActivity)?.setScreenTitle(getString(R.string.walking_go_to, place.name))
         binding.walkingTitle.text = getString(R.string.walking_go_to, place.name)
         binding.walkingStatus.visibility = View.VISIBLE
+        binding.walkingAnnouncement.visibility = View.VISIBLE
         binding.walkingCameraCard.visibility = View.VISIBLE
         binding.walkingMain.setText(R.string.walking_stop)
         tintMain(R.attr.ngDanger, R.attr.ngOnDanger)
@@ -688,8 +699,6 @@ class WalkFragment : Fragment(), VoiceHandler {
         const val REPORT_STALE_MS = 1_000L
         const val MAX_CANDIDATES = 3
         const val FALLBACK_MIN_SCORE = 0.5f
-        const val RESTART_AFTER_MS = 5_000L
-        const val RESTART_GAP_MS = 15_000L
         const val WATCHDOG_EVERY_MS = 1_000L
         const val GO_TICK_MS = 200L
     }
