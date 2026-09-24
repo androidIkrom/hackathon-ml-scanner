@@ -56,8 +56,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Three-step item enrolment: 4 samples held still, 4 moved left, 4 moved right (12 in all). The box nearest the
- * centre that covers at least 5% of the frame is embedded; detector confidence is 0.3 here. Nothing is saved
- * until the last sample.
+ * centre that covers at least 5% of the frame is embedded; detector confidence is 0.3 here. After each prompt the
+ * user gets [PROMPT_WAIT_MS] to follow it, and a left or right sample counts only once the item has really shifted
+ * (ItemEnrollmentGuide). Nothing is saved until the last sample.
  */
 class ItemEnrollFragment : Fragment(), VoiceHandler {
     private var _binding: ItemEnrollFragmentBinding? = null
@@ -81,6 +82,10 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
 
     @Volatile
     private var finished = false
+
+    /** No samples before this time, so the user hears the prompt and has time to follow it. */
+    @Volatile
+    private var waitUntilMs = 0L
 
     // Extras thread only.
     private var embedder: ItemEmbedder? = null
@@ -169,6 +174,7 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
     private fun start() {
         if (finished || running) return
         running = true
+        waitUntilMs = SystemClock.elapsedRealtime() + PROMPT_WAIT_MS
         binding.itemEnrollButton.setText(R.string.item_enroll_pause)
         services.speaker.say(ItemPhrases.prompt(guide.step ?: ItemStep.STILL, lang))
     }
@@ -227,7 +233,15 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
             return
         }
         lastSeenMs = now
-        if (now - lastSampleMs < SAMPLE_GAP_MS) return
+        if (now < waitUntilMs || now - lastSampleMs < SAMPLE_GAP_MS) return
+        if (!guide.accepts(box.centerX)) {
+            // Still where it was held: repeat the left/right prompt now and then.
+            if (now - lastHintMs > NO_ITEM_HINT_MS) {
+                lastHintMs = now
+                guide.step?.let { services.speaker.say(ItemPhrases.prompt(it, lang)) }
+            }
+            return
+        }
         val vector = embedder.embed(bitmap, box) ?: return
         lastSampleMs = now
         if (photo == null) {
@@ -237,7 +251,11 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         }
         samples += vector
         labels += label
-        val stepDone = guide.add()
+        val stepDone = guide.add(box.centerX)
+        if (stepDone) {
+            waitUntilMs = now + PROMPT_WAIT_MS
+            lastHintMs = now
+        }
         val percent = guide.percent()
         val next = guide.step
         main.post {
@@ -299,5 +317,6 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         const val ENROLL_MIN_SCORE = 0.3f
         const val SAMPLE_GAP_MS = 300L
         const val NO_ITEM_HINT_MS = 4_000L
+        const val PROMPT_WAIT_MS = 2_500L
     }
 }
