@@ -163,6 +163,11 @@ class WalkBasicsTest {
         assertEquals(WalkCommand.SavePlace("집"), WalkCommands.parse("여기를 집으로 저장해 줘"))
     }
 
+    @Test fun goModeCommands() {
+        for (p in listOf("go mode", "Navigation", "길 안내", "길찾기")) assertEquals(p, WalkCommand.GoMode, WalkCommands.parse(p))
+        assertEquals(WalkCommand.GoTo("home"), WalkCommands.parse("take me home"))
+    }
+
     @Test fun letsGoToAScreenIsNotAPlace() =
         assertNull(WalkCommands.parse("설정으로 가자") { it == "설정" })
 }

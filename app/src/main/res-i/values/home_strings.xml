@@ -11,6 +11,8 @@
     <string name="home_saved_subtitle">People and things you taught me</string>
     <string name="home_live_title">Live scan</string>
     <string name="home_live_subtitle">Hear things as the camera finds them</string>
+    <string name="home_go_title">Go somewhere</string>
+    <string name="home_go_subtitle">Search a place and follow the arrow</string>
     <string name="home_walk_title">Walk mode</string>
     <string name="home_walk_subtitle">Warnings about obstacles while walking</string>
     <string name="home_history">History</string>

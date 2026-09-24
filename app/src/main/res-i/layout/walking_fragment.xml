@@ -56,6 +56,107 @@
         </FrameLayout>
     </com.google.android.material.card.MaterialCardView>
 
+    <!-- Go mode: "Where to?" search and results, or the direction card while navigating. -->
+    <LinearLayout
+        android:id="@+id/walking_go_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/ng_gap"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/walking_go_search"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:hint="@string/walking_go_hint">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/walking_go_query"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:minHeight="@dimen/ng_touch"
+                    android:singleLine="true"
+                    android:textAppearance="@style/TextAppearance.Nungil.Body" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/walking_go_mic"
+                style="@style/Widget.Nungil.Button.Tonal"
+                android:layout_width="@dimen/ng_touch"
+                android:layout_height="@dimen/ng_touch"
+                android:layout_marginStart="@dimen/ng_gap"
+                android:contentDescription="@string/walking_go_mic"
+                android:minHeight="@dimen/ng_touch"
+                android:padding="0dp"
+                app:icon="@drawable/ng_ic_mic"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/walking_go_results"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/walking_go_direction"
+            style="@style/Widget.Nungil.Card.Primary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/walking_go_arrow"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/walking_ic_navigation" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/ng_gutter"
+                    android:layout_weight="1"
+                    android:accessibilityLiveRegion="polite"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/walking_go_instruction"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textAppearance="@style/TextAppearance.Nungil.Headline" />
+
+                    <TextView
+                        android:id="@+id/walking_go_distance"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textAppearance="@style/TextAppearance.Nungil.Body"
+                        android:textColor="?attr/ngTextSub" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+
     <TextView
         android:id="@+id/walking_announcement"
         android:layout_width="match_parent"

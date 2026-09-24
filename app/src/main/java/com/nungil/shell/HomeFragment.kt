@@ -37,6 +37,7 @@ class HomeFragment : Fragment() {
         binding.homeSaved.setOnClickListener { nav.open(Dest.Saved()) }
         binding.homeLive.setOnClickListener { nav.open(Dest.Scan(ScanMode.LIVE)) }
         binding.homeWalk.setOnClickListener { nav.open(Dest.Walk) }
+        binding.homeGo.setOnClickListener { (requireActivity() as MainActivity).openGoMode() }
         binding.homeHistory.setOnClickListener { nav.open(Dest.History) }
         binding.homeSettings.setOnClickListener { nav.open(Dest.Settings) }
 

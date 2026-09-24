@@ -179,6 +179,40 @@ class RouteTest {
         assertFalse(RoutePhrases.isYes("maybe"))
     }
 
+    @Test fun goScreenShowsTheNextTurnAndWhatIsLeft() {
+        val n = Navigator(route(), null, Lang.EN)
+        val s = n.peek(at(60.0, 0.0))
+        assertEquals(route().line[1], s.target)
+        assertEquals("Turn left onto Main Street", s.instruction)
+        assertEquals(40f, s.toTargetM, 1f)
+        assertEquals(240f, s.remainingM, 2f)
+    }
+
+    @Test fun afterTheLastTurnTheGoScreenPointsAtTheDestination() {
+        val n = Navigator(route(), null, Lang.KO)
+        val s = n.peek(at(150.0, 100.0))
+        assertEquals("home로 가세요", s.instruction)
+        assertEquals(50f, s.toTargetM, 2f)
+    }
+
+    @Test fun arrowPointsRelativeToThePhone() {
+        val here = at(0.0, 0.0)
+        assertEquals(0f, GoMath.arrowDeg(here, at(0.0, 100.0), 0f), 1f)
+        assertEquals(90f, GoMath.arrowDeg(here, at(100.0, 0.0), 0f), 1f)
+        assertEquals(-90f, GoMath.arrowDeg(here, at(0.0, 100.0), 90f), 1f)
+        assertEquals(180f, kotlin.math.abs(GoMath.arrowDeg(here, at(0.0, -100.0), 0f)), 1f)
+    }
+
+    @Test fun goPhrases() {
+        assertEquals("Head to Seoul Station", RoutePhrases.headTo("Seoul Station", Lang.EN))
+        assertEquals("서울역으로 가세요", RoutePhrases.headTo("서울역", Lang.KO))
+        assertEquals("In 40 metres · 240 metres left", RoutePhrases.goDistance(40f, 240f, Lang.EN))
+        assertEquals("40미터 후 · 240미터 남았어요", RoutePhrases.goDistance(40f, 240f, Lang.KO))
+        assertEquals("어디로 갈까요?", RoutePhrases.whereTo(Lang.KO))
+        assertEquals("Turn right", RoutePhrases.display(RouteStep("", 1, 0f, o, 1), Lang.EN))
+        assertEquals("오른쪽으로 도세요", RoutePhrases.display(RouteStep("Turn right onto X", 1, 0f, o, 1), Lang.KO))
+    }
+
     @Test fun numbersFromTheSpec() {
         assertEquals(25f, Navigator.PREPARE_M)
         assertEquals(5f, Navigator.TURN_M)

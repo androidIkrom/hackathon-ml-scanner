@@ -5,6 +5,9 @@ sealed interface WalkCommand {
     data class GoTo(val place: String) : WalkCommand
     /** [name] null: the user did not say one, so ask for it. */
     data class SavePlace(val name: String?) : WalkCommand
+
+    /** Open Go mode with no destination yet: "go mode", "길 안내". */
+    data object GoMode : WalkCommand
 }
 
 object WalkCommands {
@@ -26,9 +29,15 @@ object WalkCommands {
     private val KO_LETS_GO = Regex("""^(.+?)\s*(?:으로|로|까지|에)\s*(?:가자|가 줘|가줘|가고 싶어)$""")
 
     /** [isScreenWord] tells a screen name ("설정", "saved") from a place for the ambiguous "…로 가자". */
+    private val GO_MODE = setOf(
+        "go mode", "go", "navigation", "navigation mode", "navigate", "directions", "go somewhere", "where to",
+        "길 안내", "길안내", "길 안내 모드", "길안내 모드", "길 찾기", "길찾기", "길 찾기 모드",
+    )
+
     fun parse(text: String, isScreenWord: (String) -> Boolean = { false }): WalkCommand? {
         val t = text.trim().trimEnd('.', '!', '?', ',').trim()
         if (t.isEmpty()) return null
+        if (t.lowercase() in GO_MODE) return WalkCommand.GoMode
         EN_SAVE.find(t)?.let { m -> name(m.groupValues[1])?.let { return WalkCommand.SavePlace(it) } }
         KO_SAVE.find(t)?.let { m -> name(m.groupValues[1])?.let { return WalkCommand.SavePlace(it) } }
         if (EN_SAVE_BARE.matches(t) || KO_SAVE_BARE.matches(t)) return WalkCommand.SavePlace(null)

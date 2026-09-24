@@ -163,6 +163,23 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
         return announcement
     }
 
+    /**
+     * What the Go screen shows, without changing guidance state: the next turn point (or the destination
+     * after the last turn), its instruction, the distance to it and the distance left along the route.
+     */
+    fun peek(at: LatLon): GoState {
+        val (_, myAlong) = nearest(project(at))
+        var i = current
+        while (i < guided.size && along[guided[i].pointIndex] < myAlong - TURN_M) i++
+        val remaining = max(0f, along.last() - myAlong) + Beacon.distanceMetres(route.line.last(), route.destination.point).toFloat()
+        if (i >= guided.size) {
+            val d = Beacon.distanceMetres(at, route.destination.point).toFloat()
+            return GoState(route.destination.point, RoutePhrases.headTo(route.destination.name, lang), d, max(d, 0f))
+        }
+        val step = guided[i]
+        return GoState(step.maneuver, RoutePhrases.display(step, lang), max(0f, along[step.pointIndex] - myAlong), remaining)
+    }
+
     /** Distance to the line and progress along it, in metres. */
     private fun nearest(p: DoubleArray): Pair<Float, Float> {
         var best = Float.MAX_VALUE
@@ -202,6 +219,19 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
         const val REPEAT_MS = 10_000L
         private const val METRES_PER_DEG_LAT = 110_540.0
         private const val METRES_PER_DEG_LON = 111_320.0
+    }
+}
+
+/** One screenful of Go-mode direction: where the arrow points and what to show under it. */
+data class GoState(val target: LatLon, val instruction: String, val toTargetM: Float, val remainingM: Float)
+
+/** Arrow angle for the Go screen: the target's bearing relative to where the phone points, -180..180 (0 = straight ahead). */
+object GoMath {
+    fun arrowDeg(here: LatLon, target: LatLon, headingDeg: Float): Float {
+        var rel = (Beacon.bearingDeg(here, target) - headingDeg).toFloat() % 360f
+        if (rel > 180f) rel -= 360f
+        if (rel <= -180f) rel += 360f
+        return rel
     }
 }
 
@@ -287,6 +317,23 @@ object RoutePhrases {
         val d = WalkPhrases.far(totalM.toDouble(), lang)
         return if (lang == Lang.KO) "${name}까지 $d 안내할게요." else "Guiding you to $name, $d."
     }
+
+    /** The next instruction as shown on screen: openrouteservice's English text, or the turn in Korean. */
+    fun display(step: RouteStep, lang: Lang): String =
+        if (lang == Lang.EN && step.instruction.isNotBlank()) step.instruction.trim().trimEnd('.')
+        else typePhrase(step.type, lang).replaceFirstChar { it.uppercase() }
+
+    /** "In 40 metres · 240 metres left" / "40미터 후 · 240미터 남았어요" */
+    fun goDistance(toTargetM: Float, remainingM: Float, lang: Lang): String {
+        val next = WalkPhrases.far(toTargetM.toDouble(), lang)
+        val left = WalkPhrases.far(remainingM.toDouble(), lang)
+        return if (lang == Lang.KO) "$next 후 · $left 남았어요" else "In $next · $left left"
+    }
+
+    fun whereTo(lang: Lang): String = if (lang == Lang.KO) "어디로 갈까요?" else "Where to?"
+
+    fun headTo(name: String, lang: Lang): String =
+        if (lang == Lang.KO) "${WalkPhrases.euro(name)} 가세요" else "Head to $name"
 
     fun navigationStopped(lang: Lang): String =
         if (lang == Lang.KO) "길 안내를 멈췄어요." else "Navigation stopped."
