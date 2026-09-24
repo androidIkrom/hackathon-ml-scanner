@@ -51,7 +51,6 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -140,8 +139,9 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         gate.detach()
         extras?.let { executor ->
             executor.execute { embedder?.close() }
+            // No waiting here: blocking the main thread froze the screen while leaving. The close task above
+            // still runs last on the extras thread, and shutdown() lets nothing new in.
             executor.shutdown()
-            executor.awaitTermination(2, TimeUnit.SECONDS)
         }
         extras = null
         main.removeCallbacksAndMessages(null)

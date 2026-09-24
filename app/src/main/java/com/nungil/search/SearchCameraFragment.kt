@@ -30,7 +30,6 @@ import com.nungil.scan.OverlayView
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
@@ -60,12 +59,16 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
     @Volatile
     private var lastPulseMs = -1L
 
+    @Volatile
+    private var leaving = false
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = SearchCameraFragmentBinding.inflate(inflater, container, false)
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        leaving = false
         services = services()
         lang = services.lang
         spokenName = args.spokenName
@@ -105,14 +108,18 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        leaving = true
         camera?.stop()
         camera = null
         services.beeper.stop()
         gate.detach()
         extras?.let { executor ->
-            executor.execute { matcher.getAndSet(null)?.close() }
+            // Take the matcher now, so a close that runs late cannot close the next view's matcher.
+            val old = matcher.getAndSet(null)
+            executor.execute { old?.close() }
+            // No waiting here: blocking the main thread froze the screen while leaving. The close task above
+            // still runs last on the extras thread, and shutdown() lets nothing new in.
             executor.shutdown()
-            executor.awaitTermination(2, TimeUnit.SECONDS)
         }
         extras = null
         main.removeCallbacksAndMessages(null)
@@ -173,6 +180,8 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
 
     /** Worker thread: speech, beeps and vibration are thread-safe; the overlay is updated on the main thread. */
     private fun handle(frame: VisionFrame, index: Int) {
+        // A frame still in flight after the screen was left must not restart the beeps or speak.
+        if (leaving) return
         val target = frame.detections.getOrNull(index)
         val x = target?.let { SearchGuide.userX(it.box.centerX, frame.facing) }
         val zone = x?.let { SearchGuide.zone(it) }
