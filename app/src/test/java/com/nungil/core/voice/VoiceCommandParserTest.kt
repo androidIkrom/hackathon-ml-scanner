@@ -22,6 +22,25 @@ class VoiceCommandParserTest {
     @Test fun koMicOffWithoutSpaces() = assertEquals(VoiceCommand.StopListening, p("마이크꺼"))
     @Test fun koVoiceOff() = assertEquals(VoiceCommand.StopListening, p("음성 명령 꺼 줘"))
 
+    // ---- stop and back beat the screen they name --------------------------------------------------
+    @Test fun stopScanStops() = assertEquals(VoiceCommand.Stop, p("stop scan"))
+    @Test fun stopTheScanningStops() = assertEquals(VoiceCommand.Stop, p("stop the scanning"))
+    @Test fun moreStopWords() {
+        for (w in listOf("cancel", "halt", "be quiet", "silence", "shut up", "finish", "that's enough")) {
+            assertEquals(w, VoiceCommand.Stop, p(w))
+        }
+    }
+    @Test fun koStopScan() = assertEquals(VoiceCommand.Stop, p("스캔 멈춰"))
+    @Test fun koMoreStopWords() {
+        for (w in listOf("그만", "취소", "조용히 해", "끝내", "스캔 그만해")) assertEquals(w, VoiceCommand.Stop, p(w))
+    }
+    @Test fun moreBackWords() {
+        for (w in listOf("go back", "exit", "close", "leave this screen")) assertEquals(w, VoiceCommand.Back, p(w))
+    }
+    @Test fun koMoreBackWords() {
+        for (w in listOf("뒤로 가", "나가", "닫아 줘", "이전 화면")) assertEquals(w, VoiceCommand.Back, p(w))
+    }
+
     // ---- search with a payload ------------------------------------------------------------------
     @Test fun findMyBag() = assertEquals(Go(Dest.Search("my bag")), p("Find my bag"))
     @Test fun searchFor() = assertEquals(Go(Dest.Search("the keys")), p("search for the keys"))
