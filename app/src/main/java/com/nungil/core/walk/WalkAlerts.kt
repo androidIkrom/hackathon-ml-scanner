@@ -1,7 +1,7 @@
 package com.nungil.core.walk
 
 /** What walk mode may say, most urgent first (build guide §7 plus navigation below the saved things). */
-enum class AlertKind { FLOOR, HAZARD, GROUND, LIGHT, SAVED, SIGN, CODE, NAVIGATION, BEACON, CLEAR, INFO }
+enum class AlertKind { FLOOR, HAZARD, GROUND, LIGHT, DEPTH, SAVED, SIGN, CODE, NAVIGATION, BEACON, CLEAR, INFO }
 
 /**
  * One thing worth saying. [key] identifies the situation (e.g. "wall:ahead"): the same key is not

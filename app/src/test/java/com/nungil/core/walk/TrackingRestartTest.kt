@@ -10,7 +10,7 @@ class TrackingRestartTest {
         val r = TrackingRestart()
         assertFalse(r.shouldRestart(now = 10_000, lastTrackedAt = 9_000, startedAt = 0, selfRecovers = false))
         assertFalse(r.shouldRestart(now = 10_000, lastTrackedAt = 0, startedAt = 6_000, selfRecovers = false))
-        assertTrue(r.shouldRestart(now = 11_000, lastTrackedAt = 0, startedAt = 6_000, selfRecovers = false))
+        assertTrue(r.shouldRestart(now = 16_000, lastTrackedAt = 0, startedAt = 6_000, selfRecovers = false))
     }
 
     @Test fun neverRestartsInTheDark() {
@@ -28,14 +28,14 @@ class TrackingRestartTest {
                 started = t
             }
         }
-        assertEquals(listOf(5_000L, 20_000L, 50_000L, 110_000L, 230_000L, 350_000L), at)
+        assertEquals(listOf(10_000L, 25_000L, 55_000L, 115_000L, 235_000L, 355_000L), at)
     }
 
     @Test fun trackingAgainResetsTheWait() {
         val r = TrackingRestart()
-        assertTrue(r.shouldRestart(5_000, lastTrackedAt = 0, startedAt = 0, selfRecovers = false))
-        assertTrue(r.shouldRestart(20_000, lastTrackedAt = 0, startedAt = 5_000, selfRecovers = false))
-        // tracked again at 21 s, lost it: the next restart only needs 5 s stale, no 30 s gap
-        assertTrue(r.shouldRestart(26_000, lastTrackedAt = 21_000, startedAt = 20_000, selfRecovers = false))
+        assertTrue(r.shouldRestart(10_000, lastTrackedAt = 0, startedAt = 0, selfRecovers = false))
+        assertTrue(r.shouldRestart(25_000, lastTrackedAt = 0, startedAt = 10_000, selfRecovers = false))
+        // tracked again at 26 s, lost it: the next restart only needs 10 s stale, no 30 s gap
+        assertTrue(r.shouldRestart(36_000, lastTrackedAt = 26_000, startedAt = 25_000, selfRecovers = false))
     }
 }
