@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner Y. The small weather label in the app bar. -->
+<resources>
+    <string name="weather_title">Weather</string>
+    <string name="weather_needs_location">To tell the weather, allow the location.</string>
+    <string name="weather_not_yet">I don\'t have the weather yet. It needs the internet once.</string>
+</resources>
