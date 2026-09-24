@@ -166,13 +166,22 @@ class ReaderFragment : Fragment(), VoiceHandler {
                 ReaderPolicy.codePhrase(code, lang)
             } else {
                 val text = Tasks.await(recognizer.process(image), 2, TimeUnit.SECONDS)
-                ReaderPolicy.longestLine(text.textBlocks.flatMap { block -> block.lines.map { it.text } })
+                val w = bitmap.width.toFloat()
+                val h = bitmap.height.toFloat()
+                val lines = text.textBlocks.flatMap { block -> block.lines }.mapNotNull { line ->
+                    val box = line.boundingBox ?: return@mapNotNull null
+                    SeenLine(line.text, line.confidence, box.height() / h, box.exactCenterX() / w, box.exactCenterY() / h)
+                }
+                val picked = ReaderPolicy.pickLine(lines)
+                // Text must be seen in two reads in a row; a code is exact and is read at once.
+                if (!policy.steady(picked)) null else picked
             }
         } catch (e: Exception) {
             Log.i("Nungil", "Reader failed: ${e.message}")
             null
         } ?: return
         if (leaving || !policy.shouldSpeak(spoken, SystemClock.elapsedRealtime())) return
+        Log.i("Nungil", "Reader says \"$spoken\"")
         services.speaker.say(spoken)
         main.post { _binding?.readerText?.text = spoken }
     }
