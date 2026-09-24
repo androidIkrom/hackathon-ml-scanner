@@ -33,6 +33,8 @@ import com.nungil.core.walk.Alert
 import com.nungil.core.walk.AlertKind
 import com.nungil.core.walk.Announcement
 import com.nungil.core.walk.Beacon
+import com.nungil.core.walk.GoMath
+import com.nungil.core.walk.GoState
 import com.nungil.core.walk.LatLon
 import com.nungil.core.walk.Navigator
 import com.nungil.core.walk.Place
@@ -79,6 +81,17 @@ class WalkFragment : Fragment(), VoiceHandler {
     private var lastReportAt = 0L
     private var lastBuzzAt = 0L
     private var lastRestartAt = 0L
+
+    // Go mode: search a place, then an arrow and distances on screen while the warnings keep running.
+    private var goMode = false
+    private lateinit var goPanel: GoPanel
+    private val goTicker = object : Runnable {
+        override fun run() {
+            if (_binding == null || !goMode) return
+            updateDirection()
+            main.postDelayed(this, GO_TICK_MS)
+        }
+    }
 
     /**
      * After a system dialog, ARCore sometimes stops tracking and never recovers on its own (seen on an
@@ -157,6 +170,12 @@ class WalkFragment : Fragment(), VoiceHandler {
         binding.walkingGl.setRenderer(renderer)
         binding.walkingGl.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
         binding.walkingMain.setOnClickListener { setRunning(!running) }
+        goPanel = GoPanel(
+            binding,
+            onSearch = { q -> searchPlaces(q) },
+            onMic = { services.askForWords(viewLifecycleOwner) { q -> binding.walkingGoQuery.setText(q); searchPlaces(q) } },
+            onPick = { place -> withLocation { here -> requestRoute(here, place, reroute = false) } },
+        )
         say(WalkPhrases.started(services.lang))
         (activity as? MainActivity)?.takePendingWalkCommand()?.let { onWalkCommand(it) }
     }
@@ -327,6 +346,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         services.speaker.sayNow(RoutePhrases.arrived(place.name, services.lang))
         _binding?.walkingAnnouncement?.text = RoutePhrases.arrived(place.name, services.lang)
         status(getString(R.string.walking_subtitle))
+        if (goMode) goPanel.showSearch()
     }
 
     private fun say(text: String) {
@@ -371,6 +391,7 @@ class WalkFragment : Fragment(), VoiceHandler {
     fun onWalkCommand(command: WalkCommand) {
         if (_binding == null) return
         when (command) {
+            WalkCommand.GoMode -> enterGo(null)
             is WalkCommand.SavePlace -> {
                 val name = command.name
                 if (name == null) {
@@ -388,8 +409,62 @@ class WalkFragment : Fragment(), VoiceHandler {
                     }
                 }
             }
-            is WalkCommand.GoTo -> withLocation { here -> startNavigation(command.place, here) }
+            is WalkCommand.GoTo -> {
+                enterGo(command.place)
+                withLocation { here -> startNavigation(command.place, here) }
+            }
         }
+    }
+
+    /** Go mode on: title, search panel, and the direction ticker. "take me to X" arrives with [query]. */
+    private fun enterGo(query: String?) {
+        if (!goMode) {
+            goMode = true
+            (activity as? MainActivity)?.setScreenTitle(getString(R.string.walking_go_title))
+            binding.walkingTitle.setText(R.string.walking_go_title)
+            main.removeCallbacks(goTicker)
+            main.post(goTicker)
+        }
+        if (navigator == null && target == null) goPanel.showSearch(query.orEmpty())
+        if (query == null) {
+            say(RoutePhrases.whereTo(services.lang))
+            withLocation { }
+        }
+    }
+
+    /** Typed or spoken search: saved places first, then nearby results, all with their distance. */
+    private fun searchPlaces(query: String) {
+        goPanel.showSearching()
+        withLocation { here ->
+            val lang = services.lang
+            val saved = places.all().filter { it.name.contains(query, ignoreCase = true) || query.contains(it.name, ignoreCase = true) }
+            val src = source
+            if (src == null) {
+                goPanel.showResults(saved.map { it to Beacon.distanceMetres(here, it.point) }, lang)
+                if (saved.isEmpty()) say(RoutePhrases.notSetUp(lang))
+                return@withLocation
+            }
+            network.execute {
+                val found = src.geocode(query, here).take(MAX_CANDIDATES)
+                main.post {
+                    if (_binding == null) return@post
+                    val all = (saved + found).distinctBy { it.name.lowercase() }
+                    goPanel.showResults(all.map { it to Beacon.distanceMetres(here, it.point) }, lang)
+                    if (all.isEmpty()) say(WalkPhrases.unknownPlace(lang))
+                }
+            }
+        }
+    }
+
+    /** Arrow toward the next turn (or the destination), next instruction, distances. */
+    private fun updateDirection() {
+        val here = location.last ?: return
+        val lang = services.lang
+        val state: GoState = navigator?.peek(here) ?: target?.let { t ->
+            val d = Beacon.distanceMetres(here, t.point).toFloat()
+            GoState(t.point, RoutePhrases.headTo(t.name, lang), d, d)
+        } ?: return
+        goPanel.showDirection(state, heading.headingDeg?.let { GoMath.arrowDeg(here, state.target, it) }, lang)
     }
 
     private fun withLocation(block: (LatLon) -> Unit) {
@@ -465,6 +540,7 @@ class WalkFragment : Fragment(), VoiceHandler {
             say(WalkPhrases.unknownPlace(lang))
             return
         }
+        if (goMode && index == 0) goPanel.showResults(candidates.map { it to Beacon.distanceMetres(here, it.point) }, lang)
         say(RoutePhrases.confirm(place.name, Beacon.distanceMetres(here, place.point), lang))
         services.askForWords(viewLifecycleOwner) { answer ->
             when {
@@ -524,6 +600,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         onFirstFix = null
         location.stop()
         status(getString(R.string.walking_subtitle))
+        if (goMode) goPanel.showSearch()
         say(RoutePhrases.navigationStopped(services.lang))
     }
 
@@ -557,5 +634,6 @@ class WalkFragment : Fragment(), VoiceHandler {
         const val RESTART_AFTER_MS = 5_000L
         const val RESTART_GAP_MS = 15_000L
         const val WATCHDOG_EVERY_MS = 1_000L
+        const val GO_TICK_MS = 200L
     }
 }

@@ -11,4 +11,9 @@
     <string name="walking_camera_description">Camera view for walk mode</string>
     <string name="walking_stop">Stop</string>
     <string name="walking_start">Start</string>
+    <string name="walking_go_title">Go somewhere</string>
+    <string name="walking_go_hint">Where to?</string>
+    <string name="walking_go_mic">Say a place</string>
+    <string name="walking_go_searching">Searching nearby…</string>
+    <string name="walking_go_none">No places found nearby.</string>
 </resources>

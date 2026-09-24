@@ -74,6 +74,15 @@
                 app:ngTitle="@string/home_live_title" />
 
             <com.nungil.design.BigCardView
+                android:id="@+id/home_go"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/ng_gap"
+                app:ngIcon="@drawable/walking_ic_navigation"
+                app:ngSubtitle="@string/home_go_subtitle"
+                app:ngTitle="@string/home_go_title" />
+
+            <com.nungil.design.BigCardView
                 android:id="@+id/home_walk"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

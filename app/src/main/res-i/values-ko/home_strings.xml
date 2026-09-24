@@ -11,6 +11,8 @@
     <string name="home_saved_subtitle">알려주신 사람과 물건이에요</string>
     <string name="home_live_title">실시간 안내</string>
     <string name="home_live_subtitle">카메라가 찾는 대로 바로 말해요</string>
+    <string name="home_go_title">길 안내</string>
+    <string name="home_go_subtitle">장소를 찾고 화살표를 따라가요</string>
     <string name="home_walk_title">걷기 모드</string>
     <string name="home_walk_subtitle">걷는 동안 장애물을 알려드려요</string>
     <string name="home_history">기록</string>

@@ -499,6 +499,18 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     private fun isCommand(text: String): Boolean =
         VoiceCommandParser.parse(text) !is VoiceCommand.Unknown || walkCommand(text) != null
 
+    /** Go mode: walk mode with the "Where to?" search and the direction card. */
+    fun openGoMode() {
+        silenceAll()
+        pendingWalkCommand = WalkCommand.GoMode
+        open(Dest.Walk)
+    }
+
+    /** A screen may rename itself (walk mode shows "Go somewhere" in Go mode). */
+    fun setScreenTitle(title: CharSequence) {
+        binding.toolbar.title = title
+    }
+
     /** Walk mode takes the command it was opened for. */
     fun takePendingWalkCommand(): WalkCommand? = pendingWalkCommand.also { pendingWalkCommand = null }
 
