@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Corner shapes that let a picture and a card join into one block (Home's hero). -->
+<resources>
+    <style name="ShapeAppearance.Nungil.TopCorners" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopLeft">@dimen/ng_radius_card</item>
+        <item name="cornerSizeTopRight">@dimen/ng_radius_card</item>
+        <item name="cornerSizeBottomLeft">0dp</item>
+        <item name="cornerSizeBottomRight">0dp</item>
+    </style>
+
+    <style name="ShapeAppearance.Nungil.BottomCorners" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSizeTopLeft">0dp</item>
+        <item name="cornerSizeTopRight">0dp</item>
+        <item name="cornerSizeBottomLeft">@dimen/ng_radius_card</item>
+        <item name="cornerSizeBottomRight">@dimen/ng_radius_card</item>
+    </style>
+
+    <style name="ShapeAppearance.Nungil.Card" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">@dimen/ng_radius_card</item>
+    </style>
+</resources>

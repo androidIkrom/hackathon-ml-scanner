@@ -16,12 +16,22 @@
         android:background="?attr/ngBackground"
         app:titleTextAppearance="@style/TextAppearance.Nungil.Headline">
 
+        <!-- 눈길이 at the top right of every screen (decorative; the title says where you are). -->
+        <ImageView
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="12dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ng_brand_icon" />
+
         <!-- Y's weather and today's date, top right on every screen; tap to hear the full report. -->
         <com.nungil.weather.WeatherLabel
             android:id="@+id/app_weather"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_gravity="end|center_vertical" />
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="8dp" />
     </com.google.android.material.appbar.MaterialToolbar>
 
     <androidx.fragment.app.FragmentContainerView
