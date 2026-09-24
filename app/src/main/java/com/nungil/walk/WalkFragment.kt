@@ -17,6 +17,7 @@ import android.view.LayoutInflater
 import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
@@ -46,6 +47,7 @@ import com.nungil.core.walk.WalkBeep
 import com.nungil.core.walk.WalkCommand
 import com.nungil.core.walk.WalkPhrases
 import com.nungil.databinding.WalkingFragmentBinding
+import com.nungil.design.resolveColorAttr
 import com.nungil.scan.CameraSession
 import com.nungil.scan.HeadingProvider
 import com.nungil.shell.MainActivity
@@ -169,15 +171,25 @@ class WalkFragment : Fragment(), VoiceHandler {
         renderer = WalkRenderer({ binding.walkingGl.display?.rotation ?: Surface.ROTATION_0 }, vision)
         binding.walkingGl.setRenderer(renderer)
         binding.walkingGl.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
-        binding.walkingMain.setOnClickListener { setRunning(!running) }
+        binding.walkingMain.setOnClickListener {
+            when {
+                goMode && !navigating() -> goPanel.query().takeIf { it.isNotEmpty() }?.let { searchPlaces(it) }
+                goMode -> stopNavigation()
+                else -> setRunning(!running)
+            }
+        }
+        // Go mode: back from the route returns to the search, not to Home.
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, goBack)
         goPanel = GoPanel(
             binding,
             onSearch = { q -> searchPlaces(q) },
             onMic = { services.askForWords(viewLifecycleOwner) { q -> binding.walkingGoQuery.setText(q); searchPlaces(q) } },
             onPick = { place -> withLocation { here -> requestRoute(here, place, reroute = false) } },
         )
-        say(WalkPhrases.started(services.lang))
-        (activity as? MainActivity)?.takePendingWalkCommand()?.let { onWalkCommand(it) }
+        // Opened for Go mode ("take me to X", the Go card): say "Where to?" there, not the walk intro.
+        val pending = (activity as? MainActivity)?.takePendingWalkCommand()
+        if (pending !is WalkCommand.GoMode && pending !is WalkCommand.GoTo) say(WalkPhrases.started(services.lang))
+        pending?.let { onWalkCommand(it) }
     }
 
     /**
@@ -346,7 +358,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         services.speaker.sayNow(RoutePhrases.arrived(place.name, services.lang))
         _binding?.walkingAnnouncement?.text = RoutePhrases.arrived(place.name, services.lang)
         status(getString(R.string.walking_subtitle))
-        if (goMode) goPanel.showSearch()
+        if (goMode) showGoSearch()
     }
 
     private fun say(text: String) {
@@ -416,16 +428,23 @@ class WalkFragment : Fragment(), VoiceHandler {
         }
     }
 
-    /** Go mode on: title, search panel, and the direction ticker. "take me to X" arrives with [query]. */
+    private val goBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            services.speaker.stop()
+            stopNavigation()
+        }
+    }
+
+    private fun navigating() = navigator != null || target != null
+
+    /** Go mode on: the search step first. "take me to X" arrives with [query]. */
     private fun enterGo(query: String?) {
         if (!goMode) {
             goMode = true
-            (activity as? MainActivity)?.setScreenTitle(getString(R.string.walking_go_title))
-            binding.walkingTitle.setText(R.string.walking_go_title)
             main.removeCallbacks(goTicker)
             main.post(goTicker)
         }
-        if (navigator == null && target == null) goPanel.showSearch(query.orEmpty())
+        if (!navigating()) showGoSearch(query.orEmpty())
         if (query == null) {
             say(RoutePhrases.whereTo(services.lang))
             withLocation { }
@@ -454,6 +473,42 @@ class WalkFragment : Fragment(), VoiceHandler {
                 }
             }
         }
+    }
+
+    /** Step 1: a "Where to?" screen. Camera hidden, warnings quiet, a big Go button at the bottom. */
+    private fun showGoSearch(query: String = "") {
+        if (_binding == null) return
+        goBack.isEnabled = false
+        running = false
+        services.beeper.stop()
+        (activity as? MainActivity)?.setScreenTitle(getString(R.string.walking_go_title))
+        binding.walkingTitle.setText(R.string.walking_go_where)
+        binding.walkingStatus.visibility = View.GONE
+        binding.walkingCameraCard.visibility = View.GONE
+        binding.walkingMain.setText(R.string.walking_go_start)
+        tintMain(R.attr.ngPrimary, R.attr.ngOnPrimary)
+        goPanel.showSearch(query)
+    }
+
+    /** Step 2: like walk mode (camera, warnings) plus the arrow card; back or Stop returns to step 1. */
+    private fun showGoRoute(place: Place) {
+        if (_binding == null) return
+        goBack.isEnabled = true
+        alerts.reset()
+        running = true
+        (activity as? MainActivity)?.setScreenTitle(getString(R.string.walking_go_to, place.name))
+        binding.walkingTitle.text = getString(R.string.walking_go_to, place.name)
+        binding.walkingStatus.visibility = View.VISIBLE
+        binding.walkingCameraCard.visibility = View.VISIBLE
+        binding.walkingMain.setText(R.string.walking_stop)
+        tintMain(R.attr.ngDanger, R.attr.ngOnDanger)
+        updateDirection()
+    }
+
+    private fun tintMain(bg: Int, fg: Int) {
+        val c = requireContext()
+        binding.walkingMain.backgroundTintList = android.content.res.ColorStateList.valueOf(c.resolveColorAttr(bg))
+        binding.walkingMain.setTextColor(c.resolveColorAttr(fg))
     }
 
     /** Arrow toward the next turn (or the destination), next instruction, distances. */
@@ -565,6 +620,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         when (result) {
             is RouteResult.Ok -> {
                 navigator = Navigator(result.route, stepM, lang)
+                if (goMode) showGoRoute(place)
                 status(getString(R.string.walking_status_navigating, place.name))
                 if (!reroute) {
                     say(RoutePhrases.started(place.name, result.route.totalM, lang))
@@ -590,6 +646,7 @@ class WalkFragment : Fragment(), VoiceHandler {
     private fun beaconTo(place: Place) {
         navigator = null
         target = place
+        if (goMode) showGoRoute(place)
         status(getString(R.string.walking_status_beacon, place.name))
     }
 
@@ -600,7 +657,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         onFirstFix = null
         location.stop()
         status(getString(R.string.walking_subtitle))
-        if (goMode) goPanel.showSearch()
+        if (goMode) showGoSearch()
         say(RoutePhrases.navigationStopped(services.lang))
     }
 

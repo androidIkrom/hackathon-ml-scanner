@@ -16,4 +16,7 @@
     <string name="walking_go_mic">장소 말하기</string>
     <string name="walking_go_searching">근처에서 찾고 있어요…</string>
     <string name="walking_go_none">근처에서 찾지 못했어요.</string>
+    <string name="walking_go_start">출발</string>
+    <string name="walking_go_where">어디로 갈까요?</string>
+    <string name="walking_go_to">%1$s까지</string>
 </resources>

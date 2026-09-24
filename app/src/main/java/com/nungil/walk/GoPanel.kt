@@ -34,6 +34,7 @@ class GoPanel(
     }
 
     fun showSearch(query: String = "") {
+        fill(true)
         b.walkingGoPanel.visibility = View.VISIBLE
         b.walkingGoSearch.visibility = View.VISIBLE
         b.walkingGoResults.visibility = View.VISIBLE
@@ -65,6 +66,7 @@ class GoPanel(
 
     /** [arrowDeg] null when there is no compass: the arrow then stays hidden. */
     fun showDirection(state: GoState, arrowDeg: Float?, lang: Lang) {
+        fill(false)
         b.walkingGoPanel.visibility = View.VISIBLE
         b.walkingGoSearch.visibility = View.GONE
         b.walkingGoResults.visibility = View.GONE
@@ -73,6 +75,22 @@ class GoPanel(
         b.walkingGoDistance.text = RoutePhrases.goDistance(state.toTargetM, state.remainingM, lang)
         b.walkingGoArrow.visibility = if (arrowDeg == null) View.INVISIBLE else View.VISIBLE
         if (arrowDeg != null) b.walkingGoArrow.rotation = arrowDeg
+    }
+
+    /** The typed place, for the Go button. */
+    fun query(): String = b.walkingGoQuery.text?.toString()?.trim().orEmpty()
+
+    /** Search step: the panel takes the camera's space. Navigation: it only wraps the direction card. */
+    private fun fill(search: Boolean) {
+        val lp = b.walkingGoPanel.layoutParams as android.widget.LinearLayout.LayoutParams
+        if (search) {
+            lp.height = 0
+            lp.weight = 1f
+        } else {
+            lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            lp.weight = 0f
+        }
+        b.walkingGoPanel.layoutParams = lp
     }
 
     fun hide() {
