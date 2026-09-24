@@ -20,12 +20,33 @@
             android:orientation="vertical"
             android:paddingBottom="@dimen/ng_gap_large">
 
-            <!-- Y's clock above the greeting; tap to hear the time and date. -->
+            <!-- Home's own header instead of the app bar, so it scrolls away with the cards. -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/home_app_title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/app_name"
+                    android:textAppearance="@style/TextAppearance.Nungil.Headline" />
+
+                <com.nungil.weather.WeatherLabel
+                    android:id="@+id/home_weather"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <!-- Y's clock right under the header; tap to hear the time and date. -->
             <com.nungil.weather.ClockLabel
                 android:id="@+id/home_clock"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/ng_gap" />
+                android:layout_height="wrap_content" />
 
             <TextView
                 android:layout_width="match_parent"

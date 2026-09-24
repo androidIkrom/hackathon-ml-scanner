@@ -158,6 +158,10 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         }
         navController = (supportFragmentManager.findFragmentById(R.id.nav_host) as NavHostFragment).navController
         binding.toolbar.setupWithNavController(navController, AppBarConfiguration(setOf(R.id.home)))
+        // Home draws its own header (title, weather, clock) that scrolls with the cards.
+        navController.addOnDestinationChangedListener { _, destination, _ ->
+            binding.toolbar.visibility = if (destination.id == R.id.home) View.GONE else View.VISIBLE
+        }
 
         vibration = VibratorHaptics(this)
         tts = TtsSpeaker(

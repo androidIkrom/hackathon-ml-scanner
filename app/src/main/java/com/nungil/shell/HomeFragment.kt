@@ -31,6 +31,9 @@ class HomeFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         binding.homeHeadline.setHeading()
+        binding.homeAppTitle.setHeading()
+        // The clock sits right under the header: text at the top of its 64 dp touch area, not centred in it.
+        binding.homeClock.gravity = android.view.Gravity.START or android.view.Gravity.TOP
         val nav = services().navigator
         binding.homeFullScan.setOnClickListener { nav.open(Dest.Scan(ScanMode.FULL)) }
         binding.homeSearch.setOnClickListener { nav.open(Dest.Search()) }
