@@ -247,6 +247,15 @@ class DepthTest {
         }
     }
 
+    @Test fun anElevatorIsBoxedInAHallIsNot() {
+        fun z(zone: Zone, d: Float?) = ZoneReading(zone, d != null, d, 1f)
+        assertTrue(DepthObstacles.boxedIn(listOf(z(Zone.LEFT, 0.6f), z(Zone.AHEAD, 1.0f), z(Zone.RIGHT, 0.7f))))
+        assertFalse(DepthObstacles.boxedIn(listOf(z(Zone.LEFT, 0.6f), z(Zone.AHEAD, null), z(Zone.RIGHT, 0.7f))))
+        assertFalse(DepthObstacles.boxedIn(listOf(z(Zone.LEFT, 0.6f), z(Zone.AHEAD, 2.5f), z(Zone.RIGHT, 0.7f))))
+        // a wall that could not be measured is not proof of a box
+        assertFalse(DepthObstacles.boxedIn(listOf(z(Zone.LEFT, 0.6f), ZoneReading(Zone.AHEAD, true, 0.5f, 0f), z(Zone.RIGHT, 0.7f))))
+    }
+
     @Test fun floorChangeNeedsTwoOfThreeFrames() {
         val c = FloorConfirmer()
         val stairs = FloorReading(FloorChange.STAIRS, 2f)

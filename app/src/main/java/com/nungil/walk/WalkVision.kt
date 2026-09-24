@@ -237,6 +237,8 @@ class WalkVision(
             // Nothing behind a close wall can be seen: a "floor change" beyond it is the wall's own noise.
             val wallAt = if (aheadBlocked) beep else null
             if (floor != null && wallAt != null && floor.distanceM > wallAt - BEHIND_WALL_MARGIN_M) floor = null
+            if (floor != null && DepthObstacles.boxedIn(zones)) floor = null
+            floor?.let { Log.i(TAG, "Walk floor: ${it.change} at %.2f m camH=%.2f pitch=%.0f°".format(it.distanceM, geometry?.cameraHeightM ?: -1f, Math.toDegrees(pitchRad.toDouble()))) }
             floor?.let {
                 val text = WalkPhrases.floor(it.change, it.distanceM, stepM, l)
                 alerts.add(Alert(AlertKind.FLOOR, "floor:${it.change}", text, topic = "floor", level = WalkPhrases.distanceLevel(it.distanceM, stepM)))
