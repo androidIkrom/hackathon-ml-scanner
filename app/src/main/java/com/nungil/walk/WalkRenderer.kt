@@ -8,6 +8,7 @@ import com.google.ar.core.Coordinates2d
 import com.google.ar.core.Frame
 import com.google.ar.core.SemanticLabel
 import com.google.ar.core.Session
+import com.google.ar.core.TrackingFailureReason
 import com.google.ar.core.TrackingState
 import com.google.ar.core.exceptions.NotYetAvailableException
 import java.nio.ByteBuffer
@@ -81,6 +82,10 @@ class WalkRenderer(
     /** Last time ARCore was tracking (elapsedRealtime). Walk mode restarts the session when this goes stale. */
     @Volatile
     var lastTrackingAt = 0L
+
+    /** Why ARCore is not tracking right now (NONE while tracking). */
+    @Volatile
+    var failureReason = TrackingFailureReason.NONE
 
     private var lastFailureLogAt = 0L
 
@@ -157,6 +162,7 @@ class WalkRenderer(
     private fun grab(frame: Frame, now: Long): WalkInput {
         capture.read(background, viewWidth, viewHeight)
         val camera = frame.camera
+        failureReason = camera.trackingFailureReason
         if (camera.trackingState == TrackingState.TRACKING) {
             lastTrackingAt = now
         } else if (now - lastFailureLogAt >= FAILURE_LOG_EVERY_MS) {

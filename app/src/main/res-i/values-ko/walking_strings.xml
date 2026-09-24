@@ -12,7 +12,7 @@
     <string name="walking_stop">멈춤</string>
     <string name="walking_start">시작</string>
     <string name="walking_go_title">길 안내</string>
-    <string name="walking_go_hint">어디로 갈까요?</string>
+    <string name="walking_go_hint">장소 (예: 서울역)</string>
     <string name="walking_go_mic">장소 말하기</string>
     <string name="walking_go_searching">근처에서 찾고 있어요…</string>
     <string name="walking_go_none">근처에서 찾지 못했어요.</string>
