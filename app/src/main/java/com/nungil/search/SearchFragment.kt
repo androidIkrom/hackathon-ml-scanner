@@ -12,6 +12,7 @@ import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import com.google.android.material.chip.Chip
 import com.nungil.R
+import com.nungil.contract.Dest
 import com.nungil.contract.Lang
 import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppServices
@@ -54,6 +55,7 @@ class SearchFragment : Fragment(), VoiceHandler {
         lang = services.lang
         ViewCompat.setAccessibilityHeading(binding.searchTitle, true)
         binding.searchFind.setOnClickListener { resolveAndGo(binding.searchInput.text?.toString().orEmpty()) }
+        binding.searchRead.setOnClickListener { services.navigator.open(Dest.Reader) }
         binding.searchInputLayout.setEndIconOnClickListener { listen() }
         binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEARCH) {

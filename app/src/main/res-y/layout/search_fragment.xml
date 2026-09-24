@@ -74,6 +74,15 @@
             app:chipSpacingVertical="@dimen/ng_gap" />
     </ScrollView>
 
+    <!-- The reader has no Home card (Home is I's); this is its touch entry, one tap from "Find something". -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/search_read"
+        style="@style/Widget.Nungil.Button.Tonal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/ng_gap"
+        android:text="@string/search_read" />
+
     <com.google.android.material.button.MaterialButton
         android:id="@+id/search_find"
         style="@style/Widget.Nungil.Button"

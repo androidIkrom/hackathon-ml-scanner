@@ -7,6 +7,7 @@
     <string name="search_mic">Speak the name</string>
     <string name="search_suggestions">Suggestions</string>
     <string name="search_find">Find</string>
+    <string name="search_read">Read text or a code</string>
     <string name="search_not_understood">I don\'t know that. Try another word.</string>
 
     <string name="search_camera_title">Finding %1$s</string>
