@@ -77,6 +77,14 @@ class RouteTest {
         assertTrue(OrsJson.parseGeocode("{}").isEmpty())
     }
 
+    @Test fun geocodeSpeaksTheShortNameAndDropsFarPlaces() {
+        val json = """{"features":[
+            {"geometry":{"coordinates":[126.9707,37.5550]},"properties":{"name":"서울역","label":"South Korea Seoul Yongsan 서울역"}},
+            {"geometry":{"coordinates":[-8.61,41.15]},"properties":{"name":"Starbucks","label":"Starbucks, Porto, Portugal"}}]}"""
+        val seoul = LatLon(37.566, 126.978)
+        assertEquals(listOf(Place("서울역", LatLon(37.5550, 126.9707))), OrsJson.parseGeocode(json, near = seoul))
+    }
+
     @Test fun deprecatedHostQuotaError() {
         assertTrue(OrsJson.isQuotaError(403, """{"error":"Quota exceeded"}"""))
         assertFalse(OrsJson.isQuotaError(429, "Too many"))
