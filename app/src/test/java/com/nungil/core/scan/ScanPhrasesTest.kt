@@ -39,10 +39,8 @@ class ScanPhrasesTest {
         assertEquals("사람이 보이지 않아요.", ScanPhrases.nobody(Lang.KO))
     }
 
-    @Test fun cameraAndWalk() {
+    @Test fun cameraSwitch() {
         assertEquals("Front camera.", ScanPhrases.cameraSwitched(Facing.FRONT, Lang.EN))
         assertEquals("후면 카메라예요.", ScanPhrases.cameraSwitched(Facing.BACK, Lang.KO))
-        assertEquals("Walk mode is not ready yet.", ScanPhrases.walkNotReady(Lang.EN))
-        assertEquals("걷기 모드는 아직 준비 중이에요.", ScanPhrases.walkNotReady(Lang.KO))
     }
 }

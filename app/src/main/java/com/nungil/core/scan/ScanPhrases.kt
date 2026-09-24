@@ -41,6 +41,4 @@ object ScanPhrases {
     fun unknownPerson(lang: Lang) = pick(lang, "I don't know this person.", "누군지 모르겠어요.")
 
     fun nobody(lang: Lang) = pick(lang, "I don't see anyone.", "사람이 보이지 않아요.")
-
-    fun walkNotReady(lang: Lang) = pick(lang, "Walk mode is not ready yet.", "걷기 모드는 아직 준비 중이에요.")
 }
