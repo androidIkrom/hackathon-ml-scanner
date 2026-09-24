@@ -7,6 +7,7 @@
     <string name="search_mic">이름 말하기</string>
     <string name="search_suggestions">추천</string>
     <string name="search_find">찾기</string>
+    <string name="search_read">글자나 코드 읽기</string>
     <string name="search_not_understood">잘 모르겠어요. 다른 말로 해 주세요.</string>
 
     <string name="search_camera_title">%1$s 찾는 중</string>
