@@ -57,6 +57,9 @@ import com.nungil.core.ui.VoiceChoice
 import com.nungil.core.voice.VoiceCommandParser
 import com.nungil.core.voice.WakeResult
 import com.nungil.core.voice.WakeWord
+import com.nungil.core.walk.WalkCommand
+import com.nungil.core.walk.WalkCommands
+import com.nungil.walk.WalkFragment
 import com.nungil.databinding.ActivityMainBinding
 import com.nungil.design.isTalkBackOn
 import com.nungil.design.openAppSettings
@@ -92,6 +95,9 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     private var askedMicThisRun = false
     private var lastNotUnderstoodAt = -RecognizerPolicy.NOT_UNDERSTOOD_GAP_MS
     private val voiceOnState = MutableStateFlow(false)
+
+    /** "take me to X" said on another screen: delivered to walk mode once it opens. */
+    private var pendingWalkCommand: WalkCommand? = null
 
     /** Taking commands: between the wake word ("Eye" / "눈길") and "Eye stop". Starts asleep. */
     private val awakeState = MutableStateFlow(false)
@@ -293,7 +299,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     // ---- Voice commands ---------------------------------------------------------------------------
 
     private fun onHeard(heard: String) {
-        val wake = WakeWord.decide(heard, awakeState.value) { VoiceCommandParser.parse(it) !is VoiceCommand.Unknown }
+        val wake = WakeWord.decide(heard, awakeState.value) { isCommand(it) }
         val text = when (wake) {
             WakeResult.Ignore -> {
                 Log.i(TAG, "Asleep, ignored \"$heard\"")
@@ -311,6 +317,18 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                 if (wake.wake) wakeUp()
                 wake.text
             }
+        }
+        walkCommand(text)?.let { walk ->
+            Log.i(TAG, "Heard \"$text\" -> $walk")
+            silenceAll()
+            val screen = currentScreen()
+            if (screen is WalkFragment) {
+                screen.onWalkCommand(walk)
+            } else {
+                pendingWalkCommand = walk
+                open(Dest.Walk)
+            }
+            return
         }
         val command = VoiceCommandParser.parse(text)
         Log.i(TAG, "Heard \"$text\" -> $command")
@@ -474,6 +492,15 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             voiceOnState.value = true
         }
     }
+
+    private fun walkCommand(text: String): WalkCommand? =
+        WalkCommands.parse(text) { VoiceCommandParser.parse(it) !is VoiceCommand.Unknown }
+
+    private fun isCommand(text: String): Boolean =
+        VoiceCommandParser.parse(text) !is VoiceCommand.Unknown || walkCommand(text) != null
+
+    /** Walk mode takes the command it was opened for. */
+    fun takePendingWalkCommand(): WalkCommand? = pendingWalkCommand.also { pendingWalkCommand = null }
 
     /** Taking commands (true) or waiting for the wake word (false), for the Home microphone button. */
     val awake: StateFlow<Boolean> get() = awakeState.asStateFlow()
