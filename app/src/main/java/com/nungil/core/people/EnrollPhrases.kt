@@ -7,7 +7,7 @@ import com.nungil.core.lang.Josa
 object EnrollPhrases {
     fun start(name: String, lang: Lang): String = when (lang) {
         Lang.EN -> "Learning $name's face."
-        Lang.KO -> "$name 얼굴을 등록할게요."
+        Lang.KO -> "$name 님 얼굴을 등록할게요."
     }
 
     fun prompt(pose: Pose, lang: Lang): String = when (lang) {

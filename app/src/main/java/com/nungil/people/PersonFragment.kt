@@ -24,6 +24,8 @@ import com.nungil.core.search.TargetType
 import com.nungil.data.AppDatabase
 import com.nungil.data.PersonEntity
 import com.nungil.databinding.PersonFragmentBinding
+import com.nungil.design.announce
+import com.nungil.design.isTalkBackOn
 import com.nungil.saved.PhotoFiles
 import com.nungil.search.SearchCameraFragmentArgs
 import kotlinx.coroutines.Dispatchers
@@ -136,7 +138,9 @@ class PersonFragment : Fragment(), VoiceHandler {
         val button = binding.personDelete
         button.setText(R.string.person_delete_confirm)
         button.postDelayed({ _binding?.personDelete?.setText(R.string.person_delete) }, ConfirmWindow.WINDOW_MS)
-        services.speaker.say(getString(R.string.person_delete_tap_again))
+        // With TalkBack on, TalkBack already speaks; our own voice on top would say it twice.
+        val again = getString(R.string.person_delete_tap_again)
+        if (requireContext().isTalkBackOn()) button.announce(again) else services.speaker.say(again)
     }
 
     private fun delete() {
