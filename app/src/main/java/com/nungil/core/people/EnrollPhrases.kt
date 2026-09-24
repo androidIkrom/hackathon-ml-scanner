@@ -27,6 +27,12 @@ object EnrollPhrases {
         }
     }
 
+    /** Said once at the start: the whole sweep in one sentence. */
+    fun sweep(lang: Lang): String = when (lang) {
+        Lang.EN -> "Look straight at the phone, then slowly turn your head right, left, up and down."
+        Lang.KO -> "휴대폰을 똑바로 본 다음, 고개를 오른쪽, 왼쪽, 위, 아래로 천천히 돌려 주세요."
+    }
+
     fun percent(percent: Int, lang: Lang): String = when (lang) {
         Lang.EN -> "$percent percent"
         Lang.KO -> "${percent}퍼센트"
@@ -35,6 +41,27 @@ object EnrollPhrases {
     fun done(name: String, lang: Lang): String = when (lang) {
         Lang.EN -> "All done. I will remember $name."
         Lang.KO -> "다 됐어요. ${Josa.eulReul(name)} 기억할게요."
+    }
+
+    /** What to change when a seen face was not taken for [pose]; REPEAT says the pose's prompt again. */
+    fun hint(hint: PoseHint, pose: Pose, lang: Lang): String {
+        val tilt = pose == Pose.UP || pose == Pose.DOWN
+        return when (lang) {
+            Lang.EN -> when (hint) {
+                PoseHint.CLOSER -> "Come a little closer."
+                PoseHint.MORE -> if (tilt) "Tilt a little more." else "Turn a little more."
+                PoseHint.LESS -> if (tilt) "Too far. Tilt back a little." else "Too far. Turn back a little."
+                PoseHint.OTHER_SIDE -> "The other side, please."
+                PoseHint.REPEAT -> prompt(pose, lang)
+            }
+            Lang.KO -> when (hint) {
+                PoseHint.CLOSER -> "조금 더 가까이 와 주세요."
+                PoseHint.MORE -> if (tilt) "조금 더 기울여 주세요." else "조금 더 돌려 주세요."
+                PoseHint.LESS -> if (tilt) "너무 많이 기울였어요. 조금만 돌아와 주세요." else "너무 많이 돌렸어요. 조금만 돌아와 주세요."
+                PoseHint.OTHER_SIDE -> "반대쪽으로 돌려 주세요."
+                PoseHint.REPEAT -> prompt(pose, lang)
+            }
+        }
     }
 
     fun noFace(lang: Lang): String = when (lang) {
