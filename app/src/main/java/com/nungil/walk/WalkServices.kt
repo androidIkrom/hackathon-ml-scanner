@@ -131,7 +131,12 @@ class OrsRouteSource(private val key: String) : RouteSource {
             append("?api_key=").append(enc(key))
             append("&text=").append(enc(query))
             append("&size=3")
-            if (near != null) append("&focus.point.lon=").append(near.lon).append("&focus.point.lat=").append(near.lat)
+            if (near != null) {
+                append("&focus.point.lon=").append(near.lon).append("&focus.point.lat=").append(near.lat)
+                // Only places within walking reach; the parser also drops anything farther.
+                append("&boundary.circle.lon=").append(near.lon).append("&boundary.circle.lat=").append(near.lat)
+                append("&boundary.circle.radius=").append(OrsJson.NEAR_KM)
+            }
         }
         var answer = request(GEOCODE_URL + params, "GET", null)
         if (answer?.first == 404) answer = request(GEOCODE_FALLBACK_URL + params, "GET", null)
@@ -140,7 +145,7 @@ class OrsRouteSource(private val key: String) : RouteSource {
             Log.w(TAG, "openrouteservice geocode HTTP $code")
             return emptyList()
         }
-        return OrsJson.parseGeocode(body)
+        return OrsJson.parseGeocode(body, near)
     }
 
     /** (HTTP code, body), or null on a network failure. */

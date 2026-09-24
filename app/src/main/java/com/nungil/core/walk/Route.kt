@@ -79,15 +79,30 @@ object OrsJson {
         Route(steps, line, total.toFloat(), destination)
     }.getOrNull()
 
-    fun parseGeocode(json: String): List<Place> = runCatching {
+    /**
+     * Candidates with their short name ("서울역"), not the long label ("South Korea Seoul Yongsan 서울역"),
+     * because the name is what gets spoken. With [near], anything farther than [NEAR_KM] is dropped:
+     * nobody walks to a Starbucks in Portugal.
+     */
+    fun parseGeocode(json: String, near: LatLon? = null): List<Place> = runCatching {
         val features = JSONObject(json).optJSONArray("features") ?: return emptyList()
         (0 until features.length()).mapNotNull { i ->
             val f = features.getJSONObject(i)
             val c = f.optJSONObject("geometry")?.optJSONArray("coordinates") ?: return@mapNotNull null
-            val label = f.optJSONObject("properties")?.optString("label", "").orEmpty()
-            if (label.isBlank() || c.length() < 2) null else Place(label, LatLon(c.getDouble(1), c.getDouble(0)))
+            if (c.length() < 2) return@mapNotNull null
+            val props = f.optJSONObject("properties")
+            val name = props?.optString("name", "").orEmpty().ifBlank { props?.optString("label", "").orEmpty() }
+            val point = LatLon(c.getDouble(1), c.getDouble(0))
+            when {
+                name.isBlank() -> null
+                near != null && Beacon.distanceMetres(near, point) > NEAR_KM * 1000 -> null
+                else -> Place(name, point)
+            }
         }
     }.getOrDefault(emptyList())
+
+    /** Place search stays within walking reach of the user. */
+    const val NEAR_KM = 20
 
     /** An empty body or a 403 "Quota exceeded" (the deprecated host) both count as failure. */
     fun isQuotaError(code: Int, body: String): Boolean = code == 403 && body.contains("Quota exceeded")
