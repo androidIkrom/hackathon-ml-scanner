@@ -274,6 +274,11 @@ object GroundProfile {
     const val NOISE_M = 0.02f
     const val DEEP_DROP_M = 0.25f
     const val MIN_DROP_ROWS = 3
+
+    /** Stairs climb about 0.6 m per metre; between 0.35 m and 0.55 m high they move at least this far away. */
+    const val LOW_PART_M = 0.35f
+    const val HIGH_PART_M = 0.55f
+    const val VERTICAL_RUN_M = 0.5f
     const val DEFAULT_CAMERA_HEIGHT_M = 1.25f
     private const val MIN_BELOW_HORIZON_RAD = 0.05f
 
@@ -320,11 +325,23 @@ object GroundProfile {
         if (first.heightM > STEP_MAX_M) return null
         // A rise with something tall right next to it is the bottom of a wall or furniture, not a step.
         if (sorted.any { it.heightM > WALL_TALL_M && abs(it.forwardM - first.forwardM) <= WALL_NEAR_M }) return null
+        // Walls are vertical, stairs climb: on stairs the higher surfaces are clearly farther away, on a wall
+        // they are at the same distance. Medians of the low and the high part cancel the depth noise that
+        // spreads a wall over several distances (the "wall that sounds like stairs").
+        if (isVertical(sorted.filter { it.forwardM >= first.forwardM })) return null
         val bins = bins(sorted.filter { it.forwardM >= first.forwardM && it.heightM > FLOOR_M }, first.forwardM) { b -> b.maxOf { it.heightM } }
         val climbs = bins.zipWithNext().all { (a, b) -> b >= a - NOISE_M }
         val rises = bins.zipWithNext().count { (a, b) -> b - a >= STAIR_RISE_M }
         val change = if (climbs && rises >= MIN_RISES) FloorChange.STAIRS else FloorChange.STEP_UP
         return FloorReading(change, first.forwardM)
+    }
+
+    /** True when the low part and the high part of what rises ahead stand at nearly the same distance. */
+    fun isVertical(rising: List<Row>): Boolean {
+        val low = rising.filter { it.heightM > FLOOR_M && it.heightM <= LOW_PART_M }.map { it.forwardM }
+        val high = rising.filter { it.heightM >= HIGH_PART_M }.map { it.forwardM }
+        if (low.isEmpty() || high.isEmpty()) return false
+        return median(high) - median(low) < VERTICAL_RUN_M
     }
 
     /** Hand-wide distance bins from [start], each reduced to one height. */

@@ -286,6 +286,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         }
         val candidates = report.alerts + listOfNotNull(pendingNav, beaconAlert())
         alerts.choose(now, candidates)?.let { chosen ->
+            android.util.Log.i("Nungil", "Walk said [${chosen.kind} ${chosen.key}] ${chosen.text}")
             if (chosen === pendingNav) pendingNav = null
             if (chosen.urgent) {
                 // A step or less from a wall: do not wait behind the queue.

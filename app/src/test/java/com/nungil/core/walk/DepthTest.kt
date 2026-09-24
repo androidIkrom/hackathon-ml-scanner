@@ -220,6 +220,33 @@ class DepthTest {
         assertEquals(1.42f, c.update(1.5f), 0.001f)
     }
 
+    @Test fun aNoisyWallIsNotStairs() {
+        // A wall 1.5 m ahead: depth noise of ±0.45 m spreads its rows over 1.05-1.95 m, independent of height.
+        var seed = 7L
+        fun noise(): Float {
+            seed = (seed * 6364136223846793005L + 1442695040888963407L)
+            return ((seed ushr 33) % 1000).toFloat() / 1000f * 0.9f - 0.45f
+        }
+        val rows = listOf(GroundProfile.Row(0.8f, 0f), GroundProfile.Row(1.0f, 0f)) +
+            (0 until 30).map { i -> GroundProfile.Row(1.5f + noise(), 0.12f + i * 0.04f) }
+        assertNull(GroundProfile.analyse(rows))
+    }
+
+    @Test fun realStairsAreNotVertical() {
+        val rows = (0 until 12).map { i -> GroundProfile.Row(1f + i * 0.1f, if (i == 0) 0f else 0.17f * ((i + 2) / 3)) }
+        assertFalse(GroundProfile.isVertical(rows))
+        assertEquals(FloorChange.STAIRS, GroundProfile.analyse(rows)!!.change)
+    }
+
+    @Test fun aWallSceneApproachedCloseIsNeverStairs() {
+        for (wallAt in listOf(0.9f, 1.2f, 1.6f, 2.0f)) {
+            val depth = scene(-0.45f, camH = 1.35f) { f -> if (f > wallAt) 3f else 0f }
+            val g = GridGeometry(focal, -0.45f, h, 1.35f)
+            val floor = GroundProfile.analyse(GroundProfile.rows(depth, w, h, g))
+            assertTrue("wall at $wallAt gave $floor", floor == null || floor.change == FloorChange.STEP_UP)
+        }
+    }
+
     @Test fun floorChangeNeedsTwoOfThreeFrames() {
         val c = FloorConfirmer()
         val stairs = FloorReading(FloorChange.STAIRS, 2f)
@@ -254,7 +281,8 @@ class DepthTest {
             GroundProfile.Row(1f, 0f), GroundProfile.Row(2f, 0.2f), GroundProfile.Row(2.1f, 0.5f),
             GroundProfile.Row(2.2f, 0.3f), GroundProfile.Row(2.3f, 0.6f),
         )
-        assertEquals(FloorChange.STEP_UP, GroundProfile.analyse(rows)!!.change)
+        // Low and high parts stand at the same distance: a wall, so no floor change at all.
+        assertNull(GroundProfile.analyse(rows))
     }
 
     @Test fun numbersFromTheGuide() {
