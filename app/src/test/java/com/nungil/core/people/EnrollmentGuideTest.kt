@@ -95,6 +95,7 @@ class EnrollmentGuideTest {
         assertEquals("이제 반대쪽으로 돌려 주세요.", EnrollPhrases.prompt(Pose.RIGHT, Lang.KO))
         assertEquals("40퍼센트", EnrollPhrases.percent(40, Lang.KO))
         assertEquals("휴대폰을 똑바로 본 다음, 고개를 오른쪽, 왼쪽, 위, 아래로 천천히 돌려 주세요.", EnrollPhrases.sweep(Lang.KO))
+        assertEquals("민준 님 얼굴을 등록할게요.", EnrollPhrases.start("민준", Lang.KO))
         assertEquals("All done. I will remember Ali.", EnrollPhrases.done("Ali", Lang.EN))
         assertEquals("다 됐어요. 민준을 기억할게요.", EnrollPhrases.done("민준", Lang.KO))
         assertEquals("다 됐어요. 지아를 기억할게요.", EnrollPhrases.done("지아", Lang.KO))
