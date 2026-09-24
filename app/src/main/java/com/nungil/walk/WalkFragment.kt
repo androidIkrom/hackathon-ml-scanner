@@ -402,11 +402,29 @@ class WalkFragment : Fragment(), VoiceHandler {
             true
         }
         VoiceCommand.Start -> {
-            if (!running) setRunning(true)
+            if (onGoSearch()) {
+                val q = goPanel.query()
+                if (q.isEmpty()) say(RoutePhrases.whereTo(services.lang)) else searchPlaces(q)
+            } else if (!running) {
+                setRunning(true)
+            }
             true
+        }
+        // On the Go search step anything that is not a command is the place: "Seoul Station".
+        is VoiceCommand.Unknown -> {
+            val q = command.text.trim().trimEnd('.', '!', '?')
+            if (onGoSearch() && q.isNotEmpty()) {
+                binding.walkingGoQuery.setText(q)
+                searchPlaces(q)
+                true
+            } else {
+                false
+            }
         }
         else -> false
     }
+
+    private fun onGoSearch() = _binding != null && goMode && !navigating()
 
     /** "save this place as X" / "take me to X", from MainActivity. */
     fun onWalkCommand(command: WalkCommand) {

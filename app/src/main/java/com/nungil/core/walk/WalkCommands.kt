@@ -14,6 +14,8 @@ object WalkCommands {
     private val EN_SAVE = Regex("""^(?:please\s+)?(?:save|remember|mark)\s+(?:this\s+place|this\s+spot|here|this\s+location|the\s+place)\s+(?:as|called)\s+(.+)$""", RegexOption.IGNORE_CASE)
     /** "go to …" is left to the screen parser ("go to settings"); these verbs only mean walking there. */
     private val EN_GO = Regex("""^(?:please\s+)?(?:take\s+me|guide\s+me|walk\s+me|navigate|directions|lead\s+me|get\s+me)\s+(?:back\s+)?(?:to|towards|toward)\s+(.+)$""", RegexOption.IGNORE_CASE)
+    /** "go to Seoul Station", "let's go to the park": a place unless the word is a screen ("go to settings"). */
+    private val EN_LETS_GO = Regex("""^(?:please\s+)?(?:let'?s\s+)?go\s+(?:to|towards|toward)\s+(.+)$""", RegexOption.IGNORE_CASE)
     private val EN_HOME = Regex("""^(?:please\s+)?(?:take|bring|walk|get|guide)\s+me\s+(?:back\s+)?home$""", RegexOption.IGNORE_CASE)
 
     private val EN_SAVE_BARE = Regex("""^(?:please\s+)?(?:save|remember|mark)\s+(?:this\s+place|this\s+spot|here|this\s+location|my\s+location|the\s+place|this)$""", RegexOption.IGNORE_CASE)
@@ -43,6 +45,9 @@ object WalkCommands {
         if (EN_SAVE_BARE.matches(t) || KO_SAVE_BARE.matches(t)) return WalkCommand.SavePlace(null)
         EN_GO.find(t)?.let { m -> name(m.groupValues[1])?.let { return WalkCommand.GoTo(it) } }
         if (EN_HOME.matches(t)) return WalkCommand.GoTo("home")
+        EN_LETS_GO.find(t)?.let { m ->
+            name(m.groupValues[1])?.let { if (!isScreenWord(it)) return WalkCommand.GoTo(it) }
+        }
         KO_GO.find(t)?.let { m -> name(m.groupValues[1])?.let { return WalkCommand.GoTo(it) } }
         KO_LETS_GO.find(t)?.let { m ->
             name(m.groupValues[1])?.let { if (!isScreenWord(it)) return WalkCommand.GoTo(it) }

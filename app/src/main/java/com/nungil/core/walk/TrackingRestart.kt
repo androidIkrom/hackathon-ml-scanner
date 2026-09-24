@@ -26,7 +26,8 @@ class TrackingRestart {
     }
 
     companion object {
-        const val STALE_MS = 5_000L
+        /** ARCore reports "paused, no reason" for several seconds while it starts (longer in the dark). */
+        const val STALE_MS = 10_000L
 
         /** 15 s, 30 s, 60 s, then every 120 s. */
         const val GAP_MS = 15_000L

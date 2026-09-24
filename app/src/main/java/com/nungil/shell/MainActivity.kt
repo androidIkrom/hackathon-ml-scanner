@@ -148,6 +148,8 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         }
         enableEdgeToEdge(bars, bars)
         super.onCreate(savedInstanceState)
+        // Changing the language recreates the activity: stay awake through it.
+        if (savedInstanceState?.getBoolean(STATE_AWAKE) == true) awakeState.value = true
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         // targetSdk 35 draws edge-to-edge on Android 15: keep content out from under the system bars.
@@ -344,6 +346,8 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             claim(command.text)
             return
         }
+        // A screen that takes free words (Go: the place to search) gets them before "I did not understand".
+        if (command is VoiceCommand.Unknown && (currentScreen() as? VoiceHandler)?.onVoiceCommand(command) == true) return
         // An always-on microphone also hears people nearby: say "I did not understand" only now and then.
         if (command is VoiceCommand.Unknown) {
             val now = SystemClock.elapsedRealtime()
@@ -585,7 +589,13 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             .show()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_AWAKE, awakeState.value)
+    }
+
     private companion object {
         const val TAG = "Nungil"
+        const val STATE_AWAKE = "awake"
     }
 }

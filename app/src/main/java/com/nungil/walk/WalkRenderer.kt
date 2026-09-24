@@ -46,6 +46,8 @@ class WalkInput(
     val timestampMs: Long,
     /** ARCore depth is on for this phone; a missing [depthMm] then means "could not measure", not "no depth". */
     val depthExpected: Boolean,
+    /** ARCore is not tracking because there is not enough light. */
+    val tooDark: Boolean = false,
 )
 
 /** Receives captures; [tryReserve] must succeed before [submit]. */
@@ -212,6 +214,7 @@ class WalkRenderer(
             skyFraction = sky,
             timestampMs = now,
             depthExpected = depthEnabled,
+            tooDark = camera.trackingFailureReason == TrackingFailureReason.INSUFFICIENT_LIGHT,
         )
     }
 

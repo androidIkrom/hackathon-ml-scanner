@@ -117,6 +117,15 @@ data class ZoneReading(val zone: Zone, val blocked: Boolean, val distanceM: Floa
  * are within 3 m (build guide §7).
  */
 object DepthObstacles {
+    /**
+     * Walls within [BOXED_M] ahead, left and right: an elevator or a closet. The floor there is not
+     * seen well enough to judge, and the logs showed "stairs going up" inside an elevator.
+     */
+    fun boxedIn(zones: List<ZoneReading>): Boolean =
+        zones.size == 3 && zones.all { it.blocked && !it.unknown && (it.distanceM ?: Float.MAX_VALUE) <= BOXED_M }
+
+    const val BOXED_M = 1.2f
+
     const val BAND_TOP = 0.30f
     const val BAND_BOTTOM = 0.62f
     const val MIN_M = 0.3f

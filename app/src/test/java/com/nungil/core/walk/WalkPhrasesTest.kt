@@ -94,7 +94,7 @@ class WalkPhrasesTest {
                 WalkPhrases.waitingForLocation(l), WalkPhrases.unknownPlace(l), WalkPhrases.needCamera(l),
                 WalkPhrases.needLocation(l), WalkPhrases.ground(GroundKind.SIDEWALK, l),
                 WalkPhrases.nothingAhead(l), WalkPhrases.askPlaceName(l), WalkPhrases.alreadyAt("home", l),
-                WalkPhrases.depthLost(l),
+                WalkPhrases.depthLost(l), WalkPhrases.tooDark(l), WalkPhrases.depthBack(l),
             )
         }
         all.forEach { assertFalse(it, it.contains("safe", ignoreCase = true) || it.contains("안전")) }

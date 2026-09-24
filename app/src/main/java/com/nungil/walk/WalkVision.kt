@@ -33,6 +33,7 @@ import com.nungil.core.walk.AlertKind
 import com.nungil.core.walk.CloseHold
 import com.nungil.core.walk.DepthGrid
 import com.nungil.core.walk.DepthObstacles
+import com.nungil.core.walk.DepthStatus
 import com.nungil.core.walk.FloorChange
 import com.nungil.core.walk.FloorConfirmer
 import com.nungil.core.walk.FloorReading
@@ -89,8 +90,7 @@ class WalkVision(
     private var wallLevel = Int.MAX_VALUE
     private val approach = ApproachSpeed()
     private var lastFrameAt = 0L
-    private var depthMissingSince: Long? = null
-    private var depthLostSaid = false
+    private val depthStatus = DepthStatus()
     private var clearSince: Long? = null
     private var grid = FloatArray(0)
     private var raw: Bitmap? = null
@@ -131,6 +131,7 @@ class WalkVision(
                     skyFraction = input.skyFraction,
                     now = input.timestampMs,
                     depthExpected = input.depthExpected,
+                    tooDark = input.tooDark,
                 )
                 deliver(report)
             } catch (e: Exception) {
@@ -187,6 +188,7 @@ class WalkVision(
         skyFraction: Float,
         now: Long,
         depthExpected: Boolean,
+        tooDark: Boolean = false,
     ): WalkReport {
         val l = lang()
         val alerts = ArrayList<Alert>()
@@ -202,8 +204,6 @@ class WalkVision(
         var aheadMeasuredClear = false
         var floor: FloorReading? = null
         if (gridM != null && gridWidth > 0 && gridHeight > 0) {
-            depthMissingSince = null
-            depthLostSaid = false
             val geometry = if (focalGridPx > 0f) {
                 val h = cameraHeight.update(GridGeometry.floorHeight(gridM, gridWidth, gridHeight, focalGridPx, pitchRad))
                 GridGeometry(focalGridPx, pitchRad, gridHeight, h)
@@ -237,20 +237,24 @@ class WalkVision(
             // Nothing behind a close wall can be seen: a "floor change" beyond it is the wall's own noise.
             val wallAt = if (aheadBlocked) beep else null
             if (floor != null && wallAt != null && floor.distanceM > wallAt - BEHIND_WALL_MARGIN_M) floor = null
-            floor?.let { alerts.add(Alert(AlertKind.FLOOR, "floor:${it.change}", WalkPhrases.floor(it.change, it.distanceM, stepM, l))) }
+            if (floor != null && DepthObstacles.boxedIn(zones)) floor = null
+            floor?.let { Log.i(TAG, "Walk floor: ${it.change} at %.2f m camH=%.2f pitch=%.0f°".format(it.distanceM, geometry?.cameraHeightM ?: -1f, Math.toDegrees(pitchRad.toDouble()))) }
+            floor?.let {
+                val text = WalkPhrases.floor(it.change, it.distanceM, stepM, l)
+                alerts.add(Alert(AlertKind.FLOOR, "floor:${it.change}", text, topic = "floor", level = WalkPhrases.distanceLevel(it.distanceM, stepM)))
+            }
         } else if (depthExpected) {
             if (loggedFrames % LOG_EVERY == 0) Log.i(TAG, "Walk depth: none this frame (not tracking or not ready)")
-            val since = depthMissingSince ?: now.also { depthMissingSince = it }
-            if (!depthLostSaid && now - since >= DEPTH_LOST_SAY_MS) {
-                depthLostSaid = true
-                alerts.add(Alert(AlertKind.INFO, "depth-lost", WalkPhrases.depthLost(l)))
-            }
             // Right in front of a plain wall ARCore loses tracking and depth: that is "could not measure", not "clear".
             closeHold.update(now, ZoneReading(Zone.AHEAD, false, null, 0f), walked)?.let { d ->
                 aheadBlocked = true
                 beep = d
                 alerts.add(wallAhead(d, l))
             }
+        }
+
+        if (depthExpected) {
+            depthStatus.update(now, gridM != null && gridWidth > 0 && gridHeight > 0, tooDark, l)?.let { alerts.add(it) }
         }
 
         // Hazards: confirmed in 3 of the last 5 frames.
@@ -264,7 +268,8 @@ class WalkVision(
                 hazardAhead = true
                 if (d != null) beep = minOf(beep ?: d, d)
             }
-            alerts.add(Alert(AlertKind.HAZARD, "hazard:$label:$zone", WalkPhrases.hazard(label, zone, d, stepM, l)))
+            val level = d?.let { WalkPhrases.distanceLevel(it, stepM) } ?: Alert.FAR
+            alerts.add(Alert(AlertKind.HAZARD, "hazard:$label:$zone", WalkPhrases.hazard(label, zone, d, stepM, l), topic = "hazard:$label", level = level))
         }
 
         if (!aheadBlocked) wallLevel = Int.MAX_VALUE
@@ -435,7 +440,6 @@ class WalkVision(
         const val SIDE_WARN_M = 1.5f
         const val STAIRS_HIDE_WALL_M = 4f
         const val BEHIND_WALL_MARGIN_M = 0.2f
-        const val DEPTH_LOST_SAY_MS = 3_000L
         const val CLEAR_AFTER_MS = 2_000L
         const val LIGHT_SCORE = 0.5f
         const val READ_EVERY_MS = 2_500L
