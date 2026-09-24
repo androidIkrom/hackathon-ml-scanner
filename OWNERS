@@ -38,10 +38,11 @@ app/src/main/res-i/values/attrs.xml                   C
 
 app/src/main/java/com/nungil/core/scan/               A
 app/src/main/java/com/nungil/scan/                    A
-app/src/main/java/com/nungil/walk/                    A
+app/src/main/java/com/nungil/walk/                    I
 app/src/main/res-a/                                   A
 
 app/src/main/java/com/nungil/core/ui/                 I
+app/src/main/java/com/nungil/core/walk/               I
 app/src/main/java/com/nungil/core/voice/              I
 app/src/main/java/com/nungil/shell/                   I
 app/src/main/java/com/nungil/speech/                  I
