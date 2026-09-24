@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Owner Y. Korean-style pattern: big headline, one-line subtitle, content, one bottom button. -->
+<!-- Owner Y. Korean-style pattern: big headline with 눈길이, one-line subtitle, content, one bottom button. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -11,21 +11,45 @@
     android:paddingEnd="@dimen/ng_gutter"
     android:paddingBottom="@dimen/ng_gutter">
 
-    <TextView
-        android:id="@+id/search_title"
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/search_title"
-        android:textAppearance="@style/TextAppearance.Nungil.Display" />
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <TextView
-        android:id="@+id/search_subtitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/search_subtitle"
-        android:textAppearance="@style/TextAppearance.Nungil.Body"
-        android:textColor="?attr/ngTextSub" />
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/search_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/search_title"
+                android:textAppearance="@style/TextAppearance.Nungil.Display" />
+
+            <TextView
+                android:id="@+id/search_subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/search_subtitle"
+                android:textAppearance="@style/TextAppearance.Nungil.Body"
+                android:textColor="?attr/ngTextSub" />
+        </LinearLayout>
+
+        <!-- 눈길이 looking for things with you. Decorative: the headline says it all. -->
+        <ImageView
+            android:layout_width="84dp"
+            android:layout_height="84dp"
+            android:layout_marginStart="@dimen/ng_gap"
+            android:importantForAccessibility="no"
+            android:rotation="-5"
+            android:src="@drawable/ng_brand_mascot" />
+    </LinearLayout>
 
     <com.google.android.material.textfield.TextInputLayout
         android:id="@+id/search_input_layout"
@@ -34,13 +58,16 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/ng_gap_large"
         android:hint="@string/search_hint"
+        app:boxBackgroundColor="?attr/ngCard"
         app:boxCornerRadiusBottomEnd="@dimen/ng_radius_button"
         app:boxCornerRadiusBottomStart="@dimen/ng_radius_button"
         app:boxCornerRadiusTopEnd="@dimen/ng_radius_button"
         app:boxCornerRadiusTopStart="@dimen/ng_radius_button"
+        app:boxStrokeWidth="2dp"
         app:endIconContentDescription="@string/search_mic"
         app:endIconDrawable="@drawable/search_ic_mic"
-        app:endIconMode="custom">
+        app:endIconMode="custom"
+        app:endIconTint="?attr/ngPrimary">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/search_input"
@@ -58,7 +85,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/ng_gap_large"
         android:text="@string/search_suggestions"
-        android:textAppearance="@style/TextAppearance.Nungil.Headline" />
+        android:textAppearance="@style/TextAppearance.Nungil.Section" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -70,8 +97,8 @@
             android:id="@+id/search_chips"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:chipSpacingHorizontal="@dimen/ng_gap"
-            app:chipSpacingVertical="@dimen/ng_gap" />
+            app:chipSpacingHorizontal="8dp"
+            app:chipSpacingVertical="8dp" />
     </ScrollView>
 
     <!-- The reader has no Home card (Home is I's); this is its touch entry, one tap from "Find something". -->
