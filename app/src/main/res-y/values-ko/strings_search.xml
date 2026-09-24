@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner Y. -->
+<resources>
+    <string name="search_title">무엇을 찾을까요?</string>
+    <string name="search_subtitle">물건 이름이나 저장한 이름을 말하거나 입력해 주세요.</string>
+    <string name="search_hint">예: 가방, 컵, 민준</string>
+    <string name="search_mic">이름 말하기</string>
+    <string name="search_suggestions">추천</string>
+    <string name="search_find">찾기</string>
+    <string name="search_not_understood">잘 모르겠어요. 다른 말로 해 주세요.</string>
+
+    <string name="search_camera_title">%1$s 찾는 중</string>
+    <string name="search_camera_looking">찾고 있어요…</string>
+    <string name="search_stop">멈춤</string>
+    <string name="search_camera_error">카메라를 쓸 수 없어요.</string>
+
+    <string name="search_camera_needed_title">카메라가 필요해요</string>
+    <string name="search_camera_needed_body">이 기능을 쓰려면 앱 설정에서 카메라를 허용해 주세요.</string>
+    <string name="search_open_settings">앱 설정 열기</string>
+</resources>

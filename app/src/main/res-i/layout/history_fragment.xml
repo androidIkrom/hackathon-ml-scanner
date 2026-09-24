@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Past scans; tap one to hear it again. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingStart="@dimen/ng_gutter"
+    android:paddingEnd="@dimen/ng_gutter">
+
+    <TextView
+        android:id="@+id/history_headline"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/ng_gap"
+        android:text="@string/history_headline"
+        android:textAppearance="@style/TextAppearance.Nungil.Title" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/history_subtitle"
+        android:textAppearance="@style/TextAppearance.Nungil.Body"
+        android:textColor="?attr/ngTextSub" />
+
+    <TextView
+        android:id="@+id/history_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/ng_gap_large"
+        android:text="@string/history_empty"
+        android:textAppearance="@style/TextAppearance.Nungil.BodyStrong"
+        android:visibility="gone" />
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/history_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="@dimen/ng_gap"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="@dimen/ng_gap_large" />
+</LinearLayout>

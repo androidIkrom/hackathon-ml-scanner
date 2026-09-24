@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner A. Bottom sheet with everything the scan said. -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/ngCard">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="@dimen/ng_gutter">
+
+        <TextView
+            android:id="@+id/scan_log_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/scan_log_title"
+            android:textAppearance="@style/TextAppearance.Nungil.Headline" />
+
+        <TextView
+            android:id="@+id/scan_log_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap"
+            android:textAppearance="@style/TextAppearance.Nungil.Body"
+            android:textIsSelectable="true" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

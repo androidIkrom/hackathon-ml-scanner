@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Scan menu: the three ways to look around, plus history. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/ng_gutter"
+        android:paddingEnd="@dimen/ng_gutter"
+        android:paddingBottom="@dimen/ng_gap_large">
+
+        <TextView
+            android:id="@+id/hub_headline"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap"
+            android:text="@string/hub_headline"
+            android:textAppearance="@style/TextAppearance.Nungil.Title" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/hub_subtitle"
+            android:textAppearance="@style/TextAppearance.Nungil.Body"
+            android:textColor="?attr/ngTextSub" />
+
+        <com.nungil.design.BigCardView
+            android:id="@+id/hub_full_scan"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap_large"
+            app:ngEmphasis="true"
+            app:ngIcon="@drawable/ng_ic_explore"
+            app:ngSubtitle="@string/home_full_scan_subtitle"
+            app:ngTitle="@string/home_full_scan_title" />
+
+        <com.nungil.design.BigCardView
+            android:id="@+id/hub_live"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap"
+            app:ngIcon="@drawable/ng_ic_bolt"
+            app:ngSubtitle="@string/home_live_subtitle"
+            app:ngTitle="@string/home_live_title" />
+
+        <com.nungil.design.BigCardView
+            android:id="@+id/hub_walk"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap"
+            app:ngIcon="@drawable/ng_ic_walk"
+            app:ngSubtitle="@string/home_walk_subtitle"
+            app:ngTitle="@string/home_walk_title" />
+
+        <com.nungil.design.BigCardView
+            android:id="@+id/hub_history"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap"
+            app:ngIcon="@drawable/ng_ic_history"
+            app:ngSubtitle="@string/hub_history_subtitle"
+            app:ngTitle="@string/home_history" />
+    </LinearLayout>
+</ScrollView>

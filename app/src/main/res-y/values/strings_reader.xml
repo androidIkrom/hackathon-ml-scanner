@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner Y. QR codes, barcodes and printed text. -->
+<resources>
+    <string name="reader_title">Read text</string>
+    <string name="reader_subtitle">Point the camera at a sign, a label or a QR code.</string>
+    <string name="reader_last">Last read</string>
+    <string name="reader_nothing">Nothing read yet.</string>
+    <string name="reader_pause">Pause reading</string>
+    <string name="reader_resume">Start reading</string>
+</resources>

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner Y. Saved cars and objects. -->
+<resources>
+    <string name="item_add_title_car">What is this car called?</string>
+    <string name="item_add_title_object">What is this called?</string>
+    <string name="item_add_subtitle">For example: my bag, dad\'s car. Then point the camera at it.</string>
+    <string name="item_add_hint">Name</string>
+    <string name="item_add_ask">What should I call it?</string>
+    <string name="item_add_start">Start</string>
+    <string name="item_add_need_name">Tell me the name first.</string>
+
+    <string name="item_enroll_title">Learning %1$s</string>
+    <string name="item_enroll_start">Start</string>
+    <string name="item_enroll_pause">Pause</string>
+    <string name="item_enroll_resume">Continue</string>
+    <string name="item_enroll_model_missing">Object recognition is not available on this phone.</string>
+    <string name="item_enroll_progress">Progress</string>
+
+    <string name="item_find">Find it</string>
+    <string name="item_rename">Rename</string>
+    <string name="item_delete">Delete</string>
+    <string name="item_photo">Photo of %1$s</string>
+    <string name="item_rename_title">New name</string>
+    <string name="item_rename_speak">Say it</string>
+    <string name="item_ok">Save</string>
+    <string name="item_cancel">Cancel</string>
+    <string name="item_delete_title">Delete %1$s?</string>
+    <string name="item_delete_body">Its samples are removed from this phone.</string>
+    <string name="item_deleted">Deleted.</string>
+    <string name="item_renamed">New name: %1$s.</string>
+    <string name="item_delete_again">Say delete again to confirm.</string>
+    <string name="item_not_found">This item is no longer saved.</string>
+</resources>

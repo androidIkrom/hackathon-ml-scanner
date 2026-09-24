@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Design tokens as theme attributes. A and Y use ONLY these (?attr/ng...), never raw colours,
+     so the light, dark and high-contrast themes all work on their screens. Names are frozen. -->
+<resources>
+    <attr name="ngBackground" format="color" />
+    <attr name="ngCard" format="color" />
+    <attr name="ngText" format="color" />
+    <attr name="ngTextSub" format="color" />
+    <attr name="ngPrimary" format="color" />
+    <attr name="ngOnPrimary" format="color" />
+    <attr name="ngPrimarySoft" format="color" />
+    <attr name="ngAccentText" format="color" />
+    <attr name="ngDanger" format="color" />
+    <attr name="ngOnDanger" format="color" />
+    <attr name="ngSuccess" format="color" />
+    <attr name="ngLine" format="color" />
+    <attr name="ngFocus" format="color" />
+    <attr name="ngCardStrokeWidth" format="dimension" />
+</resources>

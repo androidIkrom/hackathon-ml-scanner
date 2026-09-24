@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner Y. Saved list, saved people and face enrolment. -->
+<resources>
+    <string name="saved_title">Saved</string>
+    <string name="saved_subtitle">People, cars and things I can recognise.</string>
+    <string name="saved_tab_people">People</string>
+    <string name="saved_tab_cars">Cars</string>
+    <string name="saved_tab_objects">Objects</string>
+    <string name="saved_add_person">Add a person</string>
+    <string name="saved_add_car">Add a car</string>
+    <string name="saved_add_object">Add an object</string>
+    <string name="saved_empty_people">No one saved yet. Add someone and I will greet them by name.</string>
+    <string name="saved_empty_cars">No cars saved yet.</string>
+    <string name="saved_empty_objects">No objects saved yet. Add your bag or keys and I will find them.</string>
+    <string name="saved_person_subtitle">Person</string>
+    <string name="saved_row_description">%1$s, %2$s</string>
+
+    <string name="person_find">Find this person</string>
+    <string name="person_rename">Rename</string>
+    <string name="person_delete">Delete</string>
+    <string name="person_photo">Photo of %1$s</string>
+    <string name="person_rename_title">New name</string>
+    <string name="person_rename_speak">Say it</string>
+    <string name="person_ok">Save</string>
+    <string name="person_cancel">Cancel</string>
+    <string name="person_delete_title">Delete %1$s?</string>
+    <string name="person_delete_body">Their face samples are removed from this phone.</string>
+    <string name="person_deleted">Deleted.</string>
+    <string name="person_renamed">New name: %1$s.</string>
+    <string name="person_delete_again">Say delete again to confirm.</string>
+    <string name="person_not_found">This person is no longer saved.</string>
+
+    <string name="person_add_title">Who is this?</string>
+    <string name="person_add_subtitle">Say or type the name, then choose the camera.</string>
+    <string name="person_add_hint">Name</string>
+    <string name="person_add_ask">What is their name?</string>
+    <string name="person_add_other">Someone else (back camera)</string>
+    <string name="person_add_me">Me (front camera)</string>
+    <string name="person_add_start">Start</string>
+    <string name="person_add_need_name">Tell me the name first.</string>
+
+    <string name="enroll_title">Learning %1$s</string>
+    <string name="enroll_start">Start</string>
+    <string name="enroll_pause">Pause</string>
+    <string name="enroll_resume">Continue</string>
+    <string name="enroll_model_missing">Face recognition is not available on this phone.</string>
+    <string name="enroll_progress">Progress</string>
+</resources>

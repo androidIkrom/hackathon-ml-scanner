@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner Y. -->
+<resources>
+    <string name="reader_title">글자 읽기</string>
+    <string name="reader_subtitle">표지판, 라벨, QR 코드에 카메라를 비춰 주세요.</string>
+    <string name="reader_last">마지막으로 읽은 글자</string>
+    <string name="reader_nothing">아직 읽은 글자가 없어요.</string>
+    <string name="reader_pause">읽기 멈춤</string>
+    <string name="reader_resume">읽기 시작</string>
+</resources>

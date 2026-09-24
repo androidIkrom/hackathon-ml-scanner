@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Scan settings (stored by SettingsStore) and app settings (AppPrefs, per-app language). -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="@dimen/ng_gutter"
+        android:paddingEnd="@dimen/ng_gutter"
+        android:paddingBottom="@dimen/ng_gap_large">
+
+        <TextView
+            android:id="@+id/settings_headline"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap"
+            android:text="@string/settings_headline"
+            android:textAppearance="@style/TextAppearance.Nungil.Title" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap_large"
+            android:text="@string/settings_section_scan"
+            android:textAppearance="@style/TextAppearance.Nungil.Section" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_camera"
+                    android:textAppearance="@style/TextAppearance.Nungil.Label" />
+
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/settings_camera"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:selectionRequired="true"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_camera_back"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_camera_back" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_camera_front"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_camera_front" />
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ng_gap_large"
+                    android:text="@string/settings_compute"
+                    android:textAppearance="@style/TextAppearance.Nungil.Label" />
+
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/settings_compute"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:selectionRequired="true"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_compute_gpu"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_compute_gpu" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_compute_cpu"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_compute_cpu" />
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ng_gap_large"
+                    android:text="@string/settings_model"
+                    android:textAppearance="@style/TextAppearance.Nungil.Label" />
+
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/settings_model"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:selectionRequired="true"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_model_light"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_model_light" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_model_fast"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_model_fast" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_model_accurate"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_model_accurate" />
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ng_gap_large"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_score"
+                        android:textAppearance="@style/TextAppearance.Nungil.Label" />
+
+                    <TextView
+                        android:id="@+id/settings_score_value"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:importantForAccessibility="no"
+                        android:textAppearance="@style/TextAppearance.Nungil.Label" />
+                </LinearLayout>
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/settings_score"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/settings_score"
+                    android:stepSize="5"
+                    android:valueFrom="30"
+                    android:valueTo="70"
+                    app:labelBehavior="gone"
+                    app:minTouchTargetSize="@dimen/ng_touch" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_score_hint"
+                    android:textAppearance="@style/TextAppearance.Nungil.Caption" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/settings_speech"
+                    style="@style/Widget.Nungil.Switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ng_gap"
+                    android:text="@string/settings_speech" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/settings_colors"
+                    style="@style/Widget.Nungil.Switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_colors" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap_large"
+            android:text="@string/settings_section_app"
+            android:textAppearance="@style/TextAppearance.Nungil.Section" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_language"
+                    android:textAppearance="@style/TextAppearance.Nungil.Label" />
+
+                <com.google.android.material.button.MaterialButtonToggleGroup
+                    android:id="@+id/settings_language"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    app:selectionRequired="true"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_language_system"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_language_system" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_language_english"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_language_english" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_language_korean"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_language_korean" />
+                </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/settings_high_contrast"
+                    style="@style/Widget.Nungil.Switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/ng_gap"
+                    android:text="@string/settings_high_contrast" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/settings_voice_guide"
+                    style="@style/Widget.Nungil.Switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_voice_guide" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/settings_learner"
+                    style="@style/Widget.Nungil.Switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_learner" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+</ScrollView>

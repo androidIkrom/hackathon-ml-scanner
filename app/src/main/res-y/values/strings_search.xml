@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner Y. Search screens and the camera permission panel shared by all Y camera screens. -->
+<resources>
+    <string name="search_title">What should I find?</string>
+    <string name="search_subtitle">Say or type a thing or a saved name.</string>
+    <string name="search_hint">For example: bag, cup, Ali</string>
+    <string name="search_mic">Speak the name</string>
+    <string name="search_suggestions">Suggestions</string>
+    <string name="search_find">Find</string>
+    <string name="search_not_understood">I don\'t know that. Try another word.</string>
+
+    <string name="search_camera_title">Finding %1$s</string>
+    <string name="search_camera_looking">Looking…</string>
+    <string name="search_stop">Stop</string>
+    <string name="search_camera_error">The camera is not available.</string>
+
+    <string name="search_camera_needed_title">Camera needed</string>
+    <string name="search_camera_needed_body">To use this, allow the camera in the app settings.</string>
+    <string name="search_open_settings">Open app settings</string>
+</resources>

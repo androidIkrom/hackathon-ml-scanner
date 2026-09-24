@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner Y. Shown over the camera card when the camera permission is refused (CameraGate). -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Nungil.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/permission_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/search_camera_needed_title"
+            android:textAppearance="@style/TextAppearance.Nungil.Headline" />
+
+        <TextView
+            android:id="@+id/permission_body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap"
+            android:text="@string/search_camera_needed_body"
+            android:textAppearance="@style/TextAppearance.Nungil.Body" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/permission_settings"
+            style="@style/Widget.Nungil.Button.Tonal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/ng_gap_large"
+            android:text="@string/search_open_settings" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

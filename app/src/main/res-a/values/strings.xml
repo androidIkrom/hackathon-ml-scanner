@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner A. Resource name prefixes owned by A: scan_, walk_, detector_, color_ -->
+<resources>
+    <string name="scan_title_full">Look around</string>
+    <string name="scan_subtitle_full">Hold the phone upright and turn slowly in a full circle.</string>
+    <string name="scan_title_live">Live guide</string>
+    <string name="scan_subtitle_live">Point the phone around. I will say what I find.</string>
+    <string name="scan_start">Start</string>
+    <string name="scan_stop">Stop</string>
+    <string name="scan_view_text">View text</string>
+    <string name="scan_switch_camera">Switch camera</string>
+    <string name="scan_preview_description">Camera view</string>
+    <string name="scan_log_title">What I said</string>
+    <string name="scan_log_empty">Nothing yet.</string>
+    <string name="scan_permission_title">Camera needed</string>
+    <string name="scan_permission_body">To see what is around you, allow the camera.</string>
+    <string name="scan_permission_allow">Allow camera</string>
+    <string name="scan_open_settings">Open settings</string>
+
+    <string name="walk_title">Walk mode</string>
+    <string name="walk_body">Walk mode is not ready yet.</string>
+</resources>

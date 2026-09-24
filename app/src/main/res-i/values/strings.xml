@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Prefixes owned by I: app_, nav_title_, home_, hub_, settings_, history_, onboarding_, voice_, help_, ng_. -->
+<resources>
+    <string name="app_name">Nungil</string>
+
+    <string name="nav_title_home">Nungil</string>
+    <string name="nav_title_onboarding">Welcome</string>
+    <string name="nav_title_scan_hub">Scan</string>
+    <string name="nav_title_settings">Settings</string>
+    <string name="nav_title_history">History</string>
+    <string name="nav_title_scan">Look around</string>
+    <string name="nav_title_walk">Walk mode</string>
+    <string name="nav_title_search">Find</string>
+    <string name="nav_title_search_camera">Finding</string>
+    <string name="nav_title_saved">Saved</string>
+    <string name="nav_title_person">Person</string>
+    <string name="nav_title_add_person">Add a person</string>
+    <string name="nav_title_enroll">Learn a face</string>
+    <string name="nav_title_item">Item</string>
+    <string name="nav_title_add_item">Add an item</string>
+    <string name="nav_title_item_enroll">Learn an item</string>
+    <string name="nav_title_reader">Read text</string>
+
+    <!-- Design components -->
+    <string name="ng_ring_description">Scanned %1$d percent</string>
+
+    <!-- Voice -->
+    <string name="voice_korean_voice_missing">The Korean voice is not installed. Speaking English.</string>
+    <string name="voice_install">Install</string>
+    <string name="voice_mic_blocked">The microphone is blocked for this app.</string>
+    <string name="voice_open_settings">Settings</string>
+</resources>

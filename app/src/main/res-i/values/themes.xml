@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Style NAMES are a frozen contract for A and Y; I may tune every VALUE. -->
+<resources>
+
+    <style name="Theme.Nungil" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="ngBackground">@color/ng_bg</item>
+        <item name="ngCard">@color/ng_card</item>
+        <item name="ngText">@color/ng_text</item>
+        <item name="ngTextSub">@color/ng_text_sub</item>
+        <item name="ngPrimary">@color/ng_primary</item>
+        <item name="ngOnPrimary">@color/ng_on_primary</item>
+        <item name="ngPrimarySoft">@color/ng_primary_soft</item>
+        <item name="ngAccentText">@color/ng_accent_text</item>
+        <item name="ngDanger">@color/ng_danger</item>
+        <item name="ngOnDanger">@color/ng_on_danger</item>
+        <item name="ngSuccess">@color/ng_success</item>
+        <item name="ngLine">@color/ng_line</item>
+        <item name="ngFocus">@color/ng_focus</item>
+        <item name="ngCardStrokeWidth">0dp</item>
+
+        <item name="colorPrimary">@color/ng_primary</item>
+        <item name="colorOnPrimary">@color/ng_on_primary</item>
+        <item name="colorSecondary">@color/ng_primary</item>
+        <item name="colorOnSecondary">@color/ng_on_primary</item>
+        <item name="colorError">@color/ng_danger</item>
+        <item name="colorOnError">@color/ng_on_danger</item>
+        <item name="android:colorBackground">@color/ng_bg</item>
+        <item name="colorOnBackground">@color/ng_text</item>
+        <item name="colorSurface">@color/ng_card</item>
+        <item name="colorOnSurface">@color/ng_text</item>
+        <item name="colorOnSurfaceVariant">@color/ng_text_sub</item>
+        <item name="colorOutline">@color/ng_line</item>
+        <item name="android:windowBackground">@color/ng_bg</item>
+
+        <item name="materialButtonStyle">@style/Widget.Nungil.Button</item>
+        <item name="materialCardViewStyle">@style/Widget.Nungil.Card</item>
+        <item name="android:textColorPrimary">@color/ng_text</item>
+        <item name="android:textColorSecondary">@color/ng_text_sub</item>
+    </style>
+
+    <!-- Black, white and yellow. Chosen in Settings; overrides only the tokens. -->
+    <style name="Theme.Nungil.HighContrast">
+        <item name="ngBackground">@color/ng_hc_bg</item>
+        <item name="ngCard">@color/ng_hc_card</item>
+        <item name="ngText">@color/ng_hc_text</item>
+        <item name="ngTextSub">@color/ng_hc_text_sub</item>
+        <item name="ngPrimary">@color/ng_hc_primary</item>
+        <item name="ngOnPrimary">@color/ng_hc_on_primary</item>
+        <item name="ngPrimarySoft">@color/ng_hc_primary_soft</item>
+        <item name="ngAccentText">@color/ng_hc_accent_text</item>
+        <item name="ngDanger">@color/ng_hc_danger</item>
+        <item name="ngOnDanger">@color/ng_hc_on_danger</item>
+        <item name="ngSuccess">@color/ng_hc_success</item>
+        <item name="ngLine">@color/ng_hc_line</item>
+        <item name="ngFocus">@color/ng_hc_focus</item>
+        <item name="ngCardStrokeWidth">2dp</item>
+
+        <item name="colorPrimary">@color/ng_hc_primary</item>
+        <item name="colorOnPrimary">@color/ng_hc_on_primary</item>
+        <item name="colorSecondary">@color/ng_hc_primary</item>
+        <item name="colorOnSecondary">@color/ng_hc_on_primary</item>
+        <item name="colorError">@color/ng_hc_danger</item>
+        <item name="colorOnError">@color/ng_hc_on_danger</item>
+        <item name="android:colorBackground">@color/ng_hc_bg</item>
+        <item name="colorOnBackground">@color/ng_hc_text</item>
+        <item name="colorSurface">@color/ng_hc_card</item>
+        <item name="colorOnSurface">@color/ng_hc_text</item>
+        <item name="colorOnSurfaceVariant">@color/ng_hc_text_sub</item>
+        <item name="colorOutline">@color/ng_hc_line</item>
+        <item name="android:windowBackground">@color/ng_hc_bg</item>
+        <item name="android:textColorPrimary">@color/ng_hc_text</item>
+        <item name="android:textColorSecondary">@color/ng_hc_text_sub</item>
+    </style>
+
+    <!-- Type scale: Pretendard, large and bold headlines, generous line height, slightly tight Korean tracking. -->
+    <style name="TextAppearance.Nungil" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:fontFamily">@font/pretendard</item>
+        <item name="fontFamily">@font/pretendard</item>
+        <item name="android:textColor">?attr/ngText</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+
+    <style name="TextAppearance.Nungil.Display">
+        <item name="android:textSize">30sp</item>
+        <item name="lineHeight">40sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">-0.02</item>
+    </style>
+
+    <style name="TextAppearance.Nungil.Title">
+        <item name="android:textSize">24sp</item>
+        <item name="lineHeight">32sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">-0.02</item>
+    </style>
+
+    <style name="TextAppearance.Nungil.Headline">
+        <item name="android:textSize">20sp</item>
+        <item name="lineHeight">28sp</item>
+        <item name="android:fontFamily">@font/pretendard_semibold</item>
+        <item name="fontFamily">@font/pretendard_semibold</item>
+    </style>
+
+    <style name="TextAppearance.Nungil.Body">
+        <item name="android:textSize">18sp</item>
+        <item name="lineHeight">27sp</item>
+    </style>
+
+    <style name="TextAppearance.Nungil.BodyStrong">
+        <item name="android:textSize">18sp</item>
+        <item name="lineHeight">27sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="TextAppearance.Nungil.Label">
+        <item name="android:textSize">18sp</item>
+        <item name="lineHeight">24sp</item>
+        <item name="android:fontFamily">@font/pretendard_semibold</item>
+        <item name="fontFamily">@font/pretendard_semibold</item>
+    </style>
+
+    <style name="TextAppearance.Nungil.Caption">
+        <item name="android:textSize">15sp</item>
+        <item name="lineHeight">21sp</item>
+        <item name="android:textColor">?attr/ngTextSub</item>
+    </style>
+
+    <!-- Buttons: 72 dp tall, 20 dp corners, full width at the bottom of the screen. -->
+    <style name="Widget.Nungil.Button" parent="Widget.Material3.Button">
+        <item name="android:minHeight">@dimen/ng_button_height</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="cornerRadius">@dimen/ng_radius_button</item>
+        <item name="backgroundTint">?attr/ngPrimary</item>
+        <item name="android:textColor">?attr/ngOnPrimary</item>
+        <item name="iconTint">?attr/ngOnPrimary</item>
+        <item name="iconSize">28dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="android:textAppearance">@style/TextAppearance.Nungil.Label</item>
+    </style>
+
+    <style name="Widget.Nungil.Button.Tonal">
+        <item name="backgroundTint">?attr/ngPrimarySoft</item>
+        <item name="android:textColor">?attr/ngText</item>
+        <item name="iconTint">?attr/ngText</item>
+        <item name="strokeColor">?attr/ngLine</item>
+        <item name="strokeWidth">?attr/ngCardStrokeWidth</item>
+    </style>
+
+    <style name="Widget.Nungil.Button.Danger">
+        <item name="backgroundTint">?attr/ngDanger</item>
+        <item name="android:textColor">?attr/ngOnDanger</item>
+        <item name="iconTint">?attr/ngOnDanger</item>
+    </style>
+
+    <style name="Widget.Nungil.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="android:minHeight">@dimen/ng_touch</item>
+        <item name="android:textColor">?attr/ngAccentText</item>
+        <item name="android:textAppearance">@style/TextAppearance.Nungil.Label</item>
+    </style>
+
+    <!-- Cards: flat, 24 dp corners; a 2 dp outline only in high contrast. -->
+    <style name="Widget.Nungil.Card" parent="Widget.Material3.CardView.Filled">
+        <item name="cardBackgroundColor">?attr/ngCard</item>
+        <item name="cardCornerRadius">@dimen/ng_radius_card</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeColor">?attr/ngLine</item>
+        <item name="strokeWidth">?attr/ngCardStrokeWidth</item>
+        <item name="contentPadding">@dimen/ng_gutter</item>
+    </style>
+
+    <style name="Widget.Nungil.Card.Primary">
+        <item name="cardBackgroundColor">?attr/ngPrimarySoft</item>
+    </style>
+</resources>

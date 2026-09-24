@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/ngBackground"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/ngBackground"
+        app:titleTextAppearance="@style/TextAppearance.Nungil.Headline" />
+
+    <androidx.fragment.app.FragmentContainerView
+        android:id="@+id/nav_host"
+        android:name="androidx.navigation.fragment.NavHostFragment"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        app:defaultNavHost="true"
+        app:navGraph="@navigation/nav_graph" />
+
+    <!-- Everything spoken appears here for sighted helpers and judges. Not read by TalkBack: it was already spoken. -->
+    <TextView
+        android:id="@+id/caption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/ngCard"
+        android:importantForAccessibility="no"
+        android:minHeight="56dp"
+        android:paddingStart="@dimen/ng_gutter"
+        android:paddingTop="12dp"
+        android:paddingEnd="@dimen/ng_gutter"
+        android:paddingBottom="12dp"
+        android:textAppearance="@style/TextAppearance.Nungil.BodyStrong" />
+</LinearLayout>

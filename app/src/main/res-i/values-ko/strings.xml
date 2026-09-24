@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. 해요체, short and friendly. -->
+<resources>
+    <string name="app_name">눈길</string>
+
+    <string name="nav_title_home">눈길</string>
+    <string name="nav_title_onboarding">시작하기</string>
+    <string name="nav_title_scan_hub">둘러보기</string>
+    <string name="nav_title_settings">설정</string>
+    <string name="nav_title_history">기록</string>
+    <string name="nav_title_scan">주변 둘러보기</string>
+    <string name="nav_title_walk">걷기 모드</string>
+    <string name="nav_title_search">찾기</string>
+    <string name="nav_title_search_camera">찾는 중</string>
+    <string name="nav_title_saved">저장한 것</string>
+    <string name="nav_title_person">사람</string>
+    <string name="nav_title_add_person">사람 추가</string>
+    <string name="nav_title_enroll">얼굴 등록</string>
+    <string name="nav_title_item">물건</string>
+    <string name="nav_title_add_item">물건 추가</string>
+    <string name="nav_title_item_enroll">물건 등록</string>
+    <string name="nav_title_reader">글자 읽기</string>
+
+    <!-- Design components -->
+    <string name="ng_ring_description">%1$d퍼센트 살펴봤어요</string>
+
+    <!-- 음성 -->
+    <string name="voice_korean_voice_missing">한국어 음성이 설치되어 있지 않아 영어로 말해요.</string>
+    <string name="voice_install">설치</string>
+    <string name="voice_mic_blocked">이 앱의 마이크가 막혀 있어요.</string>
+    <string name="voice_open_settings">설정</string>
+</resources>

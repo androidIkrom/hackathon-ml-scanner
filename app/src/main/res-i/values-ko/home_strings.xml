@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. 홈과 둘러보기 메뉴. -->
+<resources>
+    <string name="home_greeting">안녕하세요</string>
+    <string name="home_headline">무엇을 도와드릴까요?</string>
+    <string name="home_full_scan_title">주변 둘러보기</string>
+    <string name="home_full_scan_subtitle">한 바퀴 돌면 주변을 알려드려요</string>
+    <string name="home_search_title">물건 찾기</string>
+    <string name="home_search_subtitle">가까워질수록 소리가 빨라져요</string>
+    <string name="home_saved_title">저장한 것</string>
+    <string name="home_saved_subtitle">알려주신 사람과 물건이에요</string>
+    <string name="home_live_title">실시간 안내</string>
+    <string name="home_live_subtitle">카메라가 찾는 대로 바로 말해요</string>
+    <string name="home_walk_title">걷기 모드</string>
+    <string name="home_walk_subtitle">걷는 동안 장애물을 알려드려요</string>
+    <string name="home_history">기록</string>
+    <string name="home_settings">설정</string>
+    <string name="home_mic_turn_on">음성 명령 켜기</string>
+    <string name="home_mic_turn_off">음성 명령 끄기</string>
+
+    <string name="hub_headline">어떻게 둘러볼까요?</string>
+    <string name="hub_subtitle">휴대폰을 세우고 천천히 돌아 주세요.</string>
+    <string name="hub_history_subtitle">지난 결과를 다시 들어요</string>
+</resources>

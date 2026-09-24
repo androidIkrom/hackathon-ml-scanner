@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Home and scan menu. -->
+<resources>
+    <string name="home_greeting">Hello</string>
+    <string name="home_headline">What can I help with?</string>
+    <string name="home_full_scan_title">Look around</string>
+    <string name="home_full_scan_subtitle">Turn once and hear what is around you</string>
+    <string name="home_search_title">Find something</string>
+    <string name="home_search_subtitle">Beeps get faster as you point at it</string>
+    <string name="home_saved_title">Saved</string>
+    <string name="home_saved_subtitle">People and things you taught me</string>
+    <string name="home_live_title">Live scan</string>
+    <string name="home_live_subtitle">Hear things as the camera finds them</string>
+    <string name="home_walk_title">Walk mode</string>
+    <string name="home_walk_subtitle">Warnings about obstacles while walking</string>
+    <string name="home_history">History</string>
+    <string name="home_settings">Settings</string>
+    <string name="home_mic_turn_on">Turn on voice commands</string>
+    <string name="home_mic_turn_off">Turn off voice commands</string>
+
+    <string name="hub_headline">How should I look around?</string>
+    <string name="hub_subtitle">Hold the phone upright and turn slowly.</string>
+    <string name="hub_history_subtitle">Hear your past scans again</string>
+</resources>

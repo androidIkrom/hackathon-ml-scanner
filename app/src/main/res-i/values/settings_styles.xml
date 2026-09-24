@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Controls used on settings-like screens. A and Y may use them too. -->
+<resources>
+    <!-- One segment of a MaterialButtonToggleGroup: 64 dp tall, filled when selected. -->
+    <style name="Widget.Nungil.Toggle" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:minHeight">@dimen/ng_touch</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="backgroundTint">@color/ng_toggle_bg</item>
+        <item name="android:textColor">@color/ng_toggle_text</item>
+        <item name="strokeColor">?attr/ngLine</item>
+        <item name="strokeWidth">2dp</item>
+        <item name="android:textAppearance">@style/TextAppearance.Nungil.Label</item>
+    </style>
+
+    <style name="Widget.Nungil.Switch" parent="Widget.Material3.CompoundButton.MaterialSwitch">
+        <item name="android:minHeight">@dimen/ng_touch</item>
+        <item name="android:textAppearance">@style/TextAppearance.Nungil.Body</item>
+        <item name="android:textColor">?attr/ngText</item>
+    </style>
+
+    <style name="TextAppearance.Nungil.Section" parent="TextAppearance.Nungil.Label">
+        <item name="android:textColor">?attr/ngTextSub</item>
+    </style>
+</resources>

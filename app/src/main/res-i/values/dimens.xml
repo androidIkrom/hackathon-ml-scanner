@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Spacing on an 8 dp grid (KRDS); touch targets well above the 44 dp minimum. Names are frozen. -->
+<resources>
+    <dimen name="ng_gutter">20dp</dimen>
+    <dimen name="ng_gap">12dp</dimen>
+    <dimen name="ng_gap_large">24dp</dimen>
+    <dimen name="ng_touch">64dp</dimen>
+    <dimen name="ng_button_height">72dp</dimen>
+    <dimen name="ng_radius_card">24dp</dimen>
+    <dimen name="ng_radius_button">20dp</dimen>
+    <dimen name="ng_mic_size">96dp</dimen>
+</resources>

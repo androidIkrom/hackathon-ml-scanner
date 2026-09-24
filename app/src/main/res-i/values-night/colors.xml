@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Dark palette. -->
+<resources>
+    <color name="ng_bg">#0F1115</color>
+    <color name="ng_card">#1C1F26</color>
+    <color name="ng_text">#F2F4F6</color>
+    <color name="ng_text_sub">#B0B8C1</color>
+    <color name="ng_primary">#2F6FDB</color>
+    <color name="ng_on_primary">#FFFFFF</color>
+    <color name="ng_primary_soft">#1A2A45</color>
+    <color name="ng_accent_text">#7EB0FF</color>
+    <color name="ng_danger">#C62828</color>
+    <color name="ng_on_danger">#FFFFFF</color>
+    <color name="ng_success">#2EB67D</color>
+    <color name="ng_line">#2C313A</color>
+    <color name="ng_focus">#FFD400</color>
+</resources>

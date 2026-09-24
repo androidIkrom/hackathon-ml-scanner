@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Light palette (dark lives in values-night with the same names). Every text pair >= 4.5:1. -->
+<resources>
+    <color name="ng_bg">#F4F6F8</color>
+    <color name="ng_card">#FFFFFF</color>
+    <color name="ng_text">#191F28</color>
+    <color name="ng_text_sub">#4E5968</color>
+    <color name="ng_primary">#1B64DA</color>
+    <color name="ng_on_primary">#FFFFFF</color>
+    <color name="ng_primary_soft">#E8F1FF</color>
+    <color name="ng_accent_text">#1B64DA</color>
+    <color name="ng_danger">#C62828</color>
+    <color name="ng_on_danger">#FFFFFF</color>
+    <color name="ng_success">#0B7A4B</color>
+    <color name="ng_line">#E5E8EB</color>
+    <color name="ng_focus">#1B64DA</color>
+    <color name="ng_icon_bg">#1B64DA</color>
+
+    <!-- High contrast: black, white and signal yellow. Same in light and dark. -->
+    <color name="ng_hc_bg">#000000</color>
+    <color name="ng_hc_card">#000000</color>
+    <color name="ng_hc_text">#FFFFFF</color>
+    <color name="ng_hc_text_sub">#FFFFFF</color>
+    <color name="ng_hc_primary">#FFD400</color>
+    <color name="ng_hc_on_primary">#000000</color>
+    <color name="ng_hc_primary_soft">#1F1A00</color>
+    <color name="ng_hc_accent_text">#FFD400</color>
+    <color name="ng_hc_danger">#FF6B6B</color>
+    <color name="ng_hc_on_danger">#000000</color>
+    <color name="ng_hc_success">#3DFF8B</color>
+    <color name="ng_hc_line">#FFFFFF</color>
+    <color name="ng_hc_focus">#FFD400</color>
+</resources>

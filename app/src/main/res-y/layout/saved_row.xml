@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner Y. One saved person or item: the whole card is the touch target. -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Nungil.Card"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/ng_gap"
+    android:clickable="true"
+    android:focusable="true"
+    android:minHeight="88dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:importantForAccessibility="noHideDescendants"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/saved_row_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.Nungil.Headline" />
+
+        <TextView
+            android:id="@+id/saved_row_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textAppearance="@style/TextAppearance.Nungil.Caption" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

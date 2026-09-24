@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner A. -->
+<resources>
+    <string name="scan_title_full">주변을 둘러볼게요</string>
+    <string name="scan_subtitle_full">휴대폰을 세우고 천천히 한 바퀴 돌아 주세요.</string>
+    <string name="scan_title_live">실시간 안내</string>
+    <string name="scan_subtitle_live">휴대폰을 천천히 움직여 보세요. 찾는 대로 알려 드릴게요.</string>
+    <string name="scan_start">시작</string>
+    <string name="scan_stop">멈춤</string>
+    <string name="scan_view_text">글로 보기</string>
+    <string name="scan_switch_camera">카메라 전환</string>
+    <string name="scan_preview_description">카메라 화면</string>
+    <string name="scan_log_title">말한 내용</string>
+    <string name="scan_log_empty">아직 없어요.</string>
+    <string name="scan_permission_title">카메라가 필요해요</string>
+    <string name="scan_permission_body">주변을 보려면 카메라를 허용해 주세요.</string>
+    <string name="scan_permission_allow">카메라 허용</string>
+    <string name="scan_open_settings">설정 열기</string>
+
+    <string name="walk_title">걷기 모드</string>
+    <string name="walk_body">걷기 모드는 아직 준비 중이에요.</string>
+</resources>

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. One past scan. The card is one TalkBack element: date, mode, then the summary. -->
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="@dimen/ng_gap"
+    android:clickable="true"
+    android:focusable="true"
+    android:minHeight="@dimen/ng_touch">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/history_item_meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:importantForAccessibility="no"
+            android:textAppearance="@style/TextAppearance.Nungil.Caption" />
+
+        <TextView
+            android:id="@+id/history_item_summary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:importantForAccessibility="no"
+            android:textAppearance="@style/TextAppearance.Nungil.Body" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

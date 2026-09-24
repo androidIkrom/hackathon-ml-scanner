@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Owner I. Attributes of com.nungil.design.BigCardView. -->
+<resources>
+    <declare-styleable name="BigCardView">
+        <attr name="ngIcon" format="reference" />
+        <attr name="ngTitle" format="string" />
+        <attr name="ngSubtitle" format="string" />
+        <attr name="ngEmphasis" format="boolean" />
+    </declare-styleable>
+</resources>
