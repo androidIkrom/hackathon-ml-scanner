@@ -111,7 +111,10 @@ class WalkFragment : Fragment(), VoiceHandler {
             val selfRecovers = reason == TrackingFailureReason.INSUFFICIENT_LIGHT ||
                 reason == TrackingFailureReason.INSUFFICIENT_FEATURES ||
                 reason == TrackingFailureReason.EXCESSIVE_MOTION
-            if (glRunning && restart.shouldRestart(now, renderer.lastTrackingAt, cameraStartedAt, selfRecovers)) {
+            // The Go search step hides the camera: no frames, nothing to restart.
+            val visible = binding.walkingCameraCard.isShown
+            if (!visible) cameraStartedAt = now
+            if (glRunning && visible && restart.shouldRestart(now, renderer.lastTrackingAt, cameraStartedAt, selfRecovers)) {
                 android.util.Log.i("Nungil", "ARCore not tracking ($reason): restarting the session")
                 stopCamera()
                 startCamera()
