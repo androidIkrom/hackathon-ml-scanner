@@ -48,7 +48,9 @@ import kotlin.math.min
 
 /**
  * One-sweep face enrolment: 3 samples looking straight, then one each for one side, the other side, up and down
- * (7 in all), taken as soon as the head reaches each pose, with spoken prompts and progress. Nothing is saved until the last sample; leaving halfway saves nothing.
+ * (7 in all), taken as soon as the head reaches each pose. One sentence at the start describes the sweep, each
+ * sample buzzes, and a hint is spoken only after 4 s without one. Nothing is saved until the last sample; leaving
+ * halfway saves nothing.
  */
 class EnrollFragment : Fragment(), VoiceHandler {
     private var _binding: EnrollFragmentBinding? = null
@@ -81,6 +83,10 @@ class EnrollFragment : Fragment(), VoiceHandler {
     private var lastSampleMs = 0L
     private var lastFaceMs = 0L
     private var lastHintMs = 0L
+
+    /** When Start was pressed; hints wait 4 s from here too. */
+    @Volatile
+    private var startedMs = 0L
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = EnrollFragmentBinding.inflate(inflater, container, false)
@@ -163,6 +169,7 @@ class EnrollFragment : Fragment(), VoiceHandler {
     private fun start() {
         if (finished || running) return
         running = true
+        startedMs = SystemClock.elapsedRealtime()
         binding.enrollButton.setText(R.string.enroll_pause)
         val next = guide.pose ?: Pose.STRAIGHT
         services.speaker.say(if (guide.taken == 0) EnrollPhrases.sweep(lang) else EnrollPhrases.prompt(next, lang))
@@ -226,7 +233,7 @@ class EnrollFragment : Fragment(), VoiceHandler {
         val hint = guide.hint(min(box.width(), box.height()), yaw, pitch)
         if (hint != null) {
             // Seen but not taken: after a quiet spell, say what to change (and log it for tuning).
-            if (now - lastSampleMs > NO_FACE_HINT_MS && now - lastHintMs > NO_FACE_HINT_MS) {
+            if (now - maxOf(lastSampleMs, startedMs) > NO_FACE_HINT_MS && now - lastHintMs > NO_FACE_HINT_MS) {
                 lastHintMs = now
                 Log.i(TAG, "Enrol ${guide.pose}: $hint (yaw=$yaw pitch=$pitch size=${min(box.width(), box.height())})")
                 guide.pose?.let { services.speaker.say(EnrollPhrases.hint(hint, it, lang)) }
@@ -235,7 +242,6 @@ class EnrollFragment : Fragment(), VoiceHandler {
         }
         val vector = embedder.embed(bitmap, face) ?: return
         lastSampleMs = now
-        val before = guide.pose
         val takenPose = guide.add(yaw, pitch) ?: return
         if (photo == null && takenPose == Pose.STRAIGHT) photo = FaceCrops.crop(bitmap, face)
         samples += vector
@@ -247,11 +253,8 @@ class EnrollFragment : Fragment(), VoiceHandler {
             if (next != null) b.enrollPrompt.text = EnrollPhrases.prompt(next, lang)
         }
         services.haptics.buzz(Buzz.TAP)
-        when {
-            guide.isDone -> finish()
-            // The head may already be past the next pose: replace any stale prompt instead of queueing.
-            next != before && next != null -> services.speaker.sayNow(EnrollPhrases.prompt(next, lang))
-        }
+        // No prompt per pose: it would cut off the start sentence, and the head is often already past it.
+        if (guide.isDone) finish()
     }
 
     /** Extras thread: everything is written in one transaction on the process-wide scope. */
