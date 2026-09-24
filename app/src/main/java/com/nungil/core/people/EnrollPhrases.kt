@@ -27,6 +27,12 @@ object EnrollPhrases {
         }
     }
 
+    /** Said once at the start: the whole sweep in one sentence. */
+    fun sweep(lang: Lang): String = when (lang) {
+        Lang.EN -> "Look straight at the phone, then slowly turn your head right, left, up and down."
+        Lang.KO -> "휴대폰을 똑바로 본 다음, 고개를 오른쪽, 왼쪽, 위, 아래로 천천히 돌려 주세요."
+    }
+
     fun percent(percent: Int, lang: Lang): String = when (lang) {
         Lang.EN -> "$percent percent"
         Lang.KO -> "${percent}퍼센트"

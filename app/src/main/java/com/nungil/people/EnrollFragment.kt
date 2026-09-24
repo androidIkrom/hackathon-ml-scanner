@@ -48,8 +48,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
 
 /**
- * Five-pose face enrolment: 4 samples each for straight, one side, the other side, up and down (20 in all), with
- * spoken prompts and progress. Nothing is saved until the last sample; leaving halfway saves nothing.
+ * One-sweep face enrolment: 3 samples looking straight, then one each for one side, the other side, up and down
+ * (7 in all), taken as soon as the head reaches each pose, with spoken prompts and progress. Nothing is saved until the last sample; leaving halfway saves nothing.
  */
 class EnrollFragment : Fragment(), VoiceHandler {
     private var _binding: EnrollFragmentBinding? = null
@@ -164,7 +164,8 @@ class EnrollFragment : Fragment(), VoiceHandler {
         if (finished || running) return
         running = true
         binding.enrollButton.setText(R.string.enroll_pause)
-        services.speaker.say(EnrollPhrases.prompt(guide.pose ?: Pose.STRAIGHT, lang))
+        val next = guide.pose ?: Pose.STRAIGHT
+        services.speaker.say(if (guide.taken == 0) EnrollPhrases.sweep(lang) else EnrollPhrases.prompt(next, lang))
     }
 
     private fun pause() {
@@ -234,9 +235,10 @@ class EnrollFragment : Fragment(), VoiceHandler {
         }
         val vector = embedder.embed(bitmap, face) ?: return
         lastSampleMs = now
-        if (photo == null && guide.pose == Pose.STRAIGHT) photo = FaceCrops.crop(bitmap, face)
+        val before = guide.pose
+        val takenPose = guide.add(yaw, pitch) ?: return
+        if (photo == null && takenPose == Pose.STRAIGHT) photo = FaceCrops.crop(bitmap, face)
         samples += vector
-        val poseDone = guide.add(yaw)
         val percent = guide.percent()
         val next = guide.pose
         main.post {
@@ -247,10 +249,8 @@ class EnrollFragment : Fragment(), VoiceHandler {
         services.haptics.buzz(Buzz.TAP)
         when {
             guide.isDone -> finish()
-            poseDone && next != null -> {
-                services.speaker.say(EnrollPhrases.percent(percent, lang))
-                services.speaker.say(EnrollPhrases.prompt(next, lang))
-            }
+            // The head may already be past the next pose: replace any stale prompt instead of queueing.
+            next != before && next != null -> services.speaker.sayNow(EnrollPhrases.prompt(next, lang))
         }
     }
 
@@ -285,7 +285,7 @@ class EnrollFragment : Fragment(), VoiceHandler {
         const val TAG = "Nungil"
         const val PHOTO_FOLDER = "people"
 
-        /** At most one sample every 250 ms, so the 4 samples of a pose differ a little. */
+        /** At most one sample every 250 ms, so the straight samples differ a little. */
         const val SAMPLE_GAP_MS = 250L
         const val NO_FACE_HINT_MS = 4_000L
     }
