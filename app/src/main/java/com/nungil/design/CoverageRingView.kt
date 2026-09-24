@@ -34,6 +34,11 @@ class CoverageRingView @JvmOverloads constructor(
         style = Paint.Style.STROKE
         color = context.resolveColorAttr(R.attr.ngLine)
     }
+    /** A card-coloured disc behind the ring, so the ring and percent stay readable over the camera image. */
+    private val discPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = context.resolveColorAttr(R.attr.ngCard)
+    }
     private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.resolveColorAttr(R.attr.ngText)
         textAlign = Paint.Align.CENTER
@@ -71,6 +76,7 @@ class CoverageRingView @JvmOverloads constructor(
         val cy = paddingTop + (height - paddingTop - paddingBottom) / 2f
         val radius = size / 2f - stroke / 2f
         oval.set(cx - radius, cy - radius, cx + radius, cy + radius)
+        canvas.drawCircle(cx, cy, size / 2f, discPaint)
         for (i in bins.indices) {
             val arc = RingGeometry.segment(i, bins.size)
             canvas.drawArc(oval, arc.startDeg, arc.sweepDeg, false, if (bins[i]) seenPaint else unseenPaint)

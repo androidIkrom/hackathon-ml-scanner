@@ -83,6 +83,7 @@
                 app:ngTitle="@string/home_walk_title" />
 
             <LinearLayout
+                android:baselineAligned="false"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="@dimen/ng_gap_large"
