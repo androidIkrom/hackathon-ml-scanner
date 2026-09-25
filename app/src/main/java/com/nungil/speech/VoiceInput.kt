@@ -129,8 +129,8 @@ class VoiceInput(
             return
         }
         lastPartial = ""
-        // Hide the recognizer's start beep. Music stays on while the app is talking.
-        muter.mute(includeMusic = appSaying() == null)
+        // Hide the recognizer's start beep. Music (the TTS stream) is muted only while the user is talking.
+        muter.mute(includeMusic = holding)
         r.startListening(intent())
     }
 
@@ -175,8 +175,12 @@ class VoiceInput(
         if (userTalking) beginHold()
     }
 
-    /** Hide the recognizer's end beep; the app is silent while the user speaks, so music may go too. */
-    override fun onEndOfSpeech() = muter.mute(includeMusic = holding || appSaying() == null)
+    /**
+     * Hide the recognizer's end beep. Music (the stream TTS speaks on) goes quiet only while the user is
+     * talking: muting it whenever the app happened to be silent swallowed the live-scan announcements,
+     * because the always-on recognizer ends a cycle every second or so and re-muted it each time.
+     */
+    override fun onEndOfSpeech() = muter.mute(includeMusic = holding)
 
     override fun onResults(results: Bundle?) {
         muter.unmuteMusicNow()
