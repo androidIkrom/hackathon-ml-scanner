@@ -177,6 +177,27 @@ class WalkBasicsTest {
         for (screen in listOf("settings", "history", "saved")) assertNull(screen, WalkCommands.parse("go to $screen", appScreens))
     }
 
+    /** Heard during live scan: "go Seoul" used to become Start and "That does not work on this screen". */
+    @Test fun goWithoutToIsAPlace() {
+        assertEquals(WalkCommand.GoTo("Seoul"), WalkCommands.parse("go Seoul", appScreens))
+        assertEquals(WalkCommand.GoTo("Seoul Station"), WalkCommands.parse("let's go Seoul Station", appScreens))
+        assertEquals(WalkCommand.GoTo("서울"), WalkCommands.parse("서울 가자", appScreens))
+        for (p in listOf("go back", "go home", "go ahead", "go on", "go again", "go live scan", "go settings")) {
+            assertNull(p, WalkCommands.parse(p, appScreens))
+        }
+        assertNull(WalkCommands.parse("그만 가자", appScreens))
+    }
+
+    @Test fun moreWaysToAskForARoute() {
+        for (p in listOf("route", "guide me", "take me somewhere", "길 알려 줘", "내비", "네비게이션")) {
+            assertEquals(p, WalkCommand.GoMode, WalkCommands.parse(p, appScreens))
+        }
+        for (p in listOf("bring me to Seoul Station", "head to Seoul Station", "show me the way to Seoul Station", "how do I get to Seoul Station")) {
+            assertEquals(p, WalkCommand.GoTo("Seoul Station"), WalkCommands.parse(p, appScreens))
+        }
+        assertEquals(WalkCommand.GoTo("서울역"), WalkCommands.parse("서울역에 어떻게 가", appScreens))
+    }
+
     @Test fun cornerOfACorridorIsNotRepeated() {
         val a = WalkAlerts()
         val left = Alert(AlertKind.HAZARD, "wall:LEFT", "Obstacle on your left, 1 step.")
