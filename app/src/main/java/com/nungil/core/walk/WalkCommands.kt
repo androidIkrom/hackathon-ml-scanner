@@ -13,9 +13,13 @@ sealed interface WalkCommand {
 object WalkCommands {
     private val EN_SAVE = Regex("""^(?:please\s+)?(?:save|remember|mark)\s+(?:this\s+place|this\s+spot|here|this\s+location|the\s+place)\s+(?:as|called)\s+(.+)$""", RegexOption.IGNORE_CASE)
     /** "go to …" is left to the screen parser ("go to settings"); these verbs only mean walking there. */
-    private val EN_GO = Regex("""^(?:please\s+)?(?:take\s+me|guide\s+me|walk\s+me|navigate|directions|lead\s+me|get\s+me)\s+(?:back\s+)?(?:to|towards|toward)\s+(.+)$""", RegexOption.IGNORE_CASE)
+    private val EN_GO = Regex("""^(?:please\s+)?(?:take\s+me|guide\s+me|walk\s+me|navigate|directions|lead\s+me|get\s+me|bring\s+me|head|route|show\s+me\s+the\s+way|how\s+do\s+i\s+get)\s+(?:back\s+)?(?:to|towards|toward)\s+(.+)$""", RegexOption.IGNORE_CASE)
     /** "go to Seoul Station", "let's go to the park": a place unless the word is a screen ("go to settings"). */
     private val EN_LETS_GO = Regex("""^(?:please\s+)?(?:let'?s\s+)?go\s+(?:to|towards|toward)\s+(.+)$""", RegexOption.IGNORE_CASE)
+    /** "go Seoul", "let's go Seoul Station": speech often drops the "to". Screens and [NOT_PLACES_EN] stay commands. */
+    private val EN_GO_BARE = Regex("""^(?:please\s+)?(?:let'?s\s+)?go\s+(?!(?:to|towards?)\s)(.+)$""", RegexOption.IGNORE_CASE)
+    private val NOT_PLACES_EN = setOf("ahead", "on", "away", "now", "there", "here", "up", "down", "left", "right", "forward", "straight", "out", "fast", "faster", "slow", "slowly")
+
     private val EN_HOME = Regex("""^(?:please\s+)?(?:take|bring|walk|get|guide)\s+me\s+(?:back\s+)?home$""", RegexOption.IGNORE_CASE)
 
     private val EN_SAVE_BARE = Regex("""^(?:please\s+)?(?:save|remember|mark)\s+(?:this\s+place|this\s+spot|here|this\s+location|my\s+location|the\s+place|this)$""", RegexOption.IGNORE_CASE)
@@ -25,15 +29,20 @@ object WalkCommands {
     private val KO_SAVE = Regex("""^(?:여기|이\s*곳|이\s*장소|지금\s*위치|현재\s*위치)(?:를|을)?\s*(.+?)(?:으로|로|이라고|라고)\s*저장.*$""")
 
     /** 학교까지 안내해 줘 / 역에 데려다 줘 / 집으로 가는 길 알려 줘: always a place. */
-    private val KO_GO = Regex("""^(.+?)\s*(?:으로|로|까지|에)\s*(?:안내해\s*줘|안내해\s*주세요|안내|데려다\s*줘|데려다\s*주세요|가는\s*길.*|길\s*안내.*)$""")
+    private val KO_GO = Regex("""^(.+?)\s*(?:으로|로|까지|에)\s*(?:안내해\s*줘|안내해\s*주세요|안내|데려다\s*줘|데려다\s*주세요|가는\s*길.*|길\s*안내.*|어떻게\s*가.*)$""")
 
     /** 집으로 가자: a place unless the word is a screen ("설정으로 가자"). */
     private val KO_LETS_GO = Regex("""^(.+?)\s*(?:으로|로|까지|에)\s*(?:가자|가 줘|가줘|가고 싶어)$""")
 
+    /** 서울 가자: the same without a particle, a place unless the word is a screen ("그만 가자"). */
+    private val KO_LETS_GO_BARE = Regex("""^(.+?)(?<!으로|로|까지|에)\s+(?:가자|가 줘|가줘|가고 싶어)$""")
+
     /** [isScreenWord] tells a screen name ("설정", "saved") from a place for the ambiguous "…로 가자". */
     private val GO_MODE = setOf(
         "go mode", "go", "navigation", "navigation mode", "navigate", "directions", "go somewhere", "where to",
+        "route", "route mode", "directions mode", "guide me", "take me somewhere",
         "길 안내", "길안내", "길 안내 모드", "길안내 모드", "길 찾기", "길찾기", "길 찾기 모드",
+        "길 알려 줘", "길 알려줘", "내비", "네비", "내비게이션", "네비게이션",
     )
 
     fun parse(text: String, isScreenWord: (String) -> Boolean = { false }): WalkCommand? {
@@ -48,8 +57,14 @@ object WalkCommands {
         EN_LETS_GO.find(t)?.let { m ->
             name(m.groupValues[1])?.let { if (!isScreenWord(it)) return WalkCommand.GoTo(it) }
         }
+        EN_GO_BARE.find(t)?.let { m ->
+            name(m.groupValues[1])?.let { if (!isScreenWord(it) && it.lowercase() !in NOT_PLACES_EN) return WalkCommand.GoTo(it) }
+        }
         KO_GO.find(t)?.let { m -> name(m.groupValues[1])?.let { return WalkCommand.GoTo(it) } }
         KO_LETS_GO.find(t)?.let { m ->
+            name(m.groupValues[1])?.let { if (!isScreenWord(it)) return WalkCommand.GoTo(it) }
+        }
+        KO_LETS_GO_BARE.find(t)?.let { m ->
             name(m.groupValues[1])?.let { if (!isScreenWord(it)) return WalkCommand.GoTo(it) }
         }
         return null

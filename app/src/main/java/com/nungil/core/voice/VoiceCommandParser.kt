@@ -63,9 +63,11 @@ object VoiceCommandParser {
 
     // 1 ------------------------------------------------------------------------------------------------
     private fun micOff(s: Said): VoiceCommand? {
-        val en = s.has("listening", "microphone") || s.seq("mic", "off") || s.seq("voice", "off") || s.seq("stop", "voice")
+        val en = s.has("listening", "microphone") || s.seq("mic", "off") || s.seq("voice", "off") || s.seq("stop", "voice") ||
+            s.seq("stop", "hearing") || s.seq("dont", "listen") || (s.has("mic") && s.has("mute", "off")) ||
+            (s.has("voice") && s.has("off", "disable"))
         val ko = s.ko(
-            "듣기중지", "듣기그만", "듣지마", "그만들어", "마이크꺼", "마이크끄", "마이크중지",
+            "듣기중지", "듣기그만", "듣지마", "듣지말", "그만들어", "마이크꺼", "마이크끄", "마이크중지",
             "음성꺼", "음성끄", "음성명령꺼", "음성명령끄",
         )
         return if (en || ko) VoiceCommand.StopListening else null
@@ -95,16 +97,21 @@ object VoiceCommandParser {
             if (w[i] == "where" && w.getOrNull(start) == "am") return null // "where am I" is help
             if (w[i] == "search" && w.getOrNull(start) == "for") start++
             if (w[i] == "where" && w.getOrNull(start) in setOf("is", "are")) start++
+            // "where did I put my keys": the thing comes after put / leave.
+            if (w[i] == "where" && w.getOrNull(start) == "did") {
+                val verb = w.indexOfFirst { it in setOf("put", "leave", "left", "drop", "place", "keep") }
+                if (verb > start) start = verb + 1
+            }
             return goSearch(s.raw.drop(start).joinToString(" "))
         }
         return null
     }
 
     private fun koreanSearch(s: Said): VoiceCommand? {
-        val j = s.raw.indexOfFirst { it.contains("찾") || it.contains("어디") }
+        val j = s.raw.indexOfFirst { it.contains("찾") || it.contains("어디") || it.contains("어딨") }
         if (j < 0) return null
         val trigger = s.raw[j]
-        val cut = listOf(trigger.indexOf("찾"), trigger.indexOf("어디")).filter { it >= 0 }.min()
+        val cut = listOf(trigger.indexOf("찾"), trigger.indexOf("어디"), trigger.indexOf("어딨")).filter { it >= 0 }.min()
         val before = (s.raw.take(j) + trigger.substring(0, cut)).filter { it.isNotBlank() }
         val payload = if (before.isNotEmpty()) {
             before
@@ -126,16 +133,30 @@ object VoiceCommandParser {
         val w = s.words
         val helpScreen = s.seq("what", "is", "this", "screen") || s.seq("whats", "this", "screen") ||
             s.seq("where", "am", "i") || s.seq("what", "can", "i", "say") || s.seq("which", "screen") ||
-            s.ko("이화면", "여기어디", "뭐라고말", "무슨말", "도움말", "도와주", "도와줘")
+            s.seq("what", "can", "you", "do") || s.has("commands", "instructions") ||
+            s.seq("how", "do", "i", "use") || s.seq("how", "to", "use") ||
+            s.ko(
+                "이화면", "여기어디", "뭐라고말", "무슨말", "도움말", "도와주", "도와줘", "명령어", "사용법",
+                "뭐할수있", "어떻게써", "어떻게사용",
+            )
         if (helpScreen) return VoiceCommand.Help(null)
 
+        // "what is around me", "주변에 뭐 있어": the answer is a full scan.
+        val around = s.seq("what", "is", "around") || s.seq("whats", "around") || s.seq("what", "is", "near") ||
+            s.seq("whats", "near") || (s.has("describe") && s.has("room", "surroundings", "around")) ||
+            s.ko("주변에뭐", "주위에뭐", "근처에뭐", "주변뭐")
+        if (around) return VoiceCommand.Go(Dest.Scan(ScanMode.FULL))
+
         val who = s.seq("who", "is", "this") || s.seq("who", "is", "that") || s.seq("who", "is", "it") ||
-            s.seq("whos", "this") || s.seq("whos", "that") || s.ko("누구", "누군")
+            s.seq("whos", "this") || s.seq("whos", "that") || s.ko("누구", "누군") ||
+            (w.first() in setOf("who", "whos") && s.has("there", "here", "front", "see", "looking"))
         if (who) return VoiceCommand.WhoIsThis
 
         val what = s.seq("what", "is", "this") || s.seq("what", "is", "that") || s.seq("whats", "this") ||
             s.seq("whats", "that") || s.seq("what", "am", "i", "looking", "at") ||
-            s.ko("이게뭐", "이거뭐", "이건뭐", "이것뭐", "뭐야이거", "뭐야이게")
+            s.seq("what", "is", "it") || s.seq("whats", "it") || s.seq("tell", "me", "what") ||
+            (s.has("what", "whats") && (s.seq("in", "front") || s.has("see"))) || s.has("identify", "describe") ||
+            s.ko("이게뭐", "이거뭐", "이건뭐", "이것뭐", "뭐야이거", "뭐야이게", "앞에뭐", "뭐가보여", "뭐보여")
         if (what) return VoiceCommand.WhatIsThis
 
         val topicWords = when {
@@ -168,10 +189,17 @@ object VoiceCommandParser {
     // 4 ------------------------------------------------------------------------------------------------
     private enum class Kind { PERSON, CAR, OBJECT }
 
-    private val addVerbsEn = setOf("add", "create", "new", "register", "save", "make", "remember", "teach", "learn")
-    private val personEn = setOf("person", "people", "persons", "face", "faces", "friend", "friends", "someone")
+    private val addVerbsEn = setOf(
+        "add", "create", "new", "register", "save", "make", "remember", "teach", "learn",
+        "enroll", "enrol", "memorize", "memorise", "store",
+    )
+    private val personEn = setOf(
+        "person", "people", "persons", "face", "faces", "friend", "friends", "someone", "man", "woman", "human",
+    )
     private val carEn = setOf("car", "cars", "vehicle", "vehicles")
-    private val objectEn = setOf("object", "objects", "item", "items", "thing", "things")
+    private val objectEn = setOf(
+        "object", "objects", "item", "items", "thing", "things", "stuff", "belonging", "belongings",
+    )
     private val nameLeadFillersEn = setOf("called", "named", "as", "is", "a", "an", "the", "name", "whose")
     private val betweenFillersEn = setOf("a", "an", "the", "new", "this", "that", "my")
     private val nameFillersKo = setOf("좀", "줘", "해줘", "해", "해주세요", "주세요", "이름은", "이름", "새", "새로", "이", "그", "저")
@@ -185,9 +213,10 @@ object VoiceCommandParser {
     }
 
     private fun kindKo(word: String): Kind? = when {
-        word.contains("사람") || word.contains("얼굴") || word.contains("친구") -> Kind.PERSON
+        word.contains("사람") || word.contains("얼굴") || word.contains("친구") || word.contains("가족") ||
+            word.contains("지인") -> Kind.PERSON
         word.contains("자동차") || word == "차" || word.startsWith("차를") || word.startsWith("차로") -> Kind.CAR
-        word.contains("물건") || word.contains("사물") -> Kind.OBJECT
+        word.contains("물건") || word.contains("사물") || word.contains("소지품") -> Kind.OBJECT
         else -> null
     }
 
@@ -236,10 +265,10 @@ object VoiceCommandParser {
 
     // 5 ------------------------------------------------------------------------------------------------
     private fun learner(s: Said): VoiceCommand? {
-        if (s.has("learner", "learning") || s.seq("tutorial", "mode")) {
+        if (s.has("learner", "learning") || s.seq("tutorial", "mode") || s.seq("practice", "mode") || s.seq("training", "mode")) {
             return VoiceCommand.Learner(on = !s.has("off", "disable", "stop", "end"))
         }
-        if (s.ko("학습모드", "배움모드", "연습모드")) {
+        if (s.ko("학습모드", "배움모드", "연습모드", "튜토리얼")) {
             return VoiceCommand.Learner(on = !s.ko("꺼", "끄", "중지", "그만"))
         }
         return null
@@ -253,15 +282,20 @@ object VoiceCommandParser {
 
     // 6 ------------------------------------------------------------------------------------------------
     private fun action(s: Said): VoiceCommand? = when {
-        s.has("stop", "cancel", "pause", "enough", "quiet", "halt", "silence", "shut", "finish") ||
-            s.ko("멈춰", "멈춤", "정지", "그만", "중지", "스톱", "취소", "조용", "끝") -> VoiceCommand.Stop
-        s.seq("switch", "camera") || s.seq("flip", "camera") || s.seq("change", "camera") ||
-            s.seq("front", "camera") || s.seq("back", "camera") || s.seq("rear", "camera") || s.has("selfie") ||
-            s.ko("카메라전환", "카메라바꿔", "카메라바꾸", "전면카메라", "후면카메라", "셀카") -> VoiceCommand.SwitchCamera
-        s.has("read", "text", "qr", "barcode", "code") ||
-            s.ko("글자", "읽어", "텍스트", "큐알", "바코드") -> VoiceCommand.ReadText
-        s.has("delete", "remove", "erase") || s.ko("삭제", "지워", "지우") -> VoiceCommand.Delete
-        s.has("back", "previous", "exit", "close", "leave") ||
+        s.has(
+            "stop", "cancel", "pause", "enough", "quiet", "halt", "silence", "shut", "finish",
+            "wait", "hold", "mute", "shh", "hush", "end",
+        ) ||
+            s.ko("멈춰", "멈춤", "멈추", "정지", "그만", "중지", "스톱", "취소", "조용", "끝", "잠깐", "쉿") -> VoiceCommand.Stop
+        (s.has("camera") && s.has("switch", "flip", "change", "rotate", "turn", "swap", "other", "reverse", "front", "back", "rear")) ||
+            s.has("selfie") ||
+            s.ko("카메라전환", "카메라바꿔", "카메라바꾸", "카메라돌려", "카메라변경", "전면카메라", "후면카메라", "셀카") ->
+            VoiceCommand.SwitchCamera
+        s.has("read", "text", "qr", "barcode", "code", "sign", "signs", "label", "labels", "document", "ocr", "reader") ||
+            s.ko("글자", "읽어", "텍스트", "큐알", "바코드", "문자", "표지판", "간판", "리더", "라벨") -> VoiceCommand.ReadText
+        s.has("delete", "remove", "erase", "forget", "discard") ||
+            s.ko("삭제", "지워", "지우", "없애", "제거") -> VoiceCommand.Delete
+        s.has("back", "previous", "exit", "close", "leave", "quit") || (s.has("return") && !s.has("home")) ||
             s.ko("뒤로", "이전", "돌아가", "나가", "닫아") -> VoiceCommand.Back
         else -> null
     }
@@ -278,18 +312,24 @@ object VoiceCommandParser {
 
     private fun destination(s: Said): VoiceCommand? {
         val dest = when {
-            s.seq("scan", "menu") || s.ko("스캔메뉴", "둘러보기메뉴") -> Dest.ScanHub
-            s.has("walk", "walking") || (s.has("mode") && s.has("work", "working")) ||
-                s.ko("걷기", "보행", "걸을", "워킹", "산책") -> Dest.Walk
-            s.has("history") || s.seq("past", "scans") || s.ko("기록", "히스토리") -> Dest.History
-            s.has("settings", "setting", "options", "preferences") || s.ko("설정", "세팅", "셋팅", "옵션") -> Dest.Settings
-            s.has("home") || s.seq("main", "menu") || s.seq("start", "screen") ||
+            s.seq("scan", "menu") || s.seq("scan", "options") || s.seq("scan", "modes") ||
+                s.ko("스캔메뉴", "둘러보기메뉴") -> Dest.ScanHub
+            s.has("walk", "walking", "obstacle", "obstacles", "street") || (s.has("mode") && s.has("work", "working")) ||
+                s.ko("걷기", "보행", "걸을", "워킹", "산책", "장애물") -> Dest.Walk
+            s.has("history", "recent") || s.seq("past", "scans") || s.seq("last", "scan") ||
+                s.ko("기록", "히스토리", "최근") -> Dest.History
+            s.has("settings", "setting", "options", "preferences", "configuration", "setup") ||
+                s.ko("설정", "세팅", "셋팅", "옵션") -> Dest.Settings
+            s.has("home", "menu") || s.seq("main", "screen") || s.seq("start", "screen") ||
                 s.ko("홈", "처음", "메인", "첫화면", "시작화면") -> Dest.Home
-            s.has("live", "realtime") || s.seq("real", "time") || s.ko("실시간", "라이브") -> Dest.Scan(ScanMode.LIVE)
+            s.has("live", "realtime", "continuous", "announce") || s.seq("real", "time") ||
+                s.ko("실시간", "라이브", "계속알려") -> Dest.Scan(ScanMode.LIVE)
             s.words.any { it.contains("scan") } || s.seq("look", "around") || s.seq("around", "me") ||
-                s.has("surroundings") || s.ko("전체스캔", "스캔", "스켄", "둘러보", "둘러봐", "주변", "한바퀴") ->
+                s.has("surroundings", "panorama", "360") || s.seq("full", "view") ||
+                s.ko("전체스캔", "스캔", "스켄", "둘러보", "둘러봐", "주변", "주위", "한바퀴", "방안") ->
                 Dest.Scan(ScanMode.FULL)
-            s.words.any { it in savedEn } || s.ko("저장") -> Dest.Saved(tabOf(s))
+            s.words.any { it in savedEn } || s.seq("my", "list") || s.has("remembered", "library") ||
+                s.ko("저장", "목록") -> Dest.Saved(tabOf(s))
             else -> tabOf(s)?.let { Dest.Saved(it) }
         }
         return dest?.let { VoiceCommand.Go(it) }
@@ -297,8 +337,11 @@ object VoiceCommandParser {
 
     // 8 ------------------------------------------------------------------------------------------------
     private fun late(s: Said): VoiceCommand? = when {
-        s.has("start", "begin", "go") || s.ko("시작", "스타트", "눌러") -> VoiceCommand.Start
-        s.has("repeat", "again") || s.seq("what", "did", "you", "say") || s.ko("다시", "반복", "뭐라고") -> VoiceCommand.Repeat
+        s.has("start", "begin", "go", "resume", "continue", "run", "play") ||
+            s.ko("시작", "스타트", "눌러", "계속", "재개") -> VoiceCommand.Start
+        s.has("repeat", "again", "pardon", "sorry") || s.seq("what", "did", "you", "say") || s.seq("one", "more", "time") ||
+            (s.has("didnt") && s.has("hear", "catch")) || s.words == listOf("what") ||
+            s.ko("다시", "반복", "뭐라고", "한번더", "못들었") -> VoiceCommand.Repeat
         else -> null
     }
 }
