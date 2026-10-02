@@ -18,7 +18,7 @@ object WalkCommands {
     private val EN_LETS_GO = Regex("""^(?:please\s+)?(?:let'?s\s+)?go\s+(?:to|towards|toward)\s+(.+)$""", RegexOption.IGNORE_CASE)
     /** "go Seoul", "let's go Seoul Station": speech often drops the "to". Screens and [NOT_PLACES_EN] stay commands. */
     private val EN_GO_BARE = Regex("""^(?:please\s+)?(?:let'?s\s+)?go\s+(?!(?:to|towards?)\s)(.+)$""", RegexOption.IGNORE_CASE)
-    private val NOT_PLACES_EN = setOf("ahead", "on", "away", "now", "there", "here", "up", "down", "left", "right", "forward", "straight", "out", "fast", "faster", "slow", "slowly")
+    private val NOT_PLACES_EN = setOf("to", "towards", "toward", "back", "ahead", "on", "away", "now", "there", "here", "up", "down", "left", "right", "forward", "straight", "out", "fast", "faster", "slow", "slowly")
 
     private val EN_HOME = Regex("""^(?:please\s+)?(?:take|bring|walk|get|guide)\s+me\s+(?:back\s+)?home$""", RegexOption.IGNORE_CASE)
 
@@ -39,7 +39,7 @@ object WalkCommands {
 
     /** [isScreenWord] tells a screen name ("설정", "saved") from a place for the ambiguous "…로 가자". */
     private val GO_MODE = setOf(
-        "go mode", "go", "navigation", "navigation mode", "navigate", "directions", "go somewhere", "where to",
+        "go mode", "go", "go to", "navigation", "navigation mode", "navigate", "directions", "go somewhere", "where to",
         "route", "route mode", "directions mode", "guide me", "take me somewhere",
         "길 안내", "길안내", "길 안내 모드", "길안내 모드", "길 찾기", "길찾기", "길 찾기 모드",
         "길 알려 줘", "길 알려줘", "내비", "네비", "내비게이션", "네비게이션",

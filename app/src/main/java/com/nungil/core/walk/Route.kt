@@ -356,17 +356,111 @@ object RoutePhrases {
     fun attribution(lang: Lang): String =
         if (lang == Lang.KO) "경로 제공 openrouteservice, 지도 데이터 OpenStreetMap 기여자." else ATTRIBUTION
 
-    /** Geocode confirmation: "Seoul Station, 400 metres away. Say yes to go." */
-    fun confirm(label: String, metres: Double, lang: Lang): String {
+    /** Geocode confirmation: "Seoul Station, 400 metres away. Say yes to go." With [more] places, also how to hear the next. */
+    fun confirm(label: String, metres: Double, lang: Lang, more: Boolean = false): String {
         val d = WalkPhrases.far(metres, lang)
-        return if (lang == Lang.KO) "$label, $d 거리예요. 가려면 네라고 말해 주세요." else "$label, $d away. Say yes to go."
+        return if (lang == Lang.KO) {
+            if (more) "$label, $d 거리예요. 가려면 네, 다른 곳은 다음이라고 말해 주세요." else "$label, $d 거리예요. 가려면 네라고 말해 주세요."
+        } else {
+            if (more) "$label, $d away. Say yes to go, or next for another place." else "$label, $d away. Say yes to go."
+        }
     }
 
-    fun isYes(text: String): Boolean = text.trim().lowercase().trimEnd('.', '!').let {
-        it in setOf("yes", "yeah", "yep", "go", "ok", "okay", "sure", "네", "예", "응", "그래", "좋아", "가자")
+    /** A place that exists but is out of walking reach: say so instead of "I could not find that place". */
+    fun tooFar(name: String, metres: Double, lang: Lang): String {
+        val d = WalkPhrases.far(metres, lang)
+        return if (lang == Lang.KO) "${name}까지 ${d}예요. 걸어가기에는 너무 멀어요." else "$name is $d away. That is too far to walk."
     }
 
-    fun isNo(text: String): Boolean = text.trim().lowercase().trimEnd('.', '!').let {
-        it in setOf("no", "nope", "next", "아니", "아니요", "아니야", "다음")
+    /** The place search did not answer (no network, or the day's quota is used up): not "no such place". */
+    fun searchUnavailable(lang: Lang): String =
+        if (lang == Lang.KO) "지금은 장소를 검색할 수 없어요. 잠시 후에 다시 해 주세요." else "Place search is not available right now. Try again later."
+
+    fun noSavedHome(lang: Lang): String =
+        if (lang == Lang.KO) "아직 집으로 저장된 곳이 없어요. 집에 있을 때 '여기를 집으로 저장해 줘'라고 말해 주세요."
+        else "No place is saved as home yet. When you are there, say: save this place as home."
+
+    /** Every place found, numbered: "1: Bus Terminal, 400 metres. 2: … Say the number." */
+    fun options(places: List<Pair<String, Double>>, lang: Lang): String {
+        val list = places.mapIndexed { i, (name, metres) ->
+            if (lang == Lang.KO) "${i + 1}번, $name, ${WalkPhrases.far(metres, lang)}." else "${i + 1}: $name, ${WalkPhrases.far(metres, lang)}."
+        }.joinToString(" ")
+        return if (lang == Lang.KO) "$list 번호를 말해 주세요." else "$list Say the number."
+    }
+
+    fun askAgain(lang: Lang): String =
+        if (lang == Lang.KO) "가려면 네, 다른 곳은 다음이라고 말해 주세요." else "Say yes to go, or next."
+
+    fun noMorePlaces(lang: Lang): String =
+        if (lang == Lang.KO) "더 찾은 곳이 없어요. 어디로 갈까요?" else "No more places. Where to?"
+
+    fun isYes(text: String): Boolean = GoAnswer.of(text) == GoAnswer.Yes
+
+    fun isNo(text: String): Boolean = GoAnswer.of(text) == GoAnswer.Next
+}
+
+/**
+ * What the user answers when a found place is read out. Only a whole answer counts ("yes please",
+ * "not that one", "the second one"): "OK Mart" or "North Station" is another place, not a yes or a no.
+ */
+sealed interface GoAnswer {
+    data object Yes : GoAnswer
+
+    /** "no", "next": the next place found. */
+    data object Next : GoAnswer
+
+    /** "the second one": [index] counts from 0. */
+    data class Pick(val index: Int) : GoAnswer
+
+    /** "what are the options", "list them": read every place found. */
+    data object Options : GoAnswer
+
+    /** Not an answer; most likely another place. */
+    data class Other(val text: String) : GoAnswer
+
+    companion object {
+        private val YES = setOf(
+            "yes", "yeah", "yep", "yup", "ya", "yah", "ok", "okay", "sure", "correct", "go", "start",
+            "네", "예", "응", "그래", "좋아", "좋아요", "가자", "맞아", "맞아요",
+        )
+        private val NO = setOf(
+            "no", "nope", "nah", "next", "another", "other", "skip", "wrong", "not",
+            "아니", "아니요", "아니야", "아니오", "다음", "다른",
+        )
+        private val FILLERS = setOf(
+            "please", "that", "this", "one", "it", "the", "there", "thanks", "thank", "you", "lets", "let", "s", "is", "do",
+            "곳", "거", "걸로", "으로", "로",
+        )
+        private val OPTIONS = setOf("options", "option", "choices", "list", "results", "all", "목록", "전부", "모두")
+        private val OPTION_FILLERS = setOf(
+            "show", "me", "what", "are", "the", "available", "my", "them", "of", "read", "tell", "say", "which", "ones",
+            "there", "is", "please", "보여", "줘", "알려",
+        )
+        private val ORDINALS = listOf(
+            setOf("first", "1st", "첫번째", "첫째"),
+            setOf("second", "2nd", "두번째", "둘째"),
+            setOf("third", "3rd", "세번째", "셋째"),
+        )
+        private val NUMBERS = listOf(
+            setOf("one", "1", "하나", "일번", "1번"),
+            setOf("two", "2", "둘", "이번", "2번"),
+            setOf("three", "3", "셋", "삼번", "3번"),
+        )
+
+        fun of(text: String): GoAnswer {
+            val clean = text.trim().trimEnd('.', '!', '?', ',').trim()
+            val words = clean.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+            if (words.isEmpty()) return Other(clean)
+            val joined = words.joinToString("")
+            ORDINALS.forEachIndexed { i, names -> if (words.any { it in names } || names.any { it == joined }) return Pick(i) }
+            // "two", "number two": a bare number, not a place that has one in its name ("One Mount").
+            val counted = words.filter { it != "number" && it != "번" }
+            if (counted.size == 1) NUMBERS.forEachIndexed { i, names -> if (counted[0] in names) return Pick(i) }
+            if (words.any { it in OPTIONS } && words.all { it in OPTIONS || it in OPTION_FILLERS }) return Options
+            val rest = words.filter { it !in FILLERS }
+            if (rest.isNotEmpty() && rest.all { it in NO || it in YES } && rest.any { it in NO }) return Next
+            if (rest.isNotEmpty() && rest.all { it in YES }) return Yes
+            return Other(clean)
+        }
     }
 }

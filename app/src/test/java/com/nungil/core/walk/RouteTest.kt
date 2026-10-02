@@ -187,6 +187,58 @@ class RouteTest {
         assertFalse(RoutePhrases.isYes("maybe"))
     }
 
+    @Test fun answersToAFoundPlace() {
+        for (yes in listOf("Yes.", "yeah", "yes please", "ok go", "Okay", "sure", "yes that one", "네", "좋아", "가자")) {
+            assertEquals(yes, GoAnswer.Yes, GoAnswer.of(yes))
+        }
+        for (next in listOf("No.", "next", "no thanks", "next one", "not that one", "another one", "아니요", "다음")) {
+            assertEquals(next, GoAnswer.Next, GoAnswer.of(next))
+        }
+        assertEquals(GoAnswer.Pick(0), GoAnswer.of("the first one"))
+        assertEquals(GoAnswer.Pick(1), GoAnswer.of("Second"))
+        assertEquals(GoAnswer.Pick(1), GoAnswer.of("number two"))
+        assertEquals(GoAnswer.Pick(2), GoAnswer.of("3"))
+        assertEquals(GoAnswer.Pick(1), GoAnswer.of("두 번째"))
+    }
+
+    @Test fun askingForTheOptionsIsAnAnswerToo() {
+        // The logs: "Show available options" opened Settings.
+        for (ask in listOf("Show available options", "what are the options", "list them", "all of them", "목록")) {
+            assertEquals(ask, GoAnswer.Options, GoAnswer.of(ask))
+        }
+        assertEquals(
+            "1: Bus Terminal, 400 metres. 2: Bus Stop, 1.2 kilometres. Say the number.",
+            RoutePhrases.options(listOf("Bus Terminal" to 400.0, "Bus Stop" to 1_200.0), Lang.EN),
+        )
+    }
+
+    @Test fun aPlaceNameIsNotAnAnswer() {
+        // "OK Mart" and "North Station" start like an answer but are places.
+        for (place in listOf("OK Mart", "North Station", "Seoul Station", "Yes24 bookstore", "One Mount", "강남역")) {
+            assertEquals(place, GoAnswer.Other(place), GoAnswer.of(place))
+        }
+    }
+
+    @Test fun confirmSaysHowToHearTheNextPlace() {
+        assertEquals("Seoul Station, 400 metres away. Say yes to go.", RoutePhrases.confirm("Seoul Station", 400.0, Lang.EN))
+        assertEquals("Seoul Station, 400 metres away. Say yes to go, or next for another place.", RoutePhrases.confirm("Seoul Station", 400.0, Lang.EN, more = true))
+    }
+
+    @Test fun goToABusStopIsAPlaceAndGoToAloneIsNot() {
+        val isScreen: (String) -> Boolean = { it == "settings" }
+        assertEquals(WalkCommand.GoTo("bus stop"), WalkCommands.parse("Go to bus stop", isScreen))
+        assertEquals(WalkCommand.GoTo("bus stop"), WalkCommands.parse("Go bus stop", isScreen))
+        // The logs: "Go to" on its own searched for a place called "to".
+        assertEquals(WalkCommand.GoMode, WalkCommands.parse("Go to", isScreen))
+        assertNull(WalkCommands.parse("go to settings", isScreen))
+    }
+
+    @Test fun aFarPlaceIsNotAnUnknownPlace() {
+        assertEquals("Seoul is 85.2 kilometres away. That is too far to walk.", RoutePhrases.tooFar("Seoul", 85_200.0, Lang.EN))
+        assertTrue(RoutePhrases.noSavedHome(Lang.EN).contains("save this place as home"))
+        assertTrue(RoutePhrases.searchUnavailable(Lang.EN).isNotBlank())
+    }
+
     @Test fun goScreenShowsTheNextTurnAndWhatIsLeft() {
         val n = Navigator(route(), null, Lang.EN)
         val s = n.peek(at(60.0, 0.0))

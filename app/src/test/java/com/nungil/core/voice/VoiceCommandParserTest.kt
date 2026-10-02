@@ -162,6 +162,15 @@ class VoiceCommandParserTest {
     }
     @Test fun skinMeansScan() = assertEquals(Go(Dest.Scan(ScanMode.FULL)), p("full skin"))
     @Test fun aLightIsNotALiveScan() = assertEquals(VoiceCommand.Unknown("turn on the light"), p("turn on the light"))
+    @Test fun aBusStopIsAPlaceNotStop() {
+        // The logs: "Bus stop" and "Go to bus stop" stopped walk mode seven times.
+        for (heard in listOf("Bus stop", "bus stops", "the bus stop", "subway stop")) {
+            assertEquals(heard, VoiceCommand.Unknown(heard), p(heard))
+        }
+        assertEquals(VoiceCommand.Stop, p("stop"))
+        assertEquals(VoiceCommand.Stop, p("stop the bus"))
+    }
+
     @Test fun valkModeMeansWalk() {
         for (heard in listOf("Valk mode", "wok mode", "walks mode")) assertEquals(heard, Go(Dest.Walk), p(heard))
     }

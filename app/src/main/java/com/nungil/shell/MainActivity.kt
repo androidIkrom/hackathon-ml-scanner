@@ -54,6 +54,9 @@ import com.nungil.core.ui.Route
 import com.nungil.core.ui.ScreenHelp
 import com.nungil.core.ui.ShellPhrases
 import com.nungil.core.ui.VoiceChoice
+import com.nungil.core.voice.QuickAsk
+import com.nungil.core.weather.Clock
+import java.util.Calendar
 import com.nungil.core.voice.VoiceCommandParser
 import com.nungil.core.voice.WakeResult
 import com.nungil.core.voice.WakeWord
@@ -105,6 +108,36 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     /** A screen waiting for words (askForWords) while the always-on listener runs. */
     private var dictation: ((String) -> Unit)? = null
     private var dictationOwner: LifecycleOwner? = null
+
+    /**
+     * Set by a screen before [askForWords] when it waits for an answer, not a name ("yes", "next"): a
+     * later recognizer guess that is such an answer then beats a misheard first one. Cleared with the claim.
+     */
+    var dictationAccepts: ((String) -> Boolean)? = null
+
+    /**
+     * A screen no longer waits for the words it asked for (it got its answer another way, or gave up).
+     * Without this the next phrase went to the old question and was lost: "Turn on" had to be said twice.
+     */
+    fun dropWords() {
+        dictation = null
+        dictationOwner = null
+        dictationAccepts = null
+        tts.whenQuiet { }
+    }
+
+    /** Every recognizer guess for the phrase being handled. */
+    private var lastGuesses: List<String> = emptyList()
+
+    /**
+     * What [place] may have been: the recognizer's other guesses for the same phrase, as places
+     * ("Go so" came with "Go Seoul"; "Soul" with "Seoul"). [place] first, commands left out.
+     */
+    fun heardPlaces(place: String): List<String> =
+        (listOf(place) + lastGuesses.mapNotNull { guess ->
+            (walkCommand(guess) as? WalkCommand.GoTo)?.place
+                ?: guess.takeIf { VoiceCommandParser.parse(it) is VoiceCommand.Unknown }
+        }).map { it.trim().trimEnd('.', '!', '?') }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
 
     private val guide = VoiceGuide()
     private var downX = 0f
@@ -189,9 +222,15 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                 tones.resumeAfterUser()
             },
             understood = ::understood,
+            onGuesses = { guesses ->
+                lastGuesses = guesses
+                if (guesses.size > 1) Log.i(TAG, "Guesses: " + guesses.joinToString(" | "))
+            },
+            bias = { (currentScreen() as? WalkFragment)?.placeWords().orEmpty() },
             onHeard = ::onHeard,
             onProblem = ::onVoiceProblem,
         )
+        tts.onQuiet = { voice.freshSession() }
         // Leaving a screen by any back (toolbar, gesture, button) silences what it was still saying.
         binding.toolbar.setNavigationOnClickListener {
             silenceAll()
@@ -246,12 +285,18 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     override fun askForWords(owner: LifecycleOwner, onText: (String) -> Unit) {
         if (owner.lifecycle.currentState == Lifecycle.State.DESTROYED) return
-        silenceAll()
+        tones.stop()
         if (voice.isOn) {
-            voice.talkNow()
-            // One microphone, one owner: the always-on listener hands the next non-command words over.
-            dictation = onText
-            dictationOwner = owner
+            // Screens say their question and then ask for the words. Opening the microphone at once cut that
+            // question off before it was heard, so the claim, the chime and the quiet wait until it has been
+            // said (claiming earlier would hand the app's own question over as the answer).
+            tts.whenQuiet {
+                if (owner.lifecycle.currentState == Lifecycle.State.DESTROYED) return@whenQuiet
+                // One microphone, one owner: the always-on listener hands the next non-command words over.
+                dictation = onText
+                dictationOwner = owner
+                voice.talkNow()
+            }
             owner.lifecycle.addObserver(object : DefaultLifecycleObserver {
                 override fun onDestroy(owner: LifecycleOwner) {
                     if (dictationOwner === owner) {
@@ -264,8 +309,10 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         }
         ensureMic {
             haptics.buzz(Buzz.TAP)
-            voice.listenOnce { text ->
-                if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.CREATED)) onText(text)
+            tts.whenQuiet {
+                voice.listenOnce { text ->
+                    if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.CREATED)) onText(text)
+                }
             }
         }
     }
@@ -308,7 +355,10 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     /** A recognizer guess that does something. While a screen waits for a name, only the first guess counts. */
     private fun understood(guess: String): Boolean {
-        if (dictation != null) return false
+        if (dictation != null) return dictationAccepts?.invoke(guess) == true
+        // While a place is expected the first guess is the place: a later guess that happens to be a command
+        // ("Save" among the guesses for "Seoul") opened the Saved screen in the middle of Go.
+        if ((currentScreen() as? WalkFragment)?.expectsPlace() == true) return false
         return when (val wake = WakeWord.decide(guess, awakeState.value) { isCommand(it) }) {
             WakeResult.Ignore -> false
             WakeResult.Wake, WakeResult.Sleep -> true
@@ -336,7 +386,24 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                 wake.text
             }
         }
-        walkCommand(text)?.let { walk ->
+        // The time, the date and the weather are answered on every screen (on "Where to?" they were searched
+        // as places). Not while a screen waits for a name; a screen that waits for "yes" or "next" keeps waiting.
+        if (dictation == null || dictationAccepts != null) QuickAsk.of(text)?.let { ask ->
+            Log.i(TAG, "Heard \"$text\" -> $ask")
+            answer(ask)
+            return
+        }
+        // Go mode first: on "Where to?" a saved place or "home" is the destination, not the Home screen, and an
+        // answer to a place that was read out ("go", "the options") is not a command.
+        val asking = currentScreen()
+        if (asking is WalkFragment && asking.takesWords(text)) {
+            Log.i(TAG, "Heard \"$text\" -> Go mode")
+            return
+        }
+        // "Go to" alone, with "Go to InTown" among the guesses (the logs): the guess with the place is the one.
+        val heardWalk = walkCommand(text)
+        val better = if (heardWalk == WalkCommand.GoMode) lastGuesses.firstNotNullOfOrNull { walkCommand(it) as? WalkCommand.GoTo } else null
+        (better ?: heardWalk)?.let { walk ->
             Log.i(TAG, "Heard \"$text\" -> $walk")
             silenceAll()
             val screen = currentScreen()
@@ -354,6 +421,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         if (claim != null && command is VoiceCommand.Unknown) {
             dictation = null
             dictationOwner = null
+            dictationAccepts = null
             claim(command.text)
             return
         }
@@ -517,7 +585,25 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         WalkCommands.parse(text) { VoiceCommandParser.parse(it) !is VoiceCommand.Unknown }
 
     private fun isCommand(text: String): Boolean =
-        VoiceCommandParser.parse(text) !is VoiceCommand.Unknown || walkCommand(text) != null
+        VoiceCommandParser.parse(text) !is VoiceCommand.Unknown || walkCommand(text) != null || QuickAsk.of(text) != null
+
+    private fun answer(ask: QuickAsk) {
+        val now = Calendar.getInstance()
+        when (ask) {
+            QuickAsk.TIME -> tts.say(Clock.timeSpoken(now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), lang))
+            QuickAsk.DATE -> tts.say(
+                Clock.dateSpoken(
+                    now.get(Calendar.MONTH) + 1,
+                    now.get(Calendar.DAY_OF_MONTH),
+                    // Calendar: 1 = Sunday; Clock: 1 = Monday .. 7 = Sunday.
+                    (now.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1,
+                    lang,
+                ),
+            )
+            // Y's weather label in the app bar says the date and the full report when tapped.
+            QuickAsk.WEATHER -> findViewById<View>(R.id.app_weather)?.performClick()
+        }
+    }
 
     /** Go mode: walk mode with the "Where to?" search and the direction card. */
     fun openGoMode() {
@@ -552,6 +638,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         awakeState.value = false
         dictation = null
         dictationOwner = null
+        dictationAccepts = null
         silenceAll()
         voice.chimeOff()
     }

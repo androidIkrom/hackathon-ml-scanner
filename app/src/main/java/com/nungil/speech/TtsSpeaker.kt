@@ -67,10 +67,32 @@ class TtsSpeaker(
         pump()
     }
 
+    private var whenQuiet: (() -> Unit)? = null
+    private var wasSpeaking = false
+
+    /** Called on the main thread every time the app has finished saying everything it had to say. */
+    var onQuiet: () -> Unit = {}
+
+    /**
+     * Runs [action] once everything queued has been said (at once when nothing is). A question asked
+     * with say() must be heard before the microphone takes over; only the latest action is kept.
+     */
+    fun whenQuiet(action: () -> Unit) = onMain {
+        if (queue.isQuiet) action() else whenQuiet = action
+    }
+
     private val poll = object : Runnable {
         override fun run() {
             if (closed) return
             pump()
+            if (queue.isQuiet) {
+                if (wasSpeaking) onQuiet()
+                whenQuiet?.let {
+                    whenQuiet = null
+                    it()
+                }
+            }
+            wasSpeaking = !queue.isQuiet
             if (queue.finalFinished()) finishFinal()
             main.postDelayed(this, SpeechQueue.POLL_MS)
         }

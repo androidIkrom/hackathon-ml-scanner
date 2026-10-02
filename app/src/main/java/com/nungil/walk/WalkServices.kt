@@ -100,12 +100,20 @@ interface RouteSource {
 
     /** Empty on any failure. */
     fun geocode(query: String, near: LatLon?): List<Place>
+
+    /** The same search without the walking-reach limit, to tell "too far" from "no such place". */
+    fun geocodeFar(query: String, near: LatLon?): List<Place> = emptyList()
+
+    /** True when the last place search got no answer at all (no network, quota used up). */
+    val searchDown: Boolean get() = false
 }
 
 /**
  * openrouteservice on the current host api.heigit.org (spec §1). The old host
- * api.openrouteservice.org answers 403 "Quota exceeded" for directions whatever the real quota;
- * it is used only as the geocoding fallback when the new path returns 404.
+ * api.openrouteservice.org answers 403 "Quota exceeded" whatever the real quota, first for directions
+ * and later for place search too (every search failed for an evening, because the path used on the
+ * current host did not exist and all of them went to the old one). It stays only as the fallback when
+ * the current path returns 404.
  */
 class OrsRouteSource(private val key: String) : RouteSource {
 
@@ -126,26 +134,47 @@ class OrsRouteSource(private val key: String) : RouteSource {
         }
     }
 
-    override fun geocode(query: String, near: LatLon?): List<Place> {
+    /** Answers of this session by query: the day's quota is small (it ran out during a test with repeats). */
+    private val answers = java.util.concurrent.ConcurrentHashMap<String, List<Place>>()
+
+    /** The current host's path is gone (404): after the first try only the old host is asked. */
+    @Volatile private var skipCurrentHost = false
+
+    @Volatile override var searchDown = false
+        private set
+
+    override fun geocode(query: String, near: LatLon?): List<Place> = geocode(query, near, reach = true)
+
+    override fun geocodeFar(query: String, near: LatLon?): List<Place> = geocode(query, near, reach = false)
+
+    private fun geocode(query: String, near: LatLon?, reach: Boolean): List<Place> {
+        val cacheKey = "${query.trim().lowercase()}|$reach"
+        answers[cacheKey]?.let { return it }
         val params = buildString {
             append("?api_key=").append(enc(key))
             append("&text=").append(enc(query))
             append("&size=3")
             if (near != null) {
                 append("&focus.point.lon=").append(near.lon).append("&focus.point.lat=").append(near.lat)
-                // Only places within walking reach; the parser also drops anything farther.
-                append("&boundary.circle.lon=").append(near.lon).append("&boundary.circle.lat=").append(near.lat)
-                append("&boundary.circle.radius=").append(OrsJson.NEAR_KM)
+                if (reach) {
+                    // Only places within walking reach; the parser also drops anything farther.
+                    append("&boundary.circle.lon=").append(near.lon).append("&boundary.circle.lat=").append(near.lat)
+                    append("&boundary.circle.radius=").append(OrsJson.NEAR_KM)
+                }
             }
         }
-        var answer = request(GEOCODE_URL + params, "GET", null)
-        if (answer?.first == 404) answer = request(GEOCODE_FALLBACK_URL + params, "GET", null)
+        var answer = if (skipCurrentHost) null else request(GEOCODE_URL + params, "GET", null)
+        if (skipCurrentHost || answer?.first == 404) {
+            skipCurrentHost = true
+            answer = request(GEOCODE_FALLBACK_URL + params, "GET", null)
+        }
+        searchDown = answer?.first != 200
         val (code, body) = answer ?: return emptyList()
         if (code != 200) {
-            Log.w(TAG, "openrouteservice geocode HTTP $code")
+            Log.w(TAG, "openrouteservice geocode HTTP $code" + if (OrsJson.isQuotaError(code, body)) " (quota exceeded)" else "")
             return emptyList()
         }
-        return OrsJson.parseGeocode(body, near)
+        return OrsJson.parseGeocode(body, near.takeIf { reach }).also { answers[cacheKey] = it }
     }
 
     /**
@@ -188,7 +217,7 @@ class OrsRouteSource(private val key: String) : RouteSource {
         const val RETRY_MS = 2_000L
         const val TAG = "Nungil"
         const val DIRECTIONS_URL = "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson"
-        const val GEOCODE_URL = "https://api.heigit.org/openrouteservice/geocode/search"
+        const val GEOCODE_URL = "https://api.heigit.org/pelias/v1/search"
         const val GEOCODE_FALLBACK_URL = "https://api.openrouteservice.org/geocode/search"
         const val CONNECT_TIMEOUT_MS = 5_000
         const val READ_TIMEOUT_MS = 10_000

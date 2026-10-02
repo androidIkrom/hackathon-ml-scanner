@@ -36,10 +36,12 @@ import com.nungil.core.walk.AlertKind
 import com.nungil.core.walk.Announcement
 import com.nungil.core.walk.Beacon
 import com.nungil.core.walk.GoMath
+import com.nungil.core.walk.GoAnswer
 import com.nungil.core.walk.GoState
 import com.nungil.core.walk.LatLon
 import com.nungil.core.walk.Navigator
 import com.nungil.core.walk.Place
+import com.nungil.core.walk.PlaceNames
 import com.nungil.core.walk.RerouteGate
 import com.nungil.core.walk.RoutePhrases
 import com.nungil.core.walk.StepLength
@@ -132,6 +134,11 @@ class WalkFragment : Fragment(), VoiceHandler {
     private var navigator: Navigator? = null
     private var target: Place? = null
     private var pendingNav: Alert? = null
+
+    /** A found place that was read out and waits for "yes", "next", "the second one" or another place. */
+    private class Offer(val candidates: List<Place>, val index: Int, val here: LatLon, var askedAgain: Boolean = false)
+    private var offer: Offer? = null
+    private var searches = 0
     private var onFirstFix: ((LatLon) -> Unit)? = null
     private var afterLocationGranted: (() -> Unit)? = null
 
@@ -195,7 +202,11 @@ class WalkFragment : Fragment(), VoiceHandler {
             binding,
             onSearch = { q -> searchPlaces(q) },
             onMic = { services.askForWords(viewLifecycleOwner) { q -> binding.walkingGoQuery.setText(q); searchPlaces(q) } },
-            onPick = { place -> withLocation { here -> requestRoute(here, place, reroute = false) } },
+            onPick = { place ->
+                offer = null
+                (activity as? MainActivity)?.dropWords()
+                withLocation { here -> requestRoute(here, place, reroute = false) }
+            },
         )
         // Opened for Go mode ("take me to X", the Go card): say "Where to?" there, not the walk intro.
         val pending = (activity as? MainActivity)?.takePendingWalkCommand()
@@ -397,11 +408,15 @@ class WalkFragment : Fragment(), VoiceHandler {
 
     override fun onVoiceCommand(command: VoiceCommand): Boolean = when (command) {
         VoiceCommand.Stop -> {
-            if (navigator != null || target != null) stopNavigation() else if (running) setRunning(false)
+            if (navigator != null || target != null || offer != null) stopNavigation() else if (running) setRunning(false)
             true
         }
         VoiceCommand.Start -> {
-            if (onGoSearch()) {
+            val asked = offer
+            if (asked != null) {
+                // "go" and "start" are commands, so they never reach the answer: here they mean yes.
+                onGoAnswer(asked, GoAnswer.Yes)
+            } else if (onGoSearch()) {
                 val q = goPanel.query()
                 if (q.isEmpty()) say(RoutePhrases.whereTo(services.lang)) else searchPlaces(q)
             } else if (!running) {
@@ -414,7 +429,7 @@ class WalkFragment : Fragment(), VoiceHandler {
             val q = command.text.trim().trimEnd('.', '!', '?')
             if (onGoSearch() && q.isNotEmpty()) {
                 binding.walkingGoQuery.setText(q)
-                searchPlaces(q)
+                searchPlaces(q, heard(q))
                 true
             } else {
                 false
@@ -429,7 +444,15 @@ class WalkFragment : Fragment(), VoiceHandler {
     fun onWalkCommand(command: WalkCommand) {
         if (_binding == null) return
         when (command) {
-            WalkCommand.GoMode -> enterGo(null)
+            WalkCommand.GoMode -> {
+                // A plain "go" or "start" is a yes and arrives through takesWords. "Go to" and "navigation" start
+                // over: taken as a yes, "Go to" set off for a place the user had not chosen (the logs).
+                if (offer != null) {
+                    offer = null
+                    (activity as? MainActivity)?.dropWords()
+                }
+                enterGo(null)
+            }
             is WalkCommand.SavePlace -> {
                 val name = command.name
                 if (name == null) {
@@ -449,7 +472,8 @@ class WalkFragment : Fragment(), VoiceHandler {
             }
             is WalkCommand.GoTo -> {
                 enterGo(command.place)
-                withLocation { here -> startNavigation(command.place, here) }
+                val heard = heard(command.place)
+                withLocation { here -> startNavigation(command.place, here, heard) }
             }
         }
     }
@@ -478,28 +502,129 @@ class WalkFragment : Fragment(), VoiceHandler {
     }
 
     /** Typed or spoken search: saved places first, then nearby results, all with their distance. */
-    private fun searchPlaces(query: String) {
+    private fun searchPlaces(query: String, heard: List<String> = listOf(query)) {
         goPanel.showSearching()
         withLocation { here ->
             val lang = services.lang
-            val saved = places.all().filter { it.name.contains(query, ignoreCase = true) || query.contains(it.name, ignoreCase = true) }
             val src = source
             if (src == null) {
+                val saved = savedLike(heard)
                 goPanel.showResults(saved.map { it to Beacon.distanceMetres(here, it.point) }, lang)
                 if (saved.isEmpty()) say(RoutePhrases.notSetUp(lang))
                 return@withLocation
             }
-            network.execute {
-                val found = src.geocode(query, here).take(MAX_CANDIDATES)
-                main.post {
-                    if (_binding == null) return@post
-                    val all = (saved + found).distinctBy { it.name.lowercase() }
-                    goPanel.showResults(all.map { it to Beacon.distanceMetres(here, it.point) }, lang)
-                    if (all.isEmpty()) say(WalkPhrases.unknownPlace(lang))
+            findPlaces(src, heard, here)
+        }
+    }
+
+    /** The recognizer's other guesses for what was just said, as places; [place] first. */
+    private fun heard(place: String): List<String> = (activity as? MainActivity)?.heardPlaces(place) ?: listOf(place)
+
+    private fun savedLike(heard: List<String>): List<Place> =
+        places.all().filter { p -> heard.any { p.name.contains(it, ignoreCase = true) || it.contains(p.name, ignoreCase = true) } }
+
+    /**
+     * Finds what was heard and reads it out ([confirm]). Place names come out of the recognizer wrong
+     * ("Go sale" for Seoul, "Turn on" for Cheonan in the logs) and the geocoder answers those words with
+     * whatever is near ("Military Auto Sales", "Onyang-dong"). So in turn: the saved places, the known names
+     * with the same sounds, the recognizer's guesses as they are (only results that have to do with the
+     * words), then a known name one sound off. "home" without a saved home explains how to save one.
+     */
+    private fun findPlaces(src: RouteSource, heard: List<String>, here: LatLon) {
+        val lang = services.lang
+        val all = places.all()
+        val saved = savedLike(heard)
+        if (saved.isEmpty() && heard.any { PlaceNames.isHome(it) }) {
+            offer = null
+            if (goMode) goPanel.showResults(emptyList(), lang)
+            say(RoutePhrases.noSavedHome(lang))
+            return
+        }
+        // A newer search replaces this one: its answer must not be read out after the newer one's.
+        val search = ++searches
+        network.execute {
+            fun metres(p: Place) = Beacon.distanceMetres(here, p.point)
+            // A name that is known: the saved place, else the nearest one the geocoder has (its first answer
+            // for "Asan" was on Guam). Far places are offered with their distance. One request per name: the
+            // search service allows few a day, and a test with five to ten per phrase used them all up.
+            fun known(name: String): Place? = all.firstOrNull { it.name == name }
+                ?: src.geocodeFar(name, here).minByOrNull { metres(it) }?.takeIf { metres(it) <= FAR_KM * 1000 }
+            val ranked = PlaceNames.ranked(heard, all.map { it.name } + PlaceNames.KNOWN)
+            val same = ranked.filter { it.second == 0 }.take(1).mapNotNull { known(it.first) }
+            var literal = emptyList<Place>()
+            for (query in heard.take(if (same.isEmpty()) MAX_QUERIES else 1)) {
+                literal = src.geocode(query, here).filter { PlaceNames.related(query, it.name) }.take(MAX_CANDIDATES)
+                if (literal.isNotEmpty() || src.searchDown) break
+            }
+            var found = (saved + same + literal).distinctBy { it.name.lowercase() }.take(MAX_OFFERS)
+            // A name one sound off is a weak guess: taken only when it is within walking reach ("Taskin" for
+            // Tashkent matched Changwon, 250 km away).
+            if (found.isEmpty() && !src.searchDown) {
+                found = ranked.filter { it.second == 1 }.take(1).mapNotNull { (name, _) -> all.firstOrNull { it.name == name } ?: src.geocode(name, here).firstOrNull() }
+            }
+            // Nothing to offer: is it a real place that is too far? Exactly the name that was heard counts at
+            // any distance (Tashkent); a looser match only nearby (a "Restaurant Krietsch" in Germany does not).
+            val far = if (found.isEmpty() && !src.searchDown) {
+                val anywhere = src.geocodeFar(heard.first(), here)
+                anywhere.filter { p -> heard.any { it.equals(p.name, ignoreCase = true) } }.minByOrNull { metres(it) }
+                    ?: anywhere.minByOrNull { metres(it) }?.takeIf { metres(it) <= FAR_KM * 1000 }
+            } else {
+                null
+            }
+            val down = found.isEmpty() && src.searchDown
+            main.post {
+                if (_binding == null || search != searches) return@post
+                android.util.Log.i(
+                    "Nungil",
+                    "Go search $heard -> ${found.map { it.name }}" + (far?.let { ", too far: ${it.name}" } ?: "") + if (down) ", search down" else "",
+                )
+                if (down) {
+                    offer = null
+                    if (goMode) goPanel.showResults(emptyList(), lang)
+                    say(RoutePhrases.searchUnavailable(lang))
+                } else if (found.isEmpty() && far != null) {
+                    offer = null
+                    if (goMode) goPanel.showResults(emptyList(), lang)
+                    say(RoutePhrases.tooFar(far.name, Beacon.distanceMetres(here, far.point), lang))
+                } else {
+                    // Read out, not only shown: "yes" goes there, "next" hears the following one.
+                    confirm(found, 0, here)
                 }
             }
         }
     }
+
+    /**
+     * Words Go mode takes before they are parsed as a command. While a found place waits for an answer:
+     * "yes", "next", "the second one", "go", "the options". On "Where to?": a destination of the user's
+     * own ("home", a saved name). True when [text] was taken.
+     */
+    fun takesWords(text: String): Boolean {
+        if (_binding == null) return false
+        val t = text.trim().trimEnd('.', '!', '?')
+        val asked = offer
+        if (asked != null) {
+            val answer = GoAnswer.of(t)
+            if (answer is GoAnswer.Other) return false
+            onGoAnswer(asked, answer)
+            return true
+        }
+        if (!onGoSearch()) return false
+        // "Go save" and "Save" were Seoul (the logs) and opened the Saved screen in the middle of Go.
+        val place = t.replace(Regex("^(?:go|goto)\\s+(?:to\\s+)?", RegexOption.IGNORE_CASE), "")
+        val taken = PlaceNames.isHome(t) || places.all().any { it.name.equals(t, ignoreCase = true) } || PlaceNames.alias(place) != null
+        if (!taken) return false
+        binding.walkingGoQuery.setText(PlaceNames.alias(place) ?: t)
+        searchPlaces(place, heard(place))
+        return true
+    }
+
+    /** "Where to?" is open and no found place waits for an answer: the next words are a place. */
+    fun expectsPlace(): Boolean = onGoSearch() && offer == null
+
+    /** While a place is expected: the names the recognizer should lean towards. */
+    fun placeWords(): List<String> =
+        if (expectsPlace()) (places.all().map { it.name } + PlaceNames.KNOWN).distinct() else emptyList()
 
     /** Step 1: a "Where to?" screen. Camera hidden, warnings quiet, a big Go button at the bottom. */
     private fun showGoSearch(query: String = "") {
@@ -579,8 +704,11 @@ class WalkFragment : Fragment(), VoiceHandler {
                 return
             }
             is Announcement.OffRoute -> {
+                // Said only when a new route is really asked for: indoors the GPS wanders and "off the route"
+                // came every five seconds.
                 val place = target
-                if (place != null && gate.allow(SystemClock.elapsedRealtime())) requestRoute(p, place, reroute = true)
+                if (place == null || !gate.allow(SystemClock.elapsedRealtime())) return
+                requestRoute(p, place, reroute = true)
             }
             else -> Unit
         }
@@ -593,7 +721,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         if (SystemClock.elapsedRealtime() - lastReportAt > REPORT_STALE_MS) say(text) else pendingNav = alert
     }
 
-    private fun startNavigation(name: String, here: LatLon) {
+    private fun startNavigation(name: String, here: LatLon, heard: List<String> = listOf(name)) {
         val lang = services.lang
         val saved = places.find(name)
         if (saved != null && Beacon.distanceMetres(here, saved.point) <= arrivalRadius()) {
@@ -610,28 +738,66 @@ class WalkFragment : Fragment(), VoiceHandler {
             requestRoute(here, saved, reroute = false)
             return
         }
-        network.execute {
-            val candidates = src.geocode(name, here).take(MAX_CANDIDATES)
-            main.post { if (_binding != null) confirm(candidates, 0, here) }
+        findPlaces(src, heard, here)
+    }
+
+    /**
+     * "Seoul Station, 400 metres away. Say yes to go, or next for another place." "Next" moves through the
+     * candidates, "the second one" picks one, and anything that is not an answer is taken as another place.
+     */
+    private fun confirm(candidates: List<Place>, index: Int, here: LatLon) {
+        val lang = services.lang
+        if (goMode && index == 0) goPanel.showResults(candidates.map { it to Beacon.distanceMetres(here, it.point) }, lang)
+        val place = candidates.getOrNull(index) ?: run {
+            offer = null
+            say(if (index == 0) WalkPhrases.unknownPlace(lang) else RoutePhrases.noMorePlaces(lang))
+            return
+        }
+        val asked = Offer(candidates, index, here).also { offer = it }
+        say(RoutePhrases.confirm(place.name, Beacon.distanceMetres(here, place.point), lang, more = index < candidates.lastIndex))
+        listenForAnswer(asked)
+    }
+
+    private fun listenForAnswer(asked: Offer) {
+        (activity as? MainActivity)?.dictationAccepts = { GoAnswer.of(it) !is GoAnswer.Other }
+        services.askForWords(viewLifecycleOwner) { answer -> if (offer === asked) onGoAnswer(asked, GoAnswer.of(answer)) }
+    }
+
+    private fun onGoAnswer(asked: Offer, answer: GoAnswer) {
+        // The question is answered: the words it was waiting for must not swallow the next phrase.
+        (activity as? MainActivity)?.dropWords()
+        when (answer) {
+            GoAnswer.Yes -> go(asked, asked.index)
+            GoAnswer.Next -> confirm(asked.candidates, asked.index + 1, asked.here)
+            GoAnswer.Options -> {
+                say(RoutePhrases.options(asked.candidates.map { it.name to Beacon.distanceMetres(asked.here, it.point) }, services.lang))
+                listenForAnswer(asked)
+            }
+            is GoAnswer.Pick -> if (answer.index in asked.candidates.indices) go(asked, answer.index) else askAgain(asked)
+            is GoAnswer.Other -> if (answer.text.length >= MIN_PLACE_CHARS) {
+                offer = null
+                if (goMode) binding.walkingGoQuery.setText(answer.text)
+                searchPlaces(answer.text, heard(answer.text))
+            } else {
+                askAgain(asked)
+            }
         }
     }
 
-    /** "Seoul Station, 400 metres away. Say yes to go." "No" moves to the next of up to three candidates. */
-    private fun confirm(candidates: List<Place>, index: Int, here: LatLon) {
-        val lang = services.lang
-        val place = candidates.getOrNull(index) ?: run {
-            say(WalkPhrases.unknownPlace(lang))
+    private fun go(asked: Offer, index: Int) {
+        offer = null
+        requestRoute(asked.here, asked.candidates[index], reroute = false)
+    }
+
+    /** Once; a second unclear answer is most likely somebody else talking, and the question is dropped. */
+    private fun askAgain(asked: Offer) {
+        if (asked.askedAgain) {
+            offer = null
             return
         }
-        if (goMode && index == 0) goPanel.showResults(candidates.map { it to Beacon.distanceMetres(here, it.point) }, lang)
-        say(RoutePhrases.confirm(place.name, Beacon.distanceMetres(here, place.point), lang))
-        services.askForWords(viewLifecycleOwner) { answer ->
-            when {
-                RoutePhrases.isYes(answer) -> requestRoute(here, place, reroute = false)
-                RoutePhrases.isNo(answer) -> confirm(candidates, index + 1, here)
-                else -> say(WalkPhrases.unknownPlace(lang))
-            }
-        }
+        asked.askedAgain = true
+        say(RoutePhrases.askAgain(services.lang))
+        listenForAnswer(asked)
     }
 
     private fun requestRoute(from: LatLon, place: Place, reroute: Boolean) {
@@ -681,6 +847,8 @@ class WalkFragment : Fragment(), VoiceHandler {
     private fun stopNavigation() {
         navigator = null
         target = null
+        if (offer != null) (activity as? MainActivity)?.dropWords()
+        offer = null
         pendingNav = null
         onFirstFix = null
         location.stop()
@@ -715,6 +883,12 @@ class WalkFragment : Fragment(), VoiceHandler {
         const val BUZZ_EVERY_MS = 1_000L
         const val REPORT_STALE_MS = 1_000L
         const val MAX_CANDIDATES = 3
+        const val MIN_PLACE_CHARS = 3
+        const val MAX_QUERIES = 2
+        const val MAX_OFFERS = 4
+
+        /** A known name farther than walking reach is still offered, with its distance, up to this. */
+        const val FAR_KM = 300
         const val FALLBACK_MIN_SCORE = 0.5f
         const val WATCHDOG_EVERY_MS = 1_000L
         const val GO_TICK_MS = 200L

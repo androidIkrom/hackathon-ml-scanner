@@ -22,6 +22,9 @@ class SpeechQueue(private val clock: () -> Long) {
     val pendingCount: Int get() = pending.size
     val isSpeaking: Boolean get() = speakingSince != null
 
+    /** Nothing is being said and nothing waits to be said. */
+    val isQuiet: Boolean get() = speakingSince == null && pending.isEmpty()
+
     fun add(text: String) {
         val t = clean(text) ?: return
         pending.addLast(t)

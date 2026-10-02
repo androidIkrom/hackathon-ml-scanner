@@ -281,7 +281,15 @@ object VoiceCommandParser {
     }
 
     // 6 ------------------------------------------------------------------------------------------------
+    /** "bus stop", "subway stops": the stop is a place, not the command (it stopped walk mode in the logs). */
+    private val stopPlacesEn = setOf("bus", "tram", "subway", "metro", "train", "taxi", "shuttle", "truck", "rest")
+
+    private fun stopIsAPlace(s: Said): Boolean =
+        s.words.zipWithNext().any { (a, b) -> a in stopPlacesEn && (b == "stop" || b == "stops") } &&
+            s.words.count { it == "stop" || it == "stops" } == 1 && s.words.first() !in setOf("stop", "cancel", "pause")
+
     private fun action(s: Said): VoiceCommand? = when {
+        stopIsAPlace(s) -> null
         s.has(
             "stop", "cancel", "pause", "enough", "quiet", "halt", "silence", "shut", "finish",
             "wait", "hold", "mute", "shh", "hush", "end",
