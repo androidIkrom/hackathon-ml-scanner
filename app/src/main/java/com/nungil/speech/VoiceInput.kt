@@ -35,6 +35,7 @@ import com.nungil.core.voice.WakeWord
  *
  * @param appSaying what the app is saying now or has just said (for echo detection).
  * @param isAwake true between the wake word and "Eye stop".
+ * @param understood true when a recognizer guess would do something; such a guess beats a misheard first one.
  */
 class VoiceInput(
     private val context: Context,
@@ -43,6 +44,7 @@ class VoiceInput(
     private val isAwake: () -> Boolean,
     private val holdSound: () -> Unit,
     private val releaseSound: () -> Unit,
+    private val understood: (String) -> Boolean,
     private val onHeard: (String) -> Unit,
     private val onProblem: (Phrase) -> Unit,
 ) : RecognitionListener {
@@ -157,7 +159,7 @@ class VoiceInput(
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE, policy.language(language()).speechTag)
             .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, RecognizerPolicy.MAX_GUESSES)
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
 
     override fun onReadyForSpeech(params: Bundle?) = muter.unmuteSoon()
@@ -185,9 +187,9 @@ class VoiceInput(
     override fun onResults(results: Bundle?) {
         muter.unmuteMusicNow()
         muter.unmuteSoon()
-        val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
-            .orEmpty()
-            .ifEmpty { lastPartial }
+        val guesses = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
+        // One phrase for a screen is a name or a query: there the first guess is the one to keep.
+        val text = RecognizerPolicy.choose(guesses) { oneShot == null && understood(it) }.ifEmpty { lastPartial }
         if (text.isEmpty()) {
             onError(SpeechRecognizer.ERROR_NO_MATCH)
             return

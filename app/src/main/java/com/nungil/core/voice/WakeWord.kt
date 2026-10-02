@@ -29,7 +29,7 @@ object WakeWord {
     private val KOREAN = Regex("""^\s*눈\s*길(아|야)?(?![가-힣])[\s,.!?]*(.*)$""")
 
     private val START = setOf("start", "wake up", "시작", "시작해", "시작해 줘", "일어나")
-    private val STOP = setOf("stop", "sleep", "go to sleep", "멈춰", "정지", "그만", "그만해", "스톱", "중지", "멈춤")
+    private val STOP = setOf("stop", "still", "sleep", "go to sleep", "멈춰", "정지", "그만", "그만해", "스톱", "중지", "멈춤")
 
     /** The word to tell the user about. */
     fun word(lang: Lang): String = if (lang == Lang.KO) "눈길" else "Eye"

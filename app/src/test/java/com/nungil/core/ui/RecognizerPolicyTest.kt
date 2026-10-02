@@ -17,6 +17,13 @@ class RecognizerPolicyTest {
         assertEquals(700L, policy.afterError(RecognizerPolicy.ERROR_CLIENT, Lang.EN).delayMs)
     }
 
+    @Test fun aLaterGuessThatIsACommandBeatsAMisheardFirstGuess() {
+        val known = setOf("live scan", "stop")
+        assertEquals("live scan", RecognizerPolicy.choose(listOf("light skim", " live scan ", "stop")) { it in known })
+        assertEquals("light skim", RecognizerPolicy.choose(listOf("light skim", "like skim")) { it in known })
+        assertEquals("", RecognizerPolicy.choose(listOf(" ", "")) { true })
+    }
+
     @Test fun silenceIsNotAnError() {
         repeat(10) {
             assertFalse(policy.afterError(RecognizerPolicy.ERROR_SPEECH_TIMEOUT, Lang.EN).rebuild)
