@@ -11,6 +11,7 @@ import com.google.mediapipe.tasks.vision.objectdetector.ObjectDetector
 import com.nungil.contract.Compute
 import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
+import java.io.File
 
 /**
  * Builds the MediaPipe object detector. Call it on the thread that will run the detector:
@@ -23,31 +24,54 @@ class DetectorFactory(private val context: Context) {
     /**
      * Tries the delegates from [DetectorPlan.delegateOrder] and proves each with one 64x64 detect:
      * a GPU that loads a model it cannot execute otherwise fails on the first real frame and crashes on close.
+     *
+     * The GPU compiles its programs for the model on every start, which took 4.5 s for efficientdet-lite2
+     * on a Mali-G57. They are kept on disk after the first start; when a start with that copy fails, the
+     * copy is deleted and the GPU gets one more try without it.
      */
     fun create(modelFile: String, compute: Compute): Built {
         var lastError: Throwable? = null
         for (candidate in DetectorPlan.delegateOrder(compute, modelFile)) {
-            val detector = try {
-                build(modelFile, candidate)
-            } catch (t: Throwable) {
-                Log.i(TAG, "Detector $modelFile could not load on $candidate: ${t.message}")
-                lastError = t
-                continue
+            val cache = if (candidate == Compute.GPU) gpuCache(modelFile) else null
+            for (attempt in if (cache != null) listOf(cache, null) else listOf(null)) {
+                if (attempt == null) cache?.deleteRecursively()
+                val detector = try {
+                    build(modelFile, candidate, attempt)
+                } catch (t: Throwable) {
+                    Log.i(TAG, "Detector $modelFile could not load on $candidate: ${t.message}")
+                    lastError = t
+                    continue
+                }
+                if (prove(detector)) {
+                    Log.i(TAG, "Detector $modelFile running on $candidate")
+                    return Built(detector, candidate, modelFile)
+                }
+                Log.i(TAG, "Detector $modelFile failed its trial on $candidate, falling back")
+                closeQuietly(detector)
             }
-            if (prove(detector)) {
-                Log.i(TAG, "Detector $modelFile running on $candidate")
-                return Built(detector, candidate, modelFile)
-            }
-            Log.i(TAG, "Detector $modelFile failed its trial on $candidate, falling back")
-            closeQuietly(detector)
         }
         throw IllegalStateException("No delegate can run $modelFile", lastError)
     }
 
-    private fun build(modelFile: String, compute: Compute): ObjectDetector {
+    /** Android empties the code cache when the app or the system is updated, so a stale copy cannot survive. */
+    private fun gpuCache(modelFile: String): File? =
+        File(context.codeCacheDir, "gpu-" + modelFile.substringBeforeLast('.')).takeIf { it.isDirectory || it.mkdirs() }
+
+    private fun build(modelFile: String, compute: Compute, gpuCache: File?): ObjectDetector {
         val base = BaseOptions.builder()
             .setModelAssetPath(modelFile)
             .setDelegate(if (compute == Compute.GPU) Delegate.GPU else Delegate.CPU)
+            .apply {
+                if (gpuCache != null) {
+                    setDelegateOptions(
+                        BaseOptions.DelegateOptions.GpuOptions.builder()
+                            .setCachedKernelPath(gpuCache.path)
+                            .setSerializedModelDir(gpuCache.path)
+                            .setModelToken(MODEL_TOKEN)
+                            .build(),
+                    )
+                }
+            }
             .build()
         val options = ObjectDetector.ObjectDetectorOptions.builder()
             .setBaseOptions(base)
@@ -78,5 +102,6 @@ class DetectorFactory(private val context: Context) {
 
     companion object {
         const val TAG = "Nungil"
+        private const val MODEL_TOKEN = "model"
     }
 }
