@@ -3,6 +3,7 @@ package com.nungil.core.walk
 import com.nungil.contract.Lang
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DepthStatusTest {
@@ -50,6 +51,25 @@ class DepthStatusTest {
         assertNull(back.last())
         // not said again without a new loss
         assertEquals(listOf<Alert?>(null), run(s, 16_000, 24_000, working = true).distinct())
+    }
+
+    @Test fun nothingToSeeAheadIsSaidSoonAsAPossibleWall() {
+        // The recorded walk: turned to a plain wall, ARCore found no features, and nothing was said for 8 s.
+        val s = DepthStatus()
+        run(s, 0, 2_000, working = true)
+        val alerts = (2_000L until 5_000L step 100L).map { s.update(it, false, false, Lang.EN, blank = true) }
+        assertNull(alerts[14])
+        assertEquals("depth:blank:0", alerts[15]?.key)
+        assertEquals(WalkPhrases.blankAhead(Lang.EN), alerts[15]?.text)
+        assertTrue(alerts[15]!!.ahead)
+    }
+
+    @Test fun onceDepthHasWorkedALossIsSaidSooner() {
+        val s = DepthStatus()
+        run(s, 0, 2_000, working = true)
+        val alerts = run(s, 2_000, 6_000, working = false)
+        assertNull(alerts[29])
+        assertEquals("depth:lost:0", alerts[30]?.key)
     }
 
     @Test fun noReasonWaitsLongerThanTooDark() {

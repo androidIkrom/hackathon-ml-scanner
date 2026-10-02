@@ -7,7 +7,8 @@ enum class AlertKind { FLOOR, HAZARD, GROUND, LIGHT, DEPTH, SAVED, SIGN, CODE, N
  * One thing worth saying. [key] identifies the situation (e.g. "wall:ahead"): the same key is not
  * said again while it lasts, so only changes are spoken. Alerts about the same [topic] (e.g. "hazard:car")
  * are said once per [WalkAlerts.TOPIC_REPEAT_MS] unless the thing got closer; [level] is how far away it
- * is (steps or metres as spoken, 0 = very close, [FAR] = unknown).
+ * is (steps or metres as spoken, 0 = very close, [FAR] = unknown). [ahead]: it is about what is straight
+ * ahead, which is said before anything to the left or right and cuts into a sentence.
  */
 data class Alert(
     val kind: AlertKind,
@@ -16,6 +17,7 @@ data class Alert(
     val urgent: Boolean = false,
     val topic: String? = null,
     val level: Int = FAR,
+    val ahead: Boolean = false,
 ) {
     companion object {
         const val FAR = Int.MAX_VALUE
@@ -23,7 +25,7 @@ data class Alert(
 }
 
 /**
- * Chooses at most one sentence per frame: the most urgent alert that is new. Never repeats the same
+ * Chooses at most one sentence per frame: the most urgent alert that is new, what is straight ahead first. Never repeats the same
  * sentence inside [REPEAT_MS]. It never produces "all clear": when nothing is found it stays quiet.
  *
  * "New" is per key: a key that was said stays said while it keeps coming back, and only after it has been
@@ -36,14 +38,15 @@ class WalkAlerts {
     private val lastSaidAt = HashMap<String, Long>()
     private val topics = HashMap<String, Pair<Long, Int>>()
 
-    fun choose(nowMs: Long, candidates: List<Alert>): Alert? {
+    /** [allowed]: alerts that may be said right now (see [WalkPacing]); the others stay new for later. */
+    fun choose(nowMs: Long, candidates: List<Alert>, allowed: (Alert) -> Boolean = { true }): Alert? {
         val keys = candidates.map { it.key }.toSet()
         // Not seen for GONE_MS: it went away, and may be said when it is back.
         said.entries.removeAll { (_, seen) -> nowMs - seen >= GONE_MS }
         for (k in keys) if (k in said) said[k] = nowMs
         val pick = candidates
-            .sortedBy { it.kind.ordinal }
-            .firstOrNull { it.key !in said && textAllowed(it, nowMs) && topicAllowed(it, nowMs) }
+            .sortedWith(compareBy<Alert>({ !it.ahead }, { it.kind.ordinal }))
+            .firstOrNull { it.key !in said && allowed(it) && textAllowed(it, nowMs) && topicAllowed(it, nowMs) }
             ?: return null
         said[pick.key] = nowMs
         lastSaidAt[pick.text] = nowMs
@@ -75,6 +78,35 @@ class WalkAlerts {
 
         /** Within this many steps any step closer is worth saying. */
         const val NEAR_LEVEL = 3
+    }
+}
+
+/**
+ * Keeps what walk mode says about now. The speaker plays queued sentences one after another with a
+ * gap, and the logs showed "Obstacle on your right" heard 6 s and "Nothing close ahead" 5 s after they
+ * were true. So nothing is queued. What is straight ahead, and "nothing close ahead", is said at once
+ * and cuts off whatever is being said: the newest wins. Everything else waits for silence and is said
+ * if it still holds.
+ */
+class WalkPacing {
+    private var busyUntil = Long.MIN_VALUE / 2
+
+    fun allows(nowMs: Long, alert: Alert): Boolean =
+        nowMs >= busyUntil || alert.ahead || alert.kind == AlertKind.CLEAR
+
+    /** [alert] is said from [nowMs] on. */
+    fun said(nowMs: Long, alert: Alert) {
+        busyUntil = nowMs + durationMs(alert.text)
+    }
+
+    companion object {
+        private const val BASE_MS = 300L
+        private const val LATIN_MS = 70L
+        private const val HANGUL_MS = 140L
+
+        /** About how long the speaker needs for [text]. */
+        fun durationMs(text: String): Long =
+            BASE_MS + text.length * (if (text.any { it in '가'..'힣' }) HANGUL_MS else LATIN_MS)
     }
 }
 

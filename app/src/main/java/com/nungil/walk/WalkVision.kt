@@ -18,6 +18,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.nungil.BuildConfig
 import com.nungil.contract.Box
 import com.nungil.contract.Compute
 import com.nungil.contract.Detection
@@ -44,6 +45,7 @@ import com.nungil.core.walk.HazardConfirmer
 import com.nungil.core.walk.HazardPolicy
 import com.nungil.core.walk.ObstacleName
 import com.nungil.core.walk.SemanticGround
+import com.nungil.core.walk.Standpoint
 import com.nungil.core.walk.TrafficLightColor
 import com.nungil.core.walk.WalkPhrases
 import com.nungil.core.walk.Zone
@@ -69,6 +71,8 @@ class WalkVision(
     private val stepM: Float?,
     /** Steps taken since the last call (step detector); 0 when there is none. */
     private val takeSteps: () -> Int,
+    /** Compass heading of the camera, or null: it still knows about turns when ARCore is lost. */
+    private val heading: () -> Float?,
     private val onReport: (WalkReport) -> Unit,
 ) : WalkSink, Closeable {
 
@@ -92,6 +96,7 @@ class WalkVision(
     private var lastFrameAt = 0L
     private val depthStatus = DepthStatus()
     private var clearSince: Long? = null
+    private var clearOfferUntil = 0L
     private var grid = FloatArray(0)
     private var raw: Bitmap? = null
     private var upright: Bitmap? = null
@@ -102,7 +107,28 @@ class WalkVision(
     private val savedSaidAt = HashMap<String, Long>()
     private var loggedFrames = 0
     private var inferenceTotalMs = 0L
+    private var lastProfileLogAt = 0L
+    private val recorder = if (BuildConfig.DEBUG) WalkRecorder(context) else null
     @Volatile private var closed = false
+
+    /** ML Kit loads its models inside the first call, for seconds; signs and codes wait for that, walls do not. */
+    @Volatile private var textReady = false
+    @Volatile private var codesReady = false
+
+    init {
+        // The detector and ML Kit take seconds to load: do it while ARCore starts, not inside the first frame.
+        executor.execute {
+            runCatching {
+                val blank = InputImage.fromBitmap(Bitmap.createBitmap(WARM_UP_PX, WARM_UP_PX, Bitmap.Config.ARGB_8888), 0)
+                textRecognizer.process(blank).addOnCompleteListener { textReady = true }
+                barcodes.process(blank).addOnCompleteListener { codesReady = true }
+            }.onFailure {
+                textReady = true
+                codesReady = true
+            }
+            runCatching { detector() }
+        }
+    }
 
     override fun tryReserve(): Boolean = !closed && busy.compareAndSet(false, true)
 
@@ -118,10 +144,13 @@ class WalkVision(
                     DepthGrid.fill(depth, input.lut, grid)
                     grid
                 }
+                recorder?.frame(input, gridM)
+                // An empty or one-value depth image is "could not measure", like no image at all.
+                val measuredM = gridM?.takeIf { DepthGrid.measured(it) }
                 val report = analyse(
                     bitmap = bitmap,
                     detections = detect(bitmap),
-                    gridM = gridM,
+                    gridM = measuredM,
                     gridWidth = input.gridWidth,
                     gridHeight = input.gridHeight,
                     focalGridPx = input.focalGridPx,
@@ -132,6 +161,9 @@ class WalkVision(
                     now = input.timestampMs,
                     depthExpected = input.depthExpected,
                     tooDark = input.tooDark,
+                    advancedM = input.advancedM,
+                    here = input.standpoint,
+                    featureless = input.featureless,
                 )
                 deliver(report)
             } catch (e: Exception) {
@@ -189,6 +221,9 @@ class WalkVision(
         now: Long,
         depthExpected: Boolean,
         tooDark: Boolean = false,
+        advancedM: Float = 0f,
+        here: Standpoint? = null,
+        featureless: Boolean = false,
     ): WalkReport {
         val l = lang()
         val alerts = ArrayList<Alert>()
@@ -204,9 +239,9 @@ class WalkVision(
         var aheadMeasuredClear = false
         var floor: FloorReading? = null
         if (gridM != null && gridWidth > 0 && gridHeight > 0) {
+            val frameHeight = if (focalGridPx > 0f) GridGeometry.floorHeight(gridM, gridWidth, gridHeight, focalGridPx, pitchRad) else null
             val geometry = if (focalGridPx > 0f) {
-                val h = cameraHeight.update(GridGeometry.floorHeight(gridM, gridWidth, gridHeight, focalGridPx, pitchRad))
-                GridGeometry(focalGridPx, pitchRad, gridHeight, h)
+                GridGeometry(focalGridPx, pitchRad, gridHeight, cameraHeight.update(frameHeight))
             } else {
                 null
             }
@@ -215,23 +250,39 @@ class WalkVision(
             if (loggedFrames % LOG_EVERY == 0) {
                 Log.i(
                     TAG,
-                    "Walk depth: camH=%.2f pitch=%.0f° ahead valid=%.2f blocked=%s d=%s raw=%s".format(
-                        geometry?.cameraHeightM ?: -1f, Math.toDegrees(pitchRad.toDouble()), ahead.validShare,
+                    "Walk depth: camH=%.2f%s frame=%s pitch=%.0f° ahead valid=%.2f blocked=%s d=%s raw=%s".format(
+                        geometry?.cameraHeightM ?: -1f, if (cameraHeight.measured) "" else " (guess)", frameHeight,
+                        Math.toDegrees(pitchRad.toDouble()), ahead.validShare,
                         ahead.blocked, ahead.distanceM, DepthDiag.centre(gridM, gridWidth, gridHeight),
                     ),
                 )
             }
-            floor = floorConfirmer.update(geometry?.let { GroundProfile.analyse(GroundProfile.rows(gridM, gridWidth, gridHeight, it)) })
+            // Steps and drops are judged against the floor in view (GroundProfile.read), then the change has to
+            // stay where it is while the user walks (FloorConfirmer).
+            val rows = geometry?.let { GroundProfile.rows(gridM, gridWidth, gridHeight, it) }
+            val seen = rows?.let { GroundProfile.read(it) }
+            floor = floorConfirmer.update(seen, advancedM)
+            if (seen != null && now - lastProfileLogAt >= PROFILE_LOG_EVERY_MS) {
+                lastProfileLogAt = now
+                Log.i(
+                    TAG,
+                    "Walk floor seen: ${seen.change} at %.2f m (%s) camH=%.2f pitch=%.0f° profile %s".format(
+                        seen.distanceM, if (floor == null) "waiting" else "confirmed", cameraHeight.value,
+                        Math.toDegrees(pitchRad.toDouble()), DepthDiag.profile(rows),
+                    ),
+                )
+            }
             // Stairs going up look like a wall at chest height: say "stairs", not "wall".
             val stairsUp = floor?.change == FloorChange.STAIRS && floor.distanceM <= STAIRS_HIDE_WALL_M
             if (ahead.blocked && !ahead.unknown) ahead.distanceM?.let { approach.measured(now, it) } else if (!ahead.unknown) approach.clear()
-            closeHold.update(now, ahead, walked)?.let { d ->
+            closeHold.update(now, ahead, walked, here, heading())?.let { d ->
                 aheadBlocked = true
                 beep = d
                 if (!stairsUp) alerts.add(wallAhead(d, l))
             }
             aheadMeasuredClear = !ahead.unknown && !ahead.blocked
-            zones.filter { it.zone != Zone.AHEAD && it.blocked && (it.distanceM ?: 9f) < SIDE_WARN_M }.forEach {
+            // A wall in front fills the left and the right third too: with something ahead, only that is said.
+            zones.filter { !aheadBlocked && it.zone != Zone.AHEAD && it.blocked && (it.distanceM ?: 9f) < SIDE_WARN_M }.forEach {
                 alerts.add(Alert(AlertKind.HAZARD, "wall:${it.zone}", WalkPhrases.wall(it.zone, it.distanceM!!, stepM, l)))
             }
             // Nothing behind a close wall can be seen: a "floor change" beyond it is the wall's own noise.
@@ -241,12 +292,12 @@ class WalkVision(
             floor?.let { Log.i(TAG, "Walk floor: ${it.change} at %.2f m camH=%.2f pitch=%.0f°".format(it.distanceM, geometry?.cameraHeightM ?: -1f, Math.toDegrees(pitchRad.toDouble()))) }
             floor?.let {
                 val text = WalkPhrases.floor(it.change, it.distanceM, stepM, l)
-                alerts.add(Alert(AlertKind.FLOOR, "floor:${it.change}", text, topic = "floor", level = WalkPhrases.distanceLevel(it.distanceM, stepM)))
+                alerts.add(Alert(AlertKind.FLOOR, "floor:${it.change}", text, topic = "floor", level = WalkPhrases.distanceLevel(it.distanceM, stepM), ahead = true))
             }
         } else if (depthExpected) {
             if (loggedFrames % LOG_EVERY == 0) Log.i(TAG, "Walk depth: none this frame (not tracking or not ready)")
             // Right in front of a plain wall ARCore loses tracking and depth: that is "could not measure", not "clear".
-            closeHold.update(now, ZoneReading(Zone.AHEAD, false, null, 0f), walked)?.let { d ->
+            closeHold.update(now, ZoneReading(Zone.AHEAD, false, null, 0f), walked, here, heading())?.let { d ->
                 aheadBlocked = true
                 beep = d
                 alerts.add(wallAhead(d, l))
@@ -254,7 +305,7 @@ class WalkVision(
         }
 
         if (depthExpected) {
-            depthStatus.update(now, gridM != null && gridWidth > 0 && gridHeight > 0, tooDark, l)?.let { alerts.add(it) }
+            depthStatus.update(now, gridM != null && gridWidth > 0 && gridHeight > 0, tooDark, l, featureless)?.let { alerts.add(it) }
         }
 
         // Hazards: confirmed in 3 of the last 5 frames.
@@ -269,23 +320,26 @@ class WalkVision(
                 if (d != null) beep = minOf(beep ?: d, d)
             }
             val level = d?.let { WalkPhrases.distanceLevel(it, stepM) } ?: Alert.FAR
-            alerts.add(Alert(AlertKind.HAZARD, "hazard:$label:$zone", WalkPhrases.hazard(label, zone, d, stepM, l), topic = "hazard:$label", level = level))
+            alerts.add(Alert(AlertKind.HAZARD, "hazard:$label:$zone", WalkPhrases.hazard(label, zone, d, stepM, l), topic = "hazard:$label", level = level, ahead = zone == Zone.AHEAD))
         }
 
         if (!aheadBlocked) wallLevel = Int.MAX_VALUE
 
-        // Once the way ahead has been clear for a moment after a warning, say so once (never "safe").
+        // Once the way ahead has been clear for a moment after a warning, say so once (never "safe"). It stays
+        // on offer for a while: it waits for the sentence being said, and a single frame would lose it.
         if (aheadBlocked || hazardAhead || floor != null) {
             warnedAheadAt = now
             clearSince = null
+            clearOfferUntil = 0L
         } else if (aheadMeasuredClear && warnedAheadAt != null) {
             val since = clearSince ?: now.also { clearSince = it }
             if (now - since >= CLEAR_AFTER_MS) {
-                alerts.add(Alert(AlertKind.CLEAR, "clear", WalkPhrases.nothingAhead(l)))
+                clearOfferUntil = now + CLEAR_OFFER_MS
                 warnedAheadAt = null
                 clearSince = null
             }
         }
+        if (now < clearOfferUntil) alerts.add(Alert(AlertKind.CLEAR, "clear", WalkPhrases.nothingAhead(l)))
 
         // Ground class, outdoors only.
         if (skyFraction >= GroundRule.SKY_FRACTION) lastSkyAt = now
@@ -315,8 +369,8 @@ class WalkVision(
         // Signs and codes.
         if (now - lastReadAt >= READ_EVERY_MS) {
             lastReadAt = now
-            readSign(bitmap)?.let { alerts.add(Alert(AlertKind.SIGN, "sign:$it", WalkPhrases.sign(it, l))) }
-            readCode(bitmap)?.let { alerts.add(Alert(AlertKind.CODE, "code:$it", WalkPhrases.code(it, l))) }
+            if (textReady) readSign(bitmap)?.let { alerts.add(Alert(AlertKind.SIGN, "sign:$it", WalkPhrases.sign(it, l))) }
+            if (codesReady) readCode(bitmap)?.let { alerts.add(Alert(AlertKind.CODE, "code:$it", WalkPhrases.code(it, l))) }
         }
 
         // Something close ahead that the detector does not know: give it a name worth saying.
@@ -335,18 +389,14 @@ class WalkVision(
      */
     private fun wallAhead(d: Float, l: Lang): Alert {
         wallLevel = minOf(wallLevel, WalkPhrases.distanceLevel(d, stepM))
-        return Alert(AlertKind.HAZARD, "wall:ahead:$wallLevel", WalkPhrases.wall(Zone.AHEAD, d, stepM, l), urgent = wallLevel <= 1)
+        return Alert(AlertKind.HAZARD, "wall:ahead:$wallLevel", WalkPhrases.wall(Zone.AHEAD, d, stepM, l), urgent = wallLevel <= 1, ahead = true)
     }
 
     // ---- models (worker thread) ------------------------------------------------------------------
 
     private fun detect(bitmap: Bitmap): List<Detection> {
-        val d = detector ?: DetectorFactory(context).create(DetectorPlan.WALK_MODEL_FILE, Compute.CPU).detector.also {
-            detector = it
-            Log.i(TAG, "Walk detector ${DetectorPlan.WALK_MODEL_FILE} on CPU")
-        }
         val started = SystemClock.elapsedRealtime()
-        val result = d.detect(BitmapImageBuilder(bitmap).build())
+        val result = detector().detect(BitmapImageBuilder(bitmap).build())
         inferenceTotalMs += SystemClock.elapsedRealtime() - started
         if (++loggedFrames % LOG_EVERY == 0) {
             Log.i(TAG, "Walk inference ${inferenceTotalMs / LOG_EVERY} ms average")
@@ -360,6 +410,12 @@ class WalkVision(
             Detection(c.categoryName(), c.score(), Box(r.left / w, r.top / h, r.right / w, r.bottom / h))
         }
     }
+
+    private fun detector(): ObjectDetector =
+        detector ?: DetectorFactory(context).create(DetectorPlan.WALK_MODEL_FILE, Compute.CPU).detector.also {
+            detector = it
+            Log.i(TAG, "Walk detector ${DetectorPlan.WALK_MODEL_FILE} on CPU")
+        }
 
     private fun savedTags(bitmap: Bitmap, detections: List<Detection>): List<Pair<String, Zone>> {
         if (taggers.isEmpty()) taggers = runCatching { createNameTaggers(context) }.getOrDefault(emptyList())
@@ -430,6 +486,7 @@ class WalkVision(
             taggers.forEach { runCatching { it.close() } }
             runCatching { textRecognizer.close() }
             runCatching { barcodes.close() }
+            recorder?.close()
         }
         executor.shutdown()
         runCatching { executor.awaitTermination(SHUTDOWN_WAIT_S, TimeUnit.SECONDS) }
@@ -440,7 +497,8 @@ class WalkVision(
         const val SIDE_WARN_M = 1.5f
         const val STAIRS_HIDE_WALL_M = 4f
         const val BEHIND_WALL_MARGIN_M = 0.2f
-        const val CLEAR_AFTER_MS = 2_000L
+        const val CLEAR_AFTER_MS = 1_000L
+        const val CLEAR_OFFER_MS = 4_000L
         const val LIGHT_SCORE = 0.5f
         const val READ_EVERY_MS = 2_500L
         const val NAME_EVERY_MS = 1_500L
@@ -452,6 +510,8 @@ class WalkVision(
         const val LOG_EVERY = 30
         const val HFOV_DEG = 65f
         const val CLASSIFIER_FILE = "efficientnet-lite0.tflite"
+        const val WARM_UP_PX = 64
+        const val PROFILE_LOG_EVERY_MS = 1_000L
     }
 }
 
@@ -465,4 +525,13 @@ internal object DepthDiag {
         v.sort()
         return "%.2f".format(v[v.size / 2])
     }
+
+    /** Log helper: the floor ahead as "metres:centimetres above the floor", one median per quarter metre. */
+    fun profile(rows: List<GroundProfile.Row>): String =
+        rows.groupBy { (it.forwardM / PROFILE_BIN_M).toInt() }.toSortedMap().entries.joinToString(" ") { (bin, inBin) ->
+            val heights = inBin.map { it.heightM }.sorted()
+            "%.2f:%+.0f".format(bin * PROFILE_BIN_M, heights[heights.size / 2] * 100)
+        }
+
+    private const val PROFILE_BIN_M = 0.25f
 }
