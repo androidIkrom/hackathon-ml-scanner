@@ -188,6 +188,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                 tts.resumeAfterUser()
                 tones.resumeAfterUser()
             },
+            understood = ::understood,
             onHeard = ::onHeard,
             onProblem = ::onVoiceProblem,
         )
@@ -304,6 +305,16 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         supportFragmentManager.findFragmentById(R.id.nav_host)?.childFragmentManager?.primaryNavigationFragment
 
     // ---- Voice commands ---------------------------------------------------------------------------
+
+    /** A recognizer guess that does something. While a screen waits for a name, only the first guess counts. */
+    private fun understood(guess: String): Boolean {
+        if (dictation != null) return false
+        return when (val wake = WakeWord.decide(guess, awakeState.value) { isCommand(it) }) {
+            WakeResult.Ignore -> false
+            WakeResult.Wake, WakeResult.Sleep -> true
+            is WakeResult.Command -> isCommand(wake.text)
+        }
+    }
 
     private fun onHeard(heard: String) {
         val wake = WakeWord.decide(heard, awakeState.value) { isCommand(it) }

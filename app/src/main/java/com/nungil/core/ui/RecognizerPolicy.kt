@@ -66,6 +66,18 @@ class RecognizerPolicy {
         /** "I did not understand" is said at most once in this long (people nearby are heard too). */
         const val NOT_UNDERSTOOD_GAP_MS = 10_000L
 
+        /** How many guesses to ask the recognizer for. */
+        const val MAX_GUESSES = 5
+
+        /**
+         * The recognizer's first guess is often a mishearing ("light skin" for "live scan"); a later guess
+         * that [understood] accepts wins. Otherwise the first guess, or "" when there is none.
+         */
+        fun choose(guesses: List<String>, understood: (String) -> Boolean): String {
+            val heard = guesses.map { it.trim() }.filter { it.isNotEmpty() }
+            return heard.firstOrNull(understood) ?: heard.firstOrNull().orEmpty()
+        }
+
         /** Streams are never kept muted longer than this. */
         const val MUTE_MAX_MS = 2_000L
 

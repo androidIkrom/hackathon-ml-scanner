@@ -155,6 +155,16 @@ class VoiceCommandParserTest {
     @Test fun forScan() = assertEquals(Go(Dest.Scan(ScanMode.FULL)), p("for scan"))
     @Test fun foolScan() = assertEquals(Go(Dest.Scan(ScanMode.FULL)), p("fool scan"))
     @Test fun fullscanOneWord() = assertEquals(Go(Dest.Scan(ScanMode.FULL)), p("fullscan"))
+    @Test fun liveScanMisheardInTheLogs() {
+        for (heard in listOf("Live skin", "Light skin", "Livescan", "Lifespan", "life scan", "light scan")) {
+            assertEquals(heard, Go(Dest.Scan(ScanMode.LIVE)), p(heard))
+        }
+    }
+    @Test fun skinMeansScan() = assertEquals(Go(Dest.Scan(ScanMode.FULL)), p("full skin"))
+    @Test fun aLightIsNotALiveScan() = assertEquals(VoiceCommand.Unknown("turn on the light"), p("turn on the light"))
+    @Test fun valkModeMeansWalk() {
+        for (heard in listOf("Valk mode", "wok mode", "walks mode")) assertEquals(heard, Go(Dest.Walk), p(heard))
+    }
     @Test fun bareKindOpensItsTab() {
         assertEquals(Go(Dest.Saved(SavedTab.PEOPLE)), p("person"))
         assertEquals(Go(Dest.Saved(SavedTab.CARS)), p("car"))

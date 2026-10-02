@@ -153,6 +153,10 @@ object WalkPhrases {
         else "I can't measure distance right now. Move the phone slowly."
 
     /** Not enough light for ARCore: nothing about walls or steps can be said, so say that plainly. */
+    fun blankAhead(lang: Lang): String =
+        if (ko(lang)) "앞이 보이지 않아요. 벽일 수 있으니 천천히 가세요."
+        else "I can't see ahead. It may be a plain wall. Go slowly."
+
     fun tooDark(lang: Lang): String =
         if (ko(lang)) "너무 어두워서 거리를 잴 수 없어요. 벽과 계단을 알려 드릴 수 없으니 천천히 걸으세요."
         else "It's too dark to measure distance. I can't warn you about walls or steps, so walk slowly."

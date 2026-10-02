@@ -2,6 +2,7 @@ package com.nungil.core.walk
 
 import kotlin.math.abs
 import kotlin.math.atan
+import kotlin.math.atan2
 import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.floor
@@ -38,6 +39,8 @@ class GridGeometry(val focalPx: Float, val pitchRad: Float, height: Int, val cam
     companion object {
         const val FLOOR_NEAR_M = 0.6f
         const val FLOOR_FAR_M = 1.3f
+        const val FLOOR_REACH_M = 3f
+        const val FLOOR_SPAN_M = 0.7f
         const val MIN_FLOOR_SAMPLES = 20
         const val MIN_HEIGHT_M = 0.8f
         const val MAX_HEIGHT_M = 1.9f
@@ -48,23 +51,33 @@ class GridGeometry(val focalPx: Float, val pitchRad: Float, height: Int, val cam
 
         /**
          * This frame's guess of the phone's height above the floor, from points 0.6-1.3 m ahead in the
-         * middle third. A wall or a leg there sits ABOVE the floor (it is less far below the camera), so
-         * the floor is a high percentile of "how far below the camera", never the median. Null when there
+         * middle third. A phone held almost upright first sees the floor farther away than that (the logs
+         * showed the height never measured in a corridor), so the window then starts where the floor
+         * starts. A wall or a leg there sits ABOVE the floor (it is less far below the camera), so the
+         * floor is a high percentile of "how far below the camera", never the median. Null when there
          * are too few points.
          */
         fun floorHeight(depthM: FloatArray, width: Int, height: Int, focalPx: Float, pitchRad: Float): Float? {
             val probe = GridGeometry(focalPx, pitchRad, height, 0f)
-            val samples = ArrayList<Float>()
+            val forwards = ArrayList<Float>()
+            val drops = ArrayList<Float>()
             for (r in 0 until height) {
                 if (probe.alpha[r] < MIN_ALPHA_RAD) continue
                 for (x in width / 3 until width * 2 / 3) {
                     val z = depthM[r * width + x]
                     if (z.isNaN() || z < DepthObstacles.MIN_M || z > DepthObstacles.MAX_M) continue
-                    if (probe.forward(r, z) in FLOOR_NEAR_M..FLOOR_FAR_M) samples.add(probe.drop(r, z))
+                    val forward = probe.forward(r, z)
+                    if (forward in FLOOR_NEAR_M..FLOOR_REACH_M) {
+                        forwards.add(forward)
+                        drops.add(probe.drop(r, z))
+                    }
                 }
             }
+            if (forwards.size < MIN_FLOOR_SAMPLES) return null
+            val start = forwards.sorted()[forwards.size / 20]
+            val end = maxOf(FLOOR_FAR_M, start + FLOOR_SPAN_M)
+            val samples = drops.filterIndexed { i, _ -> forwards[i] <= end }.sorted()
             if (samples.size < MIN_FLOOR_SAMPLES) return null
-            samples.sort()
             return samples[((samples.size - 1) * FLOOR_PERCENTILE).toInt()]
         }
 
@@ -85,13 +98,16 @@ class GridGeometry(val focalPx: Float, val pitchRad: Float, height: Int, val cam
 class CameraHeight {
     var value = GroundProfile.DEFAULT_CAMERA_HEIGHT_M
         private set
-    private var seeded = false
+
+    /** False while [value] is still the default: steps and drops cannot be judged against a guess. */
+    var measured = false
+        private set
 
     fun update(frameGuess: Float?): Float {
         val g = frameGuess ?: return value
         if (g !in ACCEPT_MIN_M..ACCEPT_MAX_M) return value
-        value = if (seeded) value + SMOOTHING * (g - value) else g
-        seeded = true
+        value = if (measured) value + SMOOTHING * (g - value) else g
+        measured = true
         return value
     }
 
@@ -113,8 +129,8 @@ data class ZoneReading(val zone: Zone, val blocked: Boolean, val distanceM: Floa
 
 /**
  * Walls and doors from a screen-shaped depth grid in metres (row-major, 0 or NaN = no reading):
- * the band 30–62 % down the image, readings 0.3–8 m, a third blocked when 40 % of its valid readings
- * are within 3 m (build guide §7).
+ * the band 30–62 % down the image, a third blocked when 40 % of its readings are within 3 m
+ * (build guide §7). Readings beyond 8 m count as far.
  */
 object DepthObstacles {
     /**
@@ -154,9 +170,11 @@ object DepthObstacles {
             for (y in top until bottom) for (x in x0 until x1) {
                 total++
                 val raw = depthM[y * width + x]
-                if (raw.isNaN() || raw <= 0f || raw > MAX_M) continue
-                val z = raw.coerceAtLeast(MIN_M)
+                if (raw.isNaN() || raw <= 0f) continue
                 valid++
+                // Farther than the range is a reading too: a long corridor is clear, not unknown.
+                if (raw > MAX_M) continue
+                val z = raw.coerceAtLeast(MIN_M)
                 val distance = if (geometry != null) {
                     if (geometry.heightAt(y, z) < OBSTACLE_MIN_HEIGHT_M) continue
                     geometry.forward(y, z).coerceAtLeast(MIN_M)
@@ -172,24 +190,61 @@ object DepthObstacles {
     }
 }
 
+/** Where the camera is and where it looks, on the ground plane (ARCore's pose): it looks along (sin yaw, cos yaw). */
+data class Standpoint(val x: Float, val z: Float, val yawRad: Float) {
+    /**
+     * True once the camera has turned away from where it looked at [other], or stepped back from it.
+     * Walking on towards what was ahead there, or along it, is not "away".
+     */
+    fun awayFrom(other: Standpoint): Boolean {
+        val turned = abs(atan2(sin(yawRad - other.yawRad), cos(yawRad - other.yawRad)))
+        val back = -((x - other.x) * sin(other.yawRad) + (z - other.z) * cos(other.yawRad))
+        return turned >= TURNED_RAD || back >= BACK_M
+    }
+
+    companion object {
+        const val BACK_M = 0.4f
+        const val TURNED_RAD = 0.5f
+    }
+}
+
 /**
  * A close wall stays close when depth disappears. Right in front of a plain wall depth-from-motion
  * has nothing to measure; reading that as "clear" would silence the warning exactly when it matters.
- * The last reading under [CLOSE_M] is held for [HOLD_MS] while the way ahead is unknown, until a
- * measured clear way cancels it.
+ * The last reading under [HOLD_M] is held for [HOLD_MS] while the way ahead is unknown (a recorded walk
+ * lost a plain wall at 1.3 m and said nothing down to touching it), until a measured clear way cancels
+ * it. Right in front of a wall depth also came back as "7 m, clear" (the logs: walk mode then said
+ * "Nothing close ahead"), so under [CLOSE_M] a clear way is believed only once the camera has turned
+ * away or stepped back from where the wall was measured. Turning away also ends the hold at once.
  */
 class CloseHold {
     private var heldM: Float? = null
     private var heldAtMs = 0L
+    private var heldFrom: Standpoint? = null
+    private var heldHeadingDeg: Float? = null
 
     /**
      * Distance to warn about ahead, or null. [walkedM] is how far the user walked since the last call
-     * (from the step detector): while depth is gone, the held wall gets that much closer.
+     * (from the step detector): while depth is gone, the held wall gets that much closer. [here] is
+     * null when ARCore does not know where the camera is; [headingDeg] is the compass, which still
+     * knows about turns then.
      */
-    fun update(nowMs: Long, ahead: ZoneReading, walkedM: Float = 0f): Float? {
+    fun update(nowMs: Long, ahead: ZoneReading, walkedM: Float = 0f, here: Standpoint? = null, headingDeg: Float? = null): Float? {
+        val held = heldM
+        val from = heldFrom
+        val was = heldHeadingDeg
+        val away = (from != null && here != null && here.awayFrom(from)) ||
+            (was != null && headingDeg != null && abs(((headingDeg - was + 540f) % 360f) - 180f) >= TURNED_DEG)
+        val knowsWhere = (from != null && here != null) || (was != null && headingDeg != null)
+        val measuredClose = ahead.blocked && !ahead.unknown && (ahead.distanceM ?: Float.MAX_VALUE) < CLOSE_M
+        if (!ahead.unknown && !measuredClose && held != null && held < CLOSE_M && knowsWhere && !away) {
+            heldAtMs = nowMs
+            return held
+        }
         if (ahead.unknown) {
             val held = heldM ?: return null
-            if (nowMs - heldAtMs > HOLD_MS) {
+            // Turned or stepped away: whatever is ahead now, it is not that wall.
+            if (nowMs - heldAtMs > HOLD_MS || away) {
                 heldM = null
                 return null
             }
@@ -199,9 +254,13 @@ class CloseHold {
         }
         if (ahead.blocked) {
             val d = ahead.distanceM
-            if (d != null && d < CLOSE_M) {
+            if (d != null && d < HOLD_M) {
                 heldM = d
                 heldAtMs = nowMs
+                heldFrom = here
+                heldHeadingDeg = headingDeg
+            } else {
+                heldM = null
             }
             return d
         }
@@ -215,6 +274,8 @@ class CloseHold {
 
     companion object {
         const val CLOSE_M = 1.2f
+        const val HOLD_M = 2f
+        const val TURNED_DEG = 30f
         const val HOLD_MS = 10_000L
     }
 }
@@ -281,8 +342,14 @@ object GroundProfile {
     const val STAIR_RISE_M = 0.05f
     const val MIN_RISES = 2
     const val NOISE_M = 0.02f
-    const val DEEP_DROP_M = 0.25f
+    /** Depth on a plain floor wobbles by 10-20 cm: a 10 cm lower path read as 30 cm, which is not stairs yet. */
+    const val DEEP_DROP_M = 0.4f
     const val MIN_DROP_ROWS = 3
+    const val LEVEL_BIN_M = 0.25f
+    const val MIN_BEFORE_BINS = 2
+    const val MIN_AFTER_BINS = 2
+    const val SUSTAIN_M = 0.75f
+    const val MAX_CLIMB_M = 0.22f
 
     /** Stairs climb about 0.6 m per metre; between 0.35 m and 0.55 m high they move at least this far away. */
     const val LOW_PART_M = 0.35f
@@ -314,6 +381,35 @@ object GroundProfile {
             if (heights.size >= MIN_SAMPLES) out.add(Row(median(forwards), median(heights)))
         }
         return out.sortedBy { it.forwardM }
+    }
+
+    /**
+     * The floor change ahead, judged against the floor nearest to the user in this frame, not against the
+     * phone's height: that height drifts (it follows a lower path, or a wall), and the logs showed the
+     * flat floor the user stood on announced as a step up. Quarter-metre medians, nearest first:
+     * - the floor "before" is where they stay level, and it has to be at least half a metre long;
+     * - what comes after has to stay higher (or lower) for [SUSTAIN_M], on at least half a metre of floor,
+     *   and may not climb more than [MAX_CLIMB_M] per quarter metre.
+     * Anything less is depth wobble, a wall, or the phone pointing at the ground: no change is reported.
+     */
+    fun read(rows: List<Row>): FloorReading? {
+        val steps = rows.groupBy { floor(it.forwardM / LEVEL_BIN_M).toInt() }.toSortedMap().entries.toList()
+        val levels = steps.map { (_, bin) -> median(bin.map { it.heightM }) }
+        var before = 1
+        while (before < levels.size && abs(levels[before] - median(levels.take(before))) <= FLOOR_M) before++
+        if (before < MIN_BEFORE_BINS || before == levels.size) return null
+        val level = median(levels.take(before))
+        val edgeM = steps[before].key * LEVEL_BIN_M
+        val reading = analyse(rows.map { Row(it.forwardM, if (it.forwardM < edgeM) 0f else it.heightM - level) }) ?: return null
+        val up = reading.change == FloorChange.STEP_UP || reading.change == FloorChange.STAIRS
+        val from = floor(reading.distanceM / LEVEL_BIN_M).toInt()
+        val after = steps.indices.filter { steps[it].key >= from && steps[it].key * LEVEL_BIN_M < reading.distanceM + SUSTAIN_M }
+            .map { levels[it] - level }
+        if (after.size < MIN_AFTER_BINS) return null
+        if (after.any { if (up) it <= FLOOR_M else it >= -FLOOR_M }) return null
+        // Nothing to walk on climbs steeper than stairs: that is the foot of a wall or a door.
+        if (up && after.zipWithNext().any { (a, b) -> b - a > MAX_CLIMB_M }) return null
+        return reading
     }
 
     fun analyse(rows: List<Row>): FloorReading? {
@@ -360,20 +456,60 @@ object GroundProfile {
     private fun median(v: List<Float>): Float = v.sorted()[v.size / 2]
 }
 
-/** A floor change is reported once it is seen in [need] of the last [window] frames (depth noise flickers). */
+/**
+ * A floor change is reported once it is seen in [need] of the last [window] frames (depth noise flickers)
+ * and it stays where it is while the user walks. What depth invents travels along with the camera: the
+ * logs showed "stairs going down" 2.7 m ahead for five seconds of walking down a corridor. A real step
+ * comes closer by what was walked. Within [TRUST_M] there is no time left to wait for that.
+ */
 class FloorConfirmer(private val window: Int = WINDOW, private val need: Int = NEED) {
-    private val history = ArrayDeque<FloorReading?>()
+    /** [placeM] is how far the user had walked when the change was seen, plus its distance. */
+    private class Sighting(val walkedM: Float, val placeM: Float)
 
-    fun update(reading: FloorReading?): FloorReading? {
+    private val history = ArrayDeque<FloorReading?>()
+    private val sightings = HashMap<FloorChange, ArrayDeque<Sighting>>()
+    private var walkedM = 0f
+
+    /** [advancedM]: how far the camera moved towards where it looks since the last call. */
+    fun update(reading: FloorReading?, advancedM: Float = 0f): FloorReading? {
+        walkedM += advancedM
         history.addLast(reading)
         while (history.size > window) history.removeFirst()
+        if (reading != null) remember(reading)
         val counts = history.filterNotNull().groupingBy { it.change }.eachCount()
         val change = counts.entries.filter { it.value >= need }.maxByOrNull { it.value }?.key ?: return null
-        return history.lastOrNull { it?.change == change }
+        val latest = history.lastOrNull { it?.change == change } ?: return null
+        return latest.takeIf { it.distanceM <= TRUST_M || staysPut(change) }
+    }
+
+    private fun remember(reading: FloorReading) {
+        val seen = sightings.getOrPut(reading.change) { ArrayDeque() }
+        seen.addLast(Sighting(walkedM, walkedM + reading.distanceM))
+        while (seen.size > MAX_SIGHTINGS || abs(walkedM - seen.first().walkedM) > KEEP_M) seen.removeFirst()
+    }
+
+    /**
+     * How far the place moved per metre walked, over at least [MIN_TRAVEL_M] of walking: 0 for a real
+     * step, 1 for something that keeps its distance from the camera.
+     */
+    private fun staysPut(change: FloorChange): Boolean {
+        val seen = sightings[change] ?: return false
+        if (seen.last().walkedM - seen.first().walkedM < MIN_TRAVEL_M) return false
+        val meanWalked = seen.sumOf { it.walkedM.toDouble() } / seen.size
+        val meanPlace = seen.sumOf { it.placeM.toDouble() } / seen.size
+        val spread = seen.sumOf { (it.walkedM - meanWalked) * (it.walkedM - meanWalked) }
+        if (spread <= 0.0) return false
+        val follow = seen.sumOf { (it.walkedM - meanWalked) * (it.placeM - meanPlace) } / spread
+        return abs(follow) <= MAX_FOLLOW
     }
 
     companion object {
         const val WINDOW = 3
         const val NEED = 2
+        const val TRUST_M = 2f
+        const val MIN_TRAVEL_M = 1f
+        const val MAX_FOLLOW = 0.3
+        const val KEEP_M = 2.5f
+        const val MAX_SIGHTINGS = 64
     }
 }

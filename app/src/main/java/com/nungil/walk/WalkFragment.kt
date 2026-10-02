@@ -45,6 +45,7 @@ import com.nungil.core.walk.RoutePhrases
 import com.nungil.core.walk.StepLength
 import com.nungil.core.walk.TrackingRestart
 import com.nungil.core.walk.WalkAlerts
+import com.nungil.core.walk.WalkPacing
 import com.nungil.core.walk.WalkBeep
 import com.nungil.core.walk.WalkCommand
 import com.nungil.core.walk.WalkPhrases
@@ -124,6 +125,7 @@ class WalkFragment : Fragment(), VoiceHandler {
     }
 
     private val alerts = WalkAlerts()
+    private val pacing = WalkPacing()
     private val network: ExecutorService = Executors.newSingleThreadExecutor()
     private val source: RouteSource? = BuildConfig.ORS_API_KEY.takeIf { it.isNotBlank() }?.let { OrsRouteSource(it) }
     private val gate = RerouteGate()
@@ -176,7 +178,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         heading = HeadingProvider(context)
         places = PlaceStore(context)
         location = LocationTracker(context) { onFix(it) }
-        vision = WalkVision(context, { services.lang }, stepM, { steps.getAndSet(0) }) { onReport(it) }
+        vision = WalkVision(context, { services.lang }, stepM, { steps.getAndSet(0) }, { heading.headingDeg }) { onReport(it) }
         renderer = WalkRenderer({ binding.walkingGl.display?.rotation ?: Surface.ROTATION_0 }, vision)
         binding.walkingGl.setRenderer(renderer)
         binding.walkingGl.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
@@ -325,16 +327,13 @@ class WalkFragment : Fragment(), VoiceHandler {
             services.haptics.buzz(Buzz.OBSTACLE)
         }
         val candidates = report.alerts + listOfNotNull(pendingNav, beaconAlert())
-        alerts.choose(now, candidates)?.let { chosen ->
+        alerts.choose(now, candidates) { pacing.allows(now, it) }?.let { chosen ->
             android.util.Log.i("Nungil", "Walk said [${chosen.kind} ${chosen.key}] ${chosen.text}")
             if (chosen === pendingNav) pendingNav = null
-            if (chosen.urgent) {
-                // A step or less from a wall: do not wait behind the queue.
-                services.speaker.sayNow(chosen.text)
-                _binding?.walkingAnnouncement?.text = chosen.text
-            } else {
-                say(chosen.text)
-            }
+            // Never queued (see WalkPacing): the newest sentence replaces the one being said.
+            pacing.said(now, chosen)
+            services.speaker.sayNow(chosen.text)
+            _binding?.walkingAnnouncement?.text = chosen.text
         }
     }
 

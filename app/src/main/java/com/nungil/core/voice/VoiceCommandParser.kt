@@ -18,7 +18,7 @@ import java.util.Locale
  * 4. adding a person, car or object, with the words that are not command words as the name;
  * 5. learner mode, then language;
  * 6. actions: stop, switch camera, read text, delete, back (verbs beat destinations: "stop full scan" stops);
- * 7. destinations, including known mishearings ("safe", "working mode", "fool scan", bare "person");
+ * 7. destinations, including known mishearings ("safe", "working mode", "fool scan", "light skin", bare "person");
  * 8. start and repeat;
  * 9. anything else is Unknown with the original text (dictation for names and queries).
  */
@@ -303,6 +303,14 @@ object VoiceCommandParser {
     // 7 ------------------------------------------------------------------------------------------------
     private val savedEn = setOf("saved", "save", "safe", "saves", "favorites", "favourites")
 
+    /** The logs: "walk" came back as "valk", "scan" as "skin", "live scan" as "light skin", "livescan", "lifespan". */
+    private val walkEn = arrayOf("walk", "walking", "walks", "valk", "wok", "wolk", "obstacle", "obstacles", "street")
+    private val scanMisheardEn = setOf("skin", "skan", "sken", "scam")
+    private val liveMisheardEn = arrayOf("light", "lite", "life", "alive")
+    private val liveScanMisheardEn = arrayOf("lifespan", "lifescan", "livespan", "lightscan", "liveskin", "lifeskin", "lightskin")
+
+    private fun scanWord(s: Said): Boolean = s.words.any { it.contains("scan") || it in scanMisheardEn }
+
     private fun tabOf(s: Said): SavedTab? = when {
         s.words.any { kindEn(it) == Kind.PERSON } || s.ko("사람", "얼굴", "친구") -> SavedTab.PEOPLE
         s.words.any { kindEn(it) == Kind.CAR } || s.ko("자동차") || "차" in s.words -> SavedTab.CARS
@@ -314,7 +322,7 @@ object VoiceCommandParser {
         val dest = when {
             s.seq("scan", "menu") || s.seq("scan", "options") || s.seq("scan", "modes") ||
                 s.ko("스캔메뉴", "둘러보기메뉴") -> Dest.ScanHub
-            s.has("walk", "walking", "obstacle", "obstacles", "street") || (s.has("mode") && s.has("work", "working")) ||
+            s.has(*walkEn) || (s.has("mode") && s.has("work", "working")) ||
                 s.ko("걷기", "보행", "걸을", "워킹", "산책", "장애물") -> Dest.Walk
             s.has("history", "recent") || s.seq("past", "scans") || s.seq("last", "scan") ||
                 s.ko("기록", "히스토리", "최근") -> Dest.History
@@ -323,8 +331,10 @@ object VoiceCommandParser {
             s.has("home", "menu") || s.seq("main", "screen") || s.seq("start", "screen") ||
                 s.ko("홈", "처음", "메인", "첫화면", "시작화면") -> Dest.Home
             s.has("live", "realtime", "continuous", "announce") || s.seq("real", "time") ||
+                s.words.any { it.startsWith("live") && it.contains("scan") } || (s.has(*liveMisheardEn) && scanWord(s)) ||
+                s.has(*liveScanMisheardEn) ||
                 s.ko("실시간", "라이브", "계속알려") -> Dest.Scan(ScanMode.LIVE)
-            s.words.any { it.contains("scan") } || s.seq("look", "around") || s.seq("around", "me") ||
+            scanWord(s) || s.seq("look", "around") || s.seq("around", "me") ||
                 s.has("surroundings", "panorama", "360") || s.seq("full", "view") ||
                 s.ko("전체스캔", "스캔", "스켄", "둘러보", "둘러봐", "주변", "주위", "한바퀴", "방안") ->
                 Dest.Scan(ScanMode.FULL)

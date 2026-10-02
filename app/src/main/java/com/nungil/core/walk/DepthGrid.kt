@@ -16,6 +16,23 @@ object DepthGrid {
         }
     }
 
+    /**
+     * False when the depth image is no measurement at all. On a recorded walk only 36 of 229 frames
+     * were: the rest was empty, or one value in every pixel (33.11 m everywhere, then 1.43 m, with the
+     * phone tilted down), which is what ARCore hands out when it has nothing to measure with. A real
+     * scene always spreads: right in front of a wall the recorded readings still ran from 0.31 to 0.41 m.
+     */
+    fun measured(gridM: FloatArray): Boolean {
+        val valid = gridM.filter { it > 0f && !it.isNaN() }.sorted()
+        if (valid.size < gridM.size * MIN_VALID_SHARE) return false
+        val low = valid[(valid.size - 1) / 100]
+        val high = valid[(valid.size - 1) * 99 / 100]
+        return high - low >= valid[valid.size / 2] * MIN_SPREAD
+    }
+
+    const val MIN_VALID_SHARE = 0.05f
+    const val MIN_SPREAD = 0.01f
+
     /** Median depth inside [box] (normalised screen coordinates), or null when nothing was measured there. */
     fun medianIn(gridM: FloatArray, width: Int, height: Int, box: Box): Float? {
         val x0 = (box.left * width).toInt().coerceIn(0, width - 1)

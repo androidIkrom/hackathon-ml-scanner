@@ -11,11 +11,15 @@ import com.google.ar.core.Session
 import com.google.ar.core.TrackingFailureReason
 import com.google.ar.core.TrackingState
 import com.google.ar.core.exceptions.NotYetAvailableException
+import com.nungil.core.walk.Standpoint
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
+import kotlin.math.abs
 import kotlin.math.asin
+import kotlin.math.atan2
+import kotlin.math.hypot
 import kotlin.math.max
 
 /**
@@ -25,8 +29,10 @@ import kotlin.math.max
  * @param rgba bottom-up RGBA pixels, [width] × [height], shaped like the screen.
  * @param depthMm depth image in millimetres ([depthWidth] × [depthHeight], sensor orientation), or null.
  * @param lut for each cell of the [gridWidth] × [gridHeight] screen-shaped grid, the index into [depthMm] (-1 = none).
- * @param focalGridPx vertical focal length in grid pixels; [pitchRad] positive when the phone looks up.
+ * @param focalGridPx focal length in grid pixels; [pitchRad] positive when the phone looks up.
  * @param groundLabel ARCore SemanticLabel number under the user's feet (bottom centre), or -1.
+ * @param advancedM how far the camera moved towards where it looks, along the ground, since the last capture.
+ * @param standpoint where the camera is and looks, or null when ARCore does not know.
  */
 class WalkInput(
     val rgba: ByteBuffer,
@@ -48,6 +54,10 @@ class WalkInput(
     val depthExpected: Boolean,
     /** ARCore is not tracking because there is not enough light. */
     val tooDark: Boolean = false,
+    val advancedM: Float = 0f,
+    val standpoint: Standpoint? = null,
+    /** ARCore is not tracking because the picture has nothing to hold on to (a plain wall right ahead). */
+    val featureless: Boolean = false,
 )
 
 /** Receives captures; [tryReserve] must succeed before [submit]. */
@@ -105,7 +115,12 @@ class WalkRenderer(
     private var lutDepthWidth = 0
     private var lutDepthHeight = 0
     private var lutStale = true
+    private var rowImagePx = 0f
+    private var scaleStale = true
     private val groundPoint = FloatArray(2)
+    private var lastX = 0f
+    private var lastZ = 0f
+    private var havePosition = false
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         GLES20.glClearColor(0f, 0f, 0f, 1f)
@@ -121,6 +136,7 @@ class WalkRenderer(
         gridHeight = (GRID_WIDTH.toLong() * height / width).toInt()
         geometryDirty = true
         lutStale = true
+        scaleStale = true
     }
 
     override fun onDrawFrame(gl: GL10?) {
@@ -141,7 +157,10 @@ class WalkRenderer(
             return
         }
         background.update(frame)
-        if (frame.hasDisplayGeometryChanged()) lutStale = true
+        if (frame.hasDisplayGeometryChanged()) {
+            lutStale = true
+            scaleStale = true
+        }
         if (frame.timestamp == 0L) return
         background.draw()
 
@@ -174,15 +193,29 @@ class WalkRenderer(
         var focal = 0f
         var pitch = 0f
         var haveDepth = false
+        var advanced = 0f
+        var standpoint: Standpoint? = null
         if (camera.trackingState == TrackingState.TRACKING) {
             // The camera looks along -Z; world Y is up.
-            val z = camera.displayOrientedPose.zAxis
+            val pose = camera.displayOrientedPose
+            val z = pose.zAxis
             pitch = asin((-z[1]).coerceIn(-1f, 1f))
-            // Focal length is in camera-image pixels; the portrait screen shows the image's long side top to bottom.
-            val intrinsics = camera.imageIntrinsics
-            val dims = intrinsics.imageDimensions
-            focal = intrinsics.focalLength[0] * gridHeight / max(dims[0], dims[1]).toFloat()
+            // Looking straight down there is no "ahead"; a jump is ARCore correcting its pose, not a step.
+            val flat = hypot(z[0], z[2])
+            if (havePosition && flat > MIN_FLAT) {
+                val moved = ((pose.tx() - lastX) * -z[0] + (pose.tz() - lastZ) * -z[2]) / flat
+                if (abs(moved) <= MAX_ADVANCE_M) advanced = moved
+            }
+            if (flat > MIN_FLAT) standpoint = Standpoint(pose.tx(), pose.tz(), atan2(-z[0], -z[2]))
+            lastX = pose.tx()
+            lastZ = pose.tz()
+            havePosition = true
+            // Focal length is in camera-image pixels; one grid row covers rowImagePx of them.
+            if (scaleStale || rowImagePx <= 0f) measureScale(frame)
+            if (rowImagePx > 0f) focal = camera.imageIntrinsics.focalLength[0] / rowImagePx
             if (depthEnabled) haveDepth = copyDepth(frame)
+        } else {
+            havePosition = false
         }
         var label = -1
         var confidence = 0
@@ -215,6 +248,9 @@ class WalkRenderer(
             timestampMs = now,
             depthExpected = depthEnabled,
             tooDark = camera.trackingFailureReason == TrackingFailureReason.INSUFFICIENT_LIGHT,
+            advancedM = advanced,
+            standpoint = standpoint,
+            featureless = camera.trackingFailureReason == TrackingFailureReason.INSUFFICIENT_FEATURES,
         )
     }
 
@@ -242,6 +278,31 @@ class WalkRenderer(
         false
     }
 
+    /**
+     * How many camera-image pixels one grid row covers. ARCore crops the image to fill the view, and the
+     * camera card is much less tall than the image: taking the image's whole long side for the card's
+     * height made every row's angle too large, and a flat corridor floor read 60-100 cm "below the floor".
+     */
+    private fun measureScale(frame: Frame) {
+        if (gridHeight <= 0) return
+        val view = floatArrayOf(0.5f, 0.25f, 0.5f, 0.75f)
+        val image = FloatArray(4)
+        frame.transformCoordinates2d(Coordinates2d.VIEW_NORMALIZED, view, Coordinates2d.IMAGE_PIXELS, image)
+        rowImagePx = hypot(image[2] - image[0], image[3] - image[1]) / (gridHeight * 0.5f)
+        scaleStale = false
+        val intrinsics = frame.camera.imageIntrinsics
+        val dims = intrinsics.imageDimensions
+        Log.i(
+            TAG,
+            "Walk view ${viewWidth}x$viewHeight grid ${GRID_WIDTH}x$gridHeight image ${dims[0]}x${dims[1]}: " +
+                "%.2f image px per row, focal %.1f grid px (the whole long side would give %.1f)".format(
+                    rowImagePx, if (rowImagePx > 0f) intrinsics.focalLength[0] / rowImagePx else 0f,
+                    intrinsics.focalLength[0] * gridHeight / max(dims[0], dims[1]),
+                ),
+        )
+    }
+
+    /** The depth image lines up with the camera texture, not with the CPU image (it can be a crop of that). */
     private fun buildLut(frame: Frame, depthWidth: Int, depthHeight: Int) {
         val n = GRID_WIDTH * gridHeight
         val view = FloatArray(n * 2)
@@ -251,7 +312,7 @@ class WalkRenderer(
             view[i + 1] = (y + 0.5f) / gridHeight
         }
         val image = FloatArray(n * 2)
-        frame.transformCoordinates2d(Coordinates2d.VIEW_NORMALIZED, view, Coordinates2d.IMAGE_NORMALIZED, image)
+        frame.transformCoordinates2d(Coordinates2d.VIEW_NORMALIZED, view, Coordinates2d.TEXTURE_NORMALIZED, image)
         val table = IntArray(n)
         for (i in 0 until n) {
             val u = image[i * 2]
@@ -261,6 +322,17 @@ class WalkRenderer(
         lut = table
         lutDepthWidth = depthWidth
         lutDepthHeight = depthHeight
+        // Where the top and the bottom of the view's middle column land, in both coordinate systems.
+        val ends = floatArrayOf(0.5f, 0.1f, 0.5f, 0.9f)
+        val inTexture = FloatArray(4)
+        val inImage = FloatArray(4)
+        frame.transformCoordinates2d(Coordinates2d.VIEW_NORMALIZED, ends, Coordinates2d.TEXTURE_NORMALIZED, inTexture)
+        frame.transformCoordinates2d(Coordinates2d.VIEW_NORMALIZED, ends, Coordinates2d.IMAGE_NORMALIZED, inImage)
+        Log.i(
+            TAG,
+            "Walk depth image ${depthWidth}x$depthHeight: view top/bottom -> texture %.2f,%.2f / %.2f,%.2f image %.2f,%.2f / %.2f,%.2f"
+                .format(inTexture[0], inTexture[1], inTexture[2], inTexture[3], inImage[0], inImage[1], inImage[2], inImage[3]),
+        )
         mapGroundPoint(frame)
         lutStale = false
     }
@@ -287,5 +359,7 @@ class WalkRenderer(
         const val GRID_WIDTH = 90
         const val GROUND_Y = 0.93f
         const val FAILURE_LOG_EVERY_MS = 3_000L
+        const val MIN_FLAT = 0.2f
+        const val MAX_ADVANCE_M = 1.5f
     }
 }

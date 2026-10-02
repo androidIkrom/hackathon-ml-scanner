@@ -36,6 +36,8 @@ class WakeWordTest {
         assertEquals(WakeResult.Wake, asleep("Nungil"))
     }
 
+    @Test fun eyeStopMisheardAsIStillSleeps() = assertEquals(WakeResult.Sleep, awake("I still"))
+
     @Test fun eyeStopSleeps() {
         assertEquals(WakeResult.Sleep, awake("eye stop"))
         assertEquals(WakeResult.Sleep, awake("I stop."))
