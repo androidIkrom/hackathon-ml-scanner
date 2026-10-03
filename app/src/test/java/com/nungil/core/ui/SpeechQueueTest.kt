@@ -16,6 +16,17 @@ class SpeechQueueTest {
         assertTrue(q.isSpeaking)
     }
 
+    @Test fun quietOnlyWhenNothingIsSaidOrWaiting() {
+        // A question has to be heard before the microphone opens for the answer.
+        assertTrue(q.isQuiet)
+        q.add("Seoul Station, 400 metres away. Say yes to go.")
+        assertFalse(q.isQuiet)
+        q.next()
+        assertFalse(q.isQuiet)
+        q.done()
+        assertTrue(q.isQuiet)
+    }
+
     @Test fun nothingNewWhileSpeaking() {
         q.add("one")
         q.add("two")

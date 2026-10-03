@@ -66,6 +66,9 @@ class RecognizerPolicy {
         /** "I did not understand" is said at most once in this long (people nearby are heard too). */
         const val NOT_UNDERSTOOD_GAP_MS = 10_000L
 
+        /** A session that has only just started is not dropped again. */
+        const val FRESH_SESSION_MIN_MS = 400L
+
         /** How many guesses to ask the recognizer for. */
         const val MAX_GUESSES = 5
 

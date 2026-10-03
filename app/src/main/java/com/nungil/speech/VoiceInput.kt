@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -36,6 +37,8 @@ import com.nungil.core.voice.WakeWord
  * @param appSaying what the app is saying now or has just said (for echo detection).
  * @param isAwake true between the wake word and "Eye stop".
  * @param understood true when a recognizer guess would do something; such a guess beats a misheard first one.
+ * @param onGuesses every guess for the phrase, just before [onHeard] gets the chosen one.
+ * @param bias words the recognizer should lean towards right now (place names while a place is expected).
  */
 class VoiceInput(
     private val context: Context,
@@ -45,6 +48,8 @@ class VoiceInput(
     private val holdSound: () -> Unit,
     private val releaseSound: () -> Unit,
     private val understood: (String) -> Boolean,
+    private val onGuesses: (List<String>) -> Unit,
+    private val bias: () -> List<String>,
     private val onHeard: (String) -> Unit,
     private val onProblem: (Phrase) -> Unit,
 ) : RecognitionListener {
@@ -58,6 +63,8 @@ class VoiceInput(
     private var oneShot: ((String) -> Unit)? = null
     private var lastPartial = ""
     private var holding = false
+    private var speechBegan = false
+    private var listeningSince = 0L
 
     /** Set by a microphone button: app sound stays off until then, even through silence. */
     private var talkUntil = 0L
@@ -82,6 +89,20 @@ class VoiceInput(
     fun talkNow() {
         if (alwaysOn) chime.playOn() else start()
         holdForTalk()
+    }
+
+    /**
+     * The app has just stopped talking. A recognition session that ran while it talked comes back empty
+     * (the logs: three in a row, and the user's answer to "Say yes to go" was lost in one of them), so
+     * that session is dropped and a clean one starts for what the user says next. Not when the user is
+     * already talking over the app: partial words that are not the app's own.
+     */
+    fun freshSession() {
+        if (!alwaysOn || oneShot != null) return
+        if (lastPartial.isNotEmpty() && !VoiceBargeIn.isEcho(lastPartial, appSaying())) return
+        if (SystemClock.elapsedRealtime() - listeningSince < RecognizerPolicy.FRESH_SESSION_MIN_MS) return
+        recognizer?.cancel()
+        schedule(RecognizerPolicy.DELAY_AFTER_SILENCE_MS)
     }
 
     /** [chime] plays the "off" sound: true when the user turned voice off, false when the app pauses. */
@@ -131,6 +152,8 @@ class VoiceInput(
             return
         }
         lastPartial = ""
+        speechBegan = false
+        listeningSince = SystemClock.elapsedRealtime()
         // Hide the recognizer's start beep. Music (the TTS stream) is muted only while the user is talking.
         muter.mute(includeMusic = holding)
         r.startListening(intent())
@@ -161,6 +184,12 @@ class VoiceInput(
             .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             .putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, RecognizerPolicy.MAX_GUESSES)
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            .apply {
+                val words = bias()
+                if (Build.VERSION.SDK_INT >= 33 && words.isNotEmpty()) {
+                    putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, ArrayList(words))
+                }
+            }
 
     override fun onReadyForSpeech(params: Bundle?) = muter.unmuteSoon()
 
@@ -201,6 +230,7 @@ class VoiceInput(
         }
         val delay = policy.afterResult()
         endHold(force = true)
+        onGuesses(guesses.map { it.trim() }.filter { it.isNotEmpty() })
         val once = oneShot
         if (once != null) {
             oneShot = null
@@ -212,6 +242,12 @@ class VoiceInput(
     }
 
     override fun onError(error: Int) {
+        // Speech was heard but no words came out of it: worth a line, plain silence is not.
+        if (speechBegan && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
+            val seconds = (SystemClock.elapsedRealtime() - listeningSince) / 1000
+            Log.i(TAG, "Recognizer heard sound for $seconds s but no words" + if (appSaying() != null) " (the app was talking)" else "")
+        }
+        speechBegan = false
         muter.unmuteSoon()
         endHold()
         val decision = policy.afterError(error, language())
@@ -258,8 +294,12 @@ class VoiceInput(
         releaseSound()
     }
 
-    override fun onBeginningOfSpeech() = Unit
+    override fun onBeginningOfSpeech() {
+        speechBegan = true
+    }
     override fun onRmsChanged(rmsdB: Float) = Unit
     override fun onBufferReceived(buffer: ByteArray?) = Unit
     override fun onEvent(eventType: Int, params: Bundle?) = Unit
 }
+
+private const val TAG = "Nungil"
