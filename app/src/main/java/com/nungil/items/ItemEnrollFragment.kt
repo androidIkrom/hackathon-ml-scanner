@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Looking: the thing in the middle of the frame is outlined (ItemSegmenter) and tinted on the preview, and
  * once a few frames agree on what it looks like it is described and the user is asked whether it is the
- * right one: "I see something. It is black and round, about 15 centimetres across, about 40 centimetres away.
+ * right one: "It is black and round, about 15 centimetres across, about 40 centimetres away.
  * Is this it?" Yes (said, or the button) starts learning; no starts looking again.
  *
  * Learning: 3 samples held still, then 3 each with the phone moved left, right and up (ItemEnrollmentGuide).

@@ -51,11 +51,24 @@ class ItemSight(context: Context) : Closeable {
             val py = (points[2 * i + 1] * frame.height / mask.height).coerceIn(0, frame.height - 1)
             frame.getPixel(px, py)
         }
-        val color = ItemColor.name(pixels, light.gains, light.isDark)
+        val whiteLevel = ItemColor.whiteLevel(framePixels(frame), light.gains)
+        val color = ItemColor.name(pixels, light.gains, light.isDark, whiteLevel)
         val outline = ItemLooks.outline(mask.inside, mask.width, mask.height)
         val look = ItemLooks.look(outline, color, focusDistanceM, hfovDeg, mask.width)
         val view = ItemEnrollmentGuide.View(vector, mask.box.centerX, mask.box.centerY, mask.cover)
-        return Sighting(mask, look, view, square, ItemColor.shares(pixels, light.gains))
+        val colours = ItemColor.shares(pixels, light.gains, whiteLevel) + ", white level %.2f".format(whiteLevel)
+        return Sighting(mask, look, view, square, colours)
+    }
+
+    /** [FRAME_GRID] x [FRAME_GRID] pixels spread over the whole frame, for its white level. */
+    private fun framePixels(frame: Bitmap): IntArray = IntArray(FRAME_GRID * FRAME_GRID) { i ->
+        val x = ((i % FRAME_GRID + 0.5f) * frame.width / FRAME_GRID).toInt().coerceIn(0, frame.width - 1)
+        val y = ((i / FRAME_GRID + 0.5f) * frame.height / FRAME_GRID).toInt().coerceIn(0, frame.height - 1)
+        frame.getPixel(x, y)
+    }
+
+    private companion object {
+        const val FRAME_GRID = 20
     }
 
     override fun close() {

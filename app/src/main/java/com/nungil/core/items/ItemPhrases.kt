@@ -28,12 +28,14 @@ object ItemPhrases {
     /**
      * The question before learning: what the thing in view looks like, so that someone who cannot see the
      * screen knows which thing it is, and whether it is the right one. Null when nothing about it is known.
+     * Short: the microphone hears nothing while the app talks, and a nine-second question lost the answer
+     * said during it (the logs).
      */
     fun ask(look: ItemLook, lang: Lang): String? {
         val it = look(look, lang) ?: return null
         return when (lang) {
-            Lang.EN -> "I see something. $it Is this it? Say yes or no."
-            Lang.KO -> "물건이 보여요. $it 이것인가요? 네 또는 아니요라고 말해 주세요."
+            Lang.EN -> "$it Is this it?"
+            Lang.KO -> "$it 이것인가요?"
         }
     }
 

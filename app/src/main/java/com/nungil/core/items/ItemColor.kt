@@ -9,34 +9,66 @@ import com.nungil.core.scan.WhiteBalance
  * scan's white balance of the whole frame (under warm light a white remote is orange without it). The most
  * common name wins outright: scan's rule that a colourful third beats a dull majority is for detector boxes
  * with background in them, and it called a black hat blue (the logs).
+ *
+ * Light and dark are judged against the frame: the camera exposes a dim room so that its brightest parts come
+ * out at 0.7, and a white bottle in it at 0.6 (the logs), which is gray by the fixed rule. The frame's
+ * [whiteLevel] is what its brightest parts came out at, and a pixel's brightness is read as a part of that.
  */
 object ItemColor {
     /** Below this value and saturation a pixel is black: a glossy dark surface shows its sheen, not its colour. */
     const val DARK_V = 0.35f
     const val DARK_S = 0.45f
 
-    /** The most common colour of [pixels] (ARGB) under the frame's white-balance [gains], or null in a dark frame or with no pixels. */
-    fun name(pixels: IntArray, gains: FloatArray, frameIsDark: Boolean): ColorName? {
+    /** The brightest parts of the frame are its brightest [WHITE_PERCENTILE] of pixels. */
+    const val WHITE_PERCENTILE = 95
+
+    /** A frame is never stretched more than this: at night everything stays dark, not white. */
+    const val MIN_WHITE_LEVEL = 0.6f
+
+    /**
+     * The most common colour of [pixels] (ARGB) under the frame's white-balance [gains], with brightness read
+     * against the frame's [whiteLevel]; null in a dark frame or with no pixels.
+     */
+    fun name(pixels: IntArray, gains: FloatArray, frameIsDark: Boolean, whiteLevel: Float = 1f): ColorName? {
         if (frameIsDark || pixels.isEmpty()) return null
-        val counts = counts(pixels, gains)
+        val counts = counts(pixels, gains, whiteLevel)
         if (counts.all { it == 0 }) return null
         return ColorName.entries.maxByOrNull { counts[it.ordinal] }
     }
 
-    /** How many of [pixels] have each colour under [gains], by ColorName ordinal. */
-    fun counts(pixels: IntArray, gains: FloatArray): IntArray {
+    /** How many of [pixels] have each colour under [gains] and [whiteLevel], by ColorName ordinal. */
+    fun counts(pixels: IntArray, gains: FloatArray, whiteLevel: Float = 1f): IntArray {
         val counts = IntArray(ColorName.entries.size)
+        val stretch = 1f / whiteLevel.coerceIn(MIN_WHITE_LEVEL, 1f)
         for (p in pixels) {
             val q = WhiteBalance.apply(p, gains)
-            val name = of((q shr 16) and 0xFF, (q shr 8) and 0xFF, q and 0xFF) ?: continue
+            val r = (((q shr 16) and 0xFF) * stretch).toInt().coerceAtMost(255)
+            val g = (((q shr 8) and 0xFF) * stretch).toInt().coerceAtMost(255)
+            val b = ((q and 0xFF) * stretch).toInt().coerceAtMost(255)
+            val name = of(r, g, b) ?: continue
             counts[name.ordinal]++
         }
         return counts
     }
 
+    /**
+     * What the brightest parts of the frame came out at (0..1): the [WHITE_PERCENTILE] of the pixels' brightest
+     * channel after [gains], at least [MIN_WHITE_LEVEL]. [framePixels] are spread over the whole frame.
+     */
+    fun whiteLevel(framePixels: IntArray, gains: FloatArray): Float {
+        if (framePixels.isEmpty()) return 1f
+        val bright = IntArray(framePixels.size) { i ->
+            val q = WhiteBalance.apply(framePixels[i], gains)
+            maxOf((q shr 16) and 0xFF, (q shr 8) and 0xFF, q and 0xFF)
+        }
+        bright.sort()
+        val at = (bright.size * WHITE_PERCENTILE / 100).coerceAtMost(bright.size - 1)
+        return (bright[at] / 255f).coerceIn(MIN_WHITE_LEVEL, 1f)
+    }
+
     /** The colours seen, most common first, as "black 53%, blue 18%" (for the log). */
-    fun shares(pixels: IntArray, gains: FloatArray): String {
-        val counts = counts(pixels, gains)
+    fun shares(pixels: IntArray, gains: FloatArray, whiteLevel: Float = 1f): String {
+        val counts = counts(pixels, gains, whiteLevel)
         val total = counts.sum().coerceAtLeast(1)
         return ColorName.entries.filter { counts[it.ordinal] > 0 }.sortedByDescending { counts[it.ordinal] }
             .joinToString(", ") { "${it.en} ${counts[it.ordinal] * 100 / total}%" }

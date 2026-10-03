@@ -122,11 +122,11 @@ class ItemLooksTest {
     @Test fun theQuestion() {
         val look = ItemLook(ColorName.BLACK, ItemShape.ROUND, 20, null, 40)
         assertEquals(
-            "I see something. It is black and round, about 20 centimetres across, about 40 centimetres away. Is this it? Say yes or no.",
+            "It is black and round, about 20 centimetres across, about 40 centimetres away. Is this it?",
             ItemPhrases.ask(look, Lang.EN),
         )
         assertEquals(
-            "물건이 보여요. 검은색이고 둥근 모양이에요. 크기는 약 20센티미터, 거리는 약 40센티미터예요. 이것인가요? 네 또는 아니요라고 말해 주세요.",
+            "검은색이고 둥근 모양이에요. 크기는 약 20센티미터, 거리는 약 40센티미터예요. 이것인가요?",
             ItemPhrases.ask(look, Lang.KO),
         )
         assertNull(ItemPhrases.ask(ItemLook(null, null, null, null, null), Lang.EN))
