@@ -10,12 +10,12 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import com.nungil.R
-import com.nungil.contract.Box
 import com.nungil.contract.Buzz
 import com.nungil.contract.Facing
 import com.nungil.contract.ItemKind
@@ -27,37 +27,51 @@ import com.nungil.contract.app.AppServices
 import com.nungil.contract.app.VisionFrame
 import com.nungil.contract.app.VoiceHandler
 import com.nungil.contract.app.services
-import com.nungil.core.items.CenterPick
 import com.nungil.core.items.ItemCrop
 import com.nungil.core.items.ItemEnrollmentGuide
-import com.nungil.core.items.ItemKinds
-import com.nungil.core.items.ItemMatcher
+import com.nungil.core.items.ItemLook
+import com.nungil.core.items.ItemLooks
 import com.nungil.core.items.ItemPhrases
 import com.nungil.core.items.ItemStep
 import com.nungil.core.people.EnrollPhrases
 import com.nungil.core.people.VectorBytes
+import com.nungil.core.walk.RoutePhrases
 import com.nungil.data.AppDatabase
 import com.nungil.data.ItemEmbeddingEntity
 import com.nungil.data.ItemEntity
 import com.nungil.databinding.ItemEnrollFragmentBinding
+import com.nungil.design.resolveColorAttr
 import com.nungil.saved.PhotoFiles
 import com.nungil.saved.returnToSaved
 import com.nungil.scan.CameraSession
-import com.nungil.scan.OverlayView
 import com.nungil.search.CameraGate
+import com.nungil.shell.MainActivity
+import com.nungil.speech.TtsSpeaker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Three-step item enrolment: 4 samples held still, 4 moved left, 4 moved right (12 in all). The box nearest the
- * centre that covers at least 5% of the frame is embedded; detector confidence is 0.3 here. After each prompt the
- * user gets [PROMPT_WAIT_MS] to follow it, and a left or right sample counts only once the item has really shifted
- * (ItemEnrollmentGuide). Nothing is saved until the last sample.
+ * Item enrolment in two parts.
+ *
+ * Looking: the thing in the middle of the frame is outlined (ItemSegmenter) and tinted on the preview, and
+ * once a few frames agree on what it looks like it is described and the user is asked whether it is the
+ * right one: "I see something. It is black and round, about 15 centimetres across, about 40 centimetres away.
+ * Is this it?" Yes (said, or the button) starts learning; no starts looking again.
+ *
+ * Learning: 3 samples held still, then 3 each with the phone moved left, right and up (ItemEnrollmentGuide).
+ * The thing is followed from frame to frame (the segmenter is asked where it was last seen), and only what
+ * still looks like it and is about its size is learned: the bottle behind it is not. A moved step counts only
+ * once the thing has really shifted that way from where it was held still. The square around its outline is
+ * embedded (ItemWindows.square). Nothing is saved until the last sample.
+ *
+ * Size and distance come from where the lens is focused, so they are rough. One worker thread does the
+ * segmenting and embedding (about half a second a frame); frames that arrive while it is busy are dropped.
  */
 class ItemEnrollFragment : Fragment(), VoiceHandler {
     private var _binding: ItemEnrollFragmentBinding? = null
@@ -72,29 +86,47 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
     private lateinit var kind: ItemKind
     private lateinit var appContext: Context
 
-    private var camera: CameraSession? = null
-    private var extras: ExecutorService? = null
-    private val busy = AtomicBoolean(false)
+    private enum class Phase { LOOKING, LEARNING, FINISHED }
 
+    @Volatile
+    private var phase = Phase.LOOKING
+
+    @Volatile
+    private var camera: CameraSession? = null
+    private var worker: ExecutorService? = null
+    private val busy = AtomicBoolean(false)
+    private var maskFill = 0
+    private var maskEdge = 0
+
+    /** Learning goes on (not paused). */
     @Volatile
     private var running = false
 
-    @Volatile
-    private var finished = false
-
-    /** No samples before this time, so the user hears the prompt and has time to follow it. */
+    /** No samples, no question before this time: the user hears what was said and has time to follow it. */
     @Volatile
     private var waitUntilMs = 0L
 
-    // Extras thread only.
-    private var embedder: ItemEmbedder? = null
+    /** When something last happened for the user (a sample, a prompt), so hints are not repeated too soon. */
+    @Volatile
+    private var lastHintMs = 0L
+
+    /** The user was asked and has not answered; cleared by the answer, or so the question is asked again. */
+    @Volatile
+    private var asked = false
+    private var openedMs = 0L
+
+    // Worker thread only.
+    private var sight: ItemSight? = null
     private val guide = ItemEnrollmentGuide()
-    private val samples = mutableListOf<FloatArray>()
-    private val labels = mutableListOf<String>()
+    private val looks = ArrayDeque<ItemLook>()
+    private var trackX: Float? = null
+    private var trackY: Float? = null
+    private var learningStarted = false
     private var photo: Bitmap? = null
     private var lastSampleMs = 0L
     private var lastSeenMs = 0L
-    private var lastHintMs = 0L
+    private var askedAtMs = 0L
+    private var lastLogMs = 0L
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = ItemEnrollFragmentBinding.inflate(inflater, container, false)
@@ -107,17 +139,28 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         name = args.name
         kind = args.kind
         appContext = requireContext().applicationContext
+        openedMs = SystemClock.elapsedRealtime()
         binding.itemEnrollTitle.text = getString(R.string.item_enroll_title, name)
         ViewCompat.setAccessibilityHeading(binding.itemEnrollTitle, true)
-        binding.itemEnrollPrompt.text = ItemPhrases.prompt(ItemStep.STILL, lang)
-        binding.itemEnrollButton.setOnClickListener { if (running) pause() else start() }
+        binding.itemEnrollPrompt.text = ItemPhrases.start(name, lang)
+        binding.itemEnrollButton.setText(R.string.item_enroll_yes)
+        binding.itemEnrollButton.setOnClickListener {
+            when {
+                phase == Phase.LOOKING -> confirm()
+                running -> pause()
+                else -> resume()
+            }
+        }
         gate.attach(binding.itemEnrollPermission)
+        val primary = requireContext().resolveColorAttr(R.attr.ngPrimary)
+        maskFill = ColorUtils.setAlphaComponent(primary, MASK_FILL_ALPHA)
+        maskEdge = primary
 
         val executor = Executors.newSingleThreadExecutor()
-        extras = executor
+        worker = executor
         executor.execute {
             try {
-                embedder = ItemEmbedder(appContext)
+                sight = ItemSight(appContext)
             } catch (e: Exception) {
                 Log.i(TAG, "Item enrolment unavailable", e)
                 main.post { modelMissing() }
@@ -137,80 +180,130 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         camera?.stop()
         camera = null
         gate.detach()
-        extras?.let { executor ->
-            executor.execute { embedder?.close() }
+        (activity as? MainActivity)?.dropWords()
+        worker?.let { executor ->
+            executor.execute {
+                sight?.close()
+                sight = null
+            }
             // No waiting here: blocking the main thread froze the screen while leaving. The close task above
-            // still runs last on the extras thread, and shutdown() lets nothing new in.
+            // still runs last on the worker thread, and shutdown() lets nothing new in.
             executor.shutdown()
         }
-        extras = null
+        worker = null
         main.removeCallbacksAndMessages(null)
         _binding = null
     }
 
     override fun onVoiceCommand(command: VoiceCommand): Boolean = when (command) {
         VoiceCommand.Start -> {
-            start()
+            if (phase == Phase.LOOKING) confirm() else resume()
             true
         }
         VoiceCommand.Stop -> {
             pause()
             true
         }
+        // "Yes" and "no" are not commands: they come here as plain words while the question is open.
+        is VoiceCommand.Unknown -> phase == Phase.LOOKING && asked && answer(command.text)
         else -> false
     }
 
     private fun startCamera() {
         if (camera != null || _binding == null) return
-        val options = CameraSession.Options(
-            facing = Facing.BACK,
-            detect = true,
-            keepBitmap = true,
-            minScore = ENROLL_MIN_SCORE,
-        )
+        val options = CameraSession.Options(facing = Facing.BACK, detect = false, keepBitmap = true)
         camera = CameraSession(this, binding.itemEnrollPreview, options, ::onFrame, ::onCameraError).also { it.start() }
+        // Time to hear "Learning (name). Point the camera at it and hold still." and do it.
+        waitUntilMs = SystemClock.elapsedRealtime() + START_WAIT_MS
+        lastHintMs = waitUntilMs
     }
 
-    private fun start() {
-        if (finished || running) return
+    // ---- The question -------------------------------------------------------------------------------
+
+    /** Main thread: the question has been asked; the next words are the answer. */
+    private fun listenForAnswer() {
+        if (_binding == null || phase != Phase.LOOKING) return
+        (activity as? MainActivity)?.dictationAccepts = { RoutePhrases.isYes(it) || RoutePhrases.isNo(it) }
+        services.askForWords(viewLifecycleOwner) { text -> answer(text) }
+    }
+
+    /** Main thread: "yes" starts learning, "no" starts looking again; anything else is asked about again. */
+    private fun answer(text: String): Boolean {
+        if (phase != Phase.LOOKING) return false
+        when {
+            RoutePhrases.isYes(text) -> confirm()
+            RoutePhrases.isNo(text) -> notThat()
+            else -> {
+                listenForAnswer()
+                return false
+            }
+        }
+        return true
+    }
+
+    /** Main thread: the thing in view is the item. Learning starts with the phone held still. */
+    private fun confirm() {
+        if (phase != Phase.LOOKING || _binding == null) return
+        (activity as? MainActivity)?.dropWords()
+        phase = Phase.LEARNING
         running = true
+        asked = false
         waitUntilMs = SystemClock.elapsedRealtime() + PROMPT_WAIT_MS
+        lastHintMs = waitUntilMs
         binding.itemEnrollButton.setText(R.string.item_enroll_pause)
-        services.speaker.say(ItemPhrases.prompt(guide.step ?: ItemStep.STILL, lang))
+        binding.itemEnrollPrompt.text = ItemPhrases.prompt(ItemStep.STILL, lang)
+        val text = ItemPhrases.confirmed(lang)
+        (services.speaker as? TtsSpeaker)?.brighten(text)
+        services.speaker.sayNow(text)
+    }
+
+    /** Main thread: the thing in view is not the item. Looking starts again. */
+    private fun notThat() {
+        if (phase != Phase.LOOKING) return
+        asked = false
+        waitUntilMs = SystemClock.elapsedRealtime() + PROMPT_WAIT_MS
+        lastHintMs = waitUntilMs
+        services.speaker.sayNow(ItemPhrases.notThat(lang))
     }
 
     private fun pause() {
-        if (!running) return
+        if (phase != Phase.LEARNING || !running) return
         running = false
         binding.itemEnrollButton.setText(R.string.item_enroll_resume)
         services.speaker.say(EnrollPhrases.paused(lang))
     }
 
+    private fun resume() {
+        if (phase != Phase.LEARNING || running) return
+        running = true
+        waitUntilMs = SystemClock.elapsedRealtime() + PROMPT_WAIT_MS
+        lastHintMs = waitUntilMs
+        binding.itemEnrollButton.setText(R.string.item_enroll_pause)
+        services.speaker.say(ItemPhrases.prompt(guide.step ?: ItemStep.STILL, lang))
+    }
+
     private fun modelMissing() {
         val b = _binding ?: return
         running = false
-        finished = true
+        phase = Phase.FINISHED
         b.itemEnrollButton.isEnabled = false
         b.itemEnrollPrompt.setText(R.string.item_enroll_model_missing)
         services.speaker.say(getString(R.string.item_enroll_model_missing))
         services.haptics.buzz(Buzz.ERROR)
     }
 
-    /** Analysis thread: show the picked box, then hand the frame to the extras thread unless it is busy. */
-    private fun onFrame(frame: VisionFrame) {
-        val allowed = frame.detections.filter { ItemKinds.allows(kind, it.label) }
-        val picked = allowed.getOrNull(CenterPick.pick(allowed))
-        val marks = listOfNotNull(picked?.let { OverlayView.Mark(it.box, null, OverlayView.Style.TARGET) })
-        main.post { _binding?.itemEnrollOverlay?.show(marks, frame.imageWidth, frame.imageHeight, false) }
+    // ---- Frames -------------------------------------------------------------------------------------
 
-        if (!running || finished) return
+    /** Analysis thread: hand the frame to the worker unless it is still busy with an earlier one. */
+    private fun onFrame(frame: VisionFrame) {
+        if (phase == Phase.FINISHED) return
         val bitmap = frame.bitmap ?: return
-        val executor = extras ?: return
+        val executor = worker ?: return
         if (!busy.compareAndSet(false, true)) return
         try {
             executor.execute {
                 try {
-                    process(bitmap, picked?.box, picked?.label)
+                    process(bitmap, frame.hfovDeg)
                 } finally {
                     busy.set(false)
                 }
@@ -220,42 +313,115 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         }
     }
 
-    /** Extras thread. */
-    private fun process(bitmap: Bitmap, box: Box?, label: String?) {
-        val embedder = embedder ?: return
-        if (!running || finished) return
+    /** Worker thread. */
+    private fun process(bitmap: Bitmap, hfovDeg: Float) {
+        val sight = sight ?: return
         val now = SystemClock.elapsedRealtime()
-        if (box == null || label == null) {
-            if (now - lastSeenMs > NO_ITEM_HINT_MS && now - lastHintMs > NO_ITEM_HINT_MS) {
+        // Where the thing was last seen, else the middle of the frame.
+        val x = trackX ?: 0.5f
+        val y = trackY ?: 0.5f
+        val seen = sight.see(bitmap, x, y, hfovDeg, camera?.focusDistanceM)
+        showMask(seen, bitmap)
+        if (now - lastLogMs >= LOG_MS) {
+            lastLogMs = now
+            val about = seen?.let { String.format(Locale.US, "%.0f%% of the frame at %.2f,%.2f, %s", it.mask.cover * 100, x, y, it.look) } ?: "nothing"
+            Log.i(TAG, "Item $phase: $about, ${SystemClock.elapsedRealtime() - now} ms")
+        }
+        when (phase) {
+            Phase.LOOKING -> looking(seen, now)
+            Phase.LEARNING -> learning(seen, bitmap, now)
+            Phase.FINISHED -> Unit
+        }
+    }
+
+    /** Worker thread: tint the thing on the preview, or take the tint away. */
+    private fun showMask(seen: ItemSight.Sighting?, bitmap: Bitmap) {
+        val tint = seen?.mask?.let {
+            val picture = Bitmap.createBitmap(it.pixels(maskFill, maskEdge), it.width, it.height, Bitmap.Config.ARGB_8888)
+            // The preview shows the frame; an answer of another shape is stretched back onto it.
+            if (it.width == bitmap.width && it.height == bitmap.height) {
+                picture
+            } else {
+                Bitmap.createScaledBitmap(picture, bitmap.width, bitmap.height, true)
+            }
+        }
+        main.post { _binding?.itemEnrollMask?.setImageBitmap(tint) }
+    }
+
+    /** Worker thread: gather what the thing in the middle looks like, then ask whether it is the item. */
+    private fun looking(seen: ItemSight.Sighting?, now: Long) {
+        trackX = null
+        trackY = null
+        if (seen == null) {
+            looks.clear()
+            if (!asked && now >= waitUntilMs && now - lastHintMs >= NO_ITEM_HINT_MS) {
                 lastHintMs = now
                 services.speaker.say(ItemPhrases.noItem(lang))
             }
             return
         }
+        looks.addLast(seen.look)
+        while (looks.size > LOOKS_KEPT) looks.removeFirst()
+        if (asked) {
+            // No answer for a while: the thing in view may have changed. Describe what is there now.
+            if (now - askedAtMs >= ASK_AGAIN_MS) asked = false
+            return
+        }
+        if (looks.size < LOOKS_TO_ASK || now < waitUntilMs) return
+        val look = ItemLooks.agree(looks.toList())
+        val question = ItemPhrases.ask(look, lang) ?: return
+        asked = true
+        askedAtMs = now
+        waitUntilMs = Long.MAX_VALUE
+        lastHintMs = now
+        Log.i(TAG, "Item seen: $look, colours ${seen.colours}, lens focused at ${camera?.focusDistanceM} m")
+        main.post { _binding?.itemEnrollPrompt?.text = question }
+        (services.speaker as? TtsSpeaker)?.brighten(question)
+        services.speaker.sayFinal(question) {
+            // The question has been heard: the next words are the answer, and the thing may be described again later.
+            waitUntilMs = SystemClock.elapsedRealtime()
+            listenForAnswer()
+        }
+    }
+
+    /** Worker thread: follow the thing and take a sample when it is where the step asks. */
+    private fun learning(seen: ItemSight.Sighting?, bitmap: Bitmap, now: Long) {
+        if (!learningStarted) {
+            learningStarted = true
+            guide.restart()
+            lastSeenMs = now
+        }
+        if (!running) return
+        if (seen == null || !guide.isTheItem(seen.view)) {
+            // Lost, or something else (the bottle behind it) took its place: look in the middle again.
+            trackX = null
+            trackY = null
+            if (now - lastSeenMs >= LOST_MS && now - lastHintMs >= NO_ITEM_HINT_MS) {
+                lastHintMs = now
+                services.speaker.say(ItemPhrases.lost(lang))
+            }
+            return
+        }
         lastSeenMs = now
+        trackX = seen.mask.anchorX
+        trackY = seen.mask.anchorY
         if (now < waitUntilMs || now - lastSampleMs < SAMPLE_GAP_MS) return
-        if (!guide.accepts(box.centerX)) {
-            // Still where it was held: repeat the left/right prompt now and then.
-            if (now - lastHintMs > NO_ITEM_HINT_MS) {
+        if (!guide.hasMoved(seen.view)) {
+            // Still where it was held: repeat the step now and then.
+            if (now - lastHintMs >= MOVE_HINT_MS) {
                 lastHintMs = now
                 guide.step?.let { services.speaker.say(ItemPhrases.prompt(it, lang)) }
             }
             return
         }
-        val vector = embedder.embed(bitmap, box) ?: return
         lastSampleMs = now
+        lastHintMs = now
         if (photo == null) {
-            photo = ItemCrop.rect(box, bitmap.width, bitmap.height)?.let { r ->
+            photo = ItemCrop.rect(seen.square, bitmap.width, bitmap.height)?.let { r ->
                 Bitmap.createBitmap(bitmap, r[0], r[1], r[2] - r[0], r[3] - r[1])
             }
         }
-        samples += vector
-        labels += label
-        val stepDone = guide.add(box.centerX)
-        if (stepDone) {
-            waitUntilMs = now + PROMPT_WAIT_MS
-            lastHintMs = now
-        }
+        val stepDone = guide.add(seen.view)
         val percent = guide.percent()
         val next = guide.step
         main.post {
@@ -267,18 +433,22 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         when {
             guide.isDone -> finish()
             stepDone && next != null -> {
-                services.speaker.say(EnrollPhrases.percent(percent, lang))
-                services.speaker.say(ItemPhrases.prompt(next, lang))
+                waitUntilMs = now + PROMPT_WAIT_MS
+                lastHintMs = waitUntilMs
+                // At once, not queued behind a gap: the wait for the user to follow it has already begun.
+                services.speaker.sayNow(ItemPhrases.prompt(next, lang))
             }
         }
     }
 
-    /** Extras thread: the item and its 12 samples are written in one transaction on the process-wide scope. */
+    /** Worker thread: the item and its 12 samples are written in one transaction on the process-wide scope. */
     private fun finish() {
-        finished = true
+        phase = Phase.FINISHED
         running = false
-        val vectors = samples.toList()
-        val label = ItemMatcher.mostCommon(labels) ?: "object"
+        val vectors = guide.samples.toList()
+        // No detector here, so no kind of thing to show under the name; saved items are found by their look.
+        val label = if (kind == ItemKind.CAR) "car" else "object"
+        Log.i(TAG, "Item enrolled: ${vectors.size} samples, ${(SystemClock.elapsedRealtime() - openedMs) / 1000} s on the screen")
         val image = photo
         val context = appContext
         val itemName = name
@@ -297,7 +467,9 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
             )
             withContext(Dispatchers.Main) {
                 services.haptics.buzz(Buzz.DONE)
-                services.speaker.say(ItemPhrases.done(itemName, lang))
+                val done = ItemPhrases.done(itemName, lang)
+                (services.speaker as? TtsSpeaker)?.brighten(done)
+                services.speaker.say(done)
                 val tab = if (itemKind == ItemKind.CAR) SavedTab.CARS else SavedTab.OBJECTS
                 if (_binding != null) findNavController().returnToSaved(R.id.add_item, tab)
             }
@@ -313,10 +485,29 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         const val TAG = "Nungil"
         const val PHOTO_FOLDER = "items"
 
-        /** Enrol at confidence 0.3 so the item keeps being found while the phone moves (brief §6). */
-        const val ENROLL_MIN_SCORE = 0.3f
         const val SAMPLE_GAP_MS = 300L
         const val NO_ITEM_HINT_MS = 4_000L
-        const val PROMPT_WAIT_MS = 2_500L
+        const val MOVE_HINT_MS = 4_000L
+
+        /** Without the thing in view this long while learning, the user is told. */
+        const val LOST_MS = 3_000L
+
+        /** Time to hear a prompt ("Move the phone a little to the left.") and do it. */
+        const val PROMPT_WAIT_MS = 2_000L
+
+        /** Time to hear "Learning (name). Point the camera at it and hold still." and point the phone. */
+        const val START_WAIT_MS = 4_000L
+
+        /** How many frames in a row must show a thing before it is described, and how many are agreed on. */
+        const val LOOKS_TO_ASK = 3
+        const val LOOKS_KEPT = 6
+
+        /** A question without an answer is asked again, about whatever is in view then, after this long. */
+        const val ASK_AGAIN_MS = 15_000L
+
+        const val LOG_MS = 2_000L
+
+        /** How strong the tint on the thing is (0..255); its rim is drawn solid. */
+        const val MASK_FILL_ALPHA = 0x73
     }
 }

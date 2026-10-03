@@ -48,6 +48,18 @@ object SearchResolver {
         return SearchTarget(TargetType.LABEL, -1L, label, LabelNames.name(label, lang))
     }
 
+    /**
+     * [resolve], and when [text] means nothing, the first of the recognizer's other [guesses] for the same
+     * phrase that names something saved: "Find Dopey" was heard as "Find Dorothy", with "Find Dopey" as the
+     * second guess (the logs). Guesses that do not have [text] in them are for some other phrase and are not used.
+     */
+    fun resolve(text: String, guesses: List<String>, saved: List<SavedName>, lang: Lang): SearchTarget? {
+        resolve(text, saved, lang)?.let { return it }
+        val heard = QueryCleaner.normalize(text)
+        if (heard.isEmpty() || guesses.none { QueryCleaner.normalize(it).contains(heard) }) return null
+        return guesses.firstNotNullOfOrNull { guess -> resolve(guess, saved, lang)?.takeIf { it.type != TargetType.LABEL } }
+    }
+
     /** COCO label for one word or phrase, or null. Also used for suggestion chips. */
     fun labelFor(term: String): String? {
         val t = QueryCleaner.normalize(term)

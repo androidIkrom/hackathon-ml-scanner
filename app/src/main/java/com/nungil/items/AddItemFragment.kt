@@ -16,7 +16,10 @@ import com.nungil.contract.app.VoiceHandler
 import com.nungil.contract.app.services
 import com.nungil.databinding.ItemAddFragmentBinding
 
-/** Name a new car or object (voice or keyboard), then go to the three-step item enrolment. */
+/**
+ * Name a new car or object (voice or keyboard), then go to the three-step item enrolment. A name that was said
+ * goes there at once: "Start" after it was one more thing to say, and to be misheard (the logs).
+ */
 class AddItemFragment : Fragment(), VoiceHandler {
     private var _binding: ItemAddFragmentBinding? = null
     private val binding get() = _binding!!
@@ -41,7 +44,12 @@ class AddItemFragment : Fragment(), VoiceHandler {
         if (!arrived) {
             arrived = true
             val given = args.name
-            if (!given.isNullOrBlank()) binding.itemAddName.setText(given) else askName()
+            if (!given.isNullOrBlank()) {
+                binding.itemAddName.setText(given)
+                view.post { if (_binding != null) start() }
+            } else {
+                askName()
+            }
         }
     }
 
@@ -61,7 +69,9 @@ class AddItemFragment : Fragment(), VoiceHandler {
     private fun askName() {
         services.speaker.say(getString(R.string.item_add_ask))
         services.askForWords(viewLifecycleOwner) { text ->
-            _binding?.itemAddName?.setText(text.trim())
+            if (_binding == null) return@askForWords
+            binding.itemAddName.setText(text.trim())
+            start()
         }
     }
 

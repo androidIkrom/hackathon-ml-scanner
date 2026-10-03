@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import com.nungil.contract.Lang
@@ -37,6 +38,13 @@ class TtsSpeaker(
     private var currentId: String? = null
     private var counter = 0
     private var finalCallback: (() -> Unit)? = null
+    private val resolver = context.applicationContext.contentResolver
+
+    /** Sentences to say in the brighter voice; each is said so once. */
+    private val bright = HashSet<String>()
+
+    /** The pitch was raised for the last sentence and has to go back. */
+    private var pitchRaised = false
     private var closed = false
 
     /** True while the user is talking: nothing is spoken until [resumeAfterUser]. */
@@ -141,6 +149,16 @@ class TtsSpeaker(
         pump()
     }
 
+    /**
+     * [text] is good news ("I see it!", "All done!"): the next time it is said, it is said in a brighter voice.
+     * The engine has no feelings to pick from; a pitch a little above the user's own setting is the nearest
+     * thing. Call just before say, sayNow or sayFinal with the same text.
+     */
+    fun brighten(text: String) = onMain {
+        if (bright.size >= MAX_BRIGHT) bright.clear()
+        bright += text.trim()
+    }
+
     override fun sayNow(text: String) = onMain {
         if (state == State.STARTING || held) {
             queue.clear()
@@ -205,6 +223,13 @@ class TtsSpeaker(
             queue.done()
             return
         }
+        val cheer = bright.remove(text)
+        if (cheer || pitchRaised) {
+            // The user's own pitch (phone settings) stays the base; before the first bright sentence it is never set.
+            val own = Settings.Secure.getInt(resolver, Settings.Secure.TTS_DEFAULT_PITCH, NORMAL_PITCH) / NORMAL_PITCH.toFloat()
+            runCatching { tts.setPitch(if (cheer) own * BRIGHT_PITCH else own) }
+            pitchRaised = cheer
+        }
         val id = "nungil-${counter++}"
         currentId = id
         currentText = text
@@ -235,6 +260,13 @@ class TtsSpeaker(
     private companion object {
         /** How long after a sentence ends the microphone may still be hearing it. */
         const val ECHO_WINDOW_MS = 1_500L
+
+        /** How much higher the brighter voice is. */
+        const val BRIGHT_PITCH = 1.18f
+
+        /** The phone's pitch setting for an unchanged voice. */
+        const val NORMAL_PITCH = 100
+        const val MAX_BRIGHT = 8
     }
 
     private fun onMain(block: () -> Unit) {

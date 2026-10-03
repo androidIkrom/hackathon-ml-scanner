@@ -12,6 +12,7 @@ import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.navArgs
 import com.nungil.R
+import com.nungil.contract.Box
 import com.nungil.contract.Buzz
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
@@ -87,6 +88,12 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
             val created = try {
                 TargetMatchers.create(context, type, targetId, label)
             } catch (e: Exception) {
+                if (type == TargetType.ITEM) {
+                    // A saved item is found by its look alone, with the detector off: no model, no search.
+                    Log.i(TAG, "Item search unavailable", e)
+                    services.speaker.say(context.getString(R.string.item_enroll_model_missing))
+                    return@execute
+                }
                 Log.i(TAG, "Search matcher failed, hunting by label instead", e)
                 LabelMatcher(if (type == TargetType.PERSON) "person" else label)
             }
@@ -142,7 +149,8 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
         if (camera != null || _binding == null) return
         val options = CameraSession.Options(
             facing = Facing.BACK,
-            detect = true,
+            // A saved item is looked for in the picture itself (ItemTargetMatcher); the detector would only slow it.
+            detect = type != TargetType.ITEM,
             keepBitmap = type != TargetType.LABEL,
             minScore = SEARCH_MIN_SCORE,
         )
@@ -153,7 +161,7 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
     private fun onFrame(frame: VisionFrame) {
         val m = matcher.get() ?: return
         if (!m.slow) {
-            handle(frame, m.find(frame))
+            handle(frame, m.locate(frame))
             return
         }
         val executor = extras ?: return
@@ -161,7 +169,7 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
         try {
             executor.execute {
                 try {
-                    handle(frame, safeFind(m, frame))
+                    handle(frame, safeLocate(m, frame))
                 } finally {
                     busy.set(false)
                 }
@@ -171,19 +179,18 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
         }
     }
 
-    private fun safeFind(m: TargetMatcher, frame: VisionFrame): Int = try {
-        m.find(frame)
+    private fun safeLocate(m: TargetMatcher, frame: VisionFrame): Box? = try {
+        m.locate(frame)
     } catch (e: Exception) {
         Log.i(TAG, "Search matcher error", e)
-        -1
+        null
     }
 
     /** Worker thread: speech, beeps and vibration are thread-safe; the overlay is updated on the main thread. */
-    private fun handle(frame: VisionFrame, index: Int) {
+    private fun handle(frame: VisionFrame, target: Box?) {
         // A frame still in flight after the screen was left must not restart the beeps or speak.
         if (leaving) return
-        val target = frame.detections.getOrNull(index)
-        val x = target?.let { SearchGuide.userX(it.box.centerX, frame.facing) }
+        val x = target?.let { SearchGuide.userX(it.centerX, frame.facing) }
         val zone = x?.let { SearchGuide.zone(it) }
         val update = synchronized(tracker) { tracker.update(SystemClock.elapsedRealtime(), zone) }
 
@@ -199,13 +206,8 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
             null -> Unit
         }
 
-        val marks = frame.detections.mapIndexed { i, d ->
-            if (i == index) {
-                OverlayView.Mark(d.box, spokenName, OverlayView.Style.TARGET)
-            } else {
-                OverlayView.Mark(d.box, null, OverlayView.Style.DIM)
-            }
-        }
+        val marks = frame.detections.filter { it.box != target }.map { OverlayView.Mark(it.box, null, OverlayView.Style.DIM) } +
+            listOfNotNull(target?.let { OverlayView.Mark(it, spokenName, OverlayView.Style.TARGET) })
         main.post {
             val b = _binding ?: return@post
             b.searchCameraOverlay.show(marks, frame.imageWidth, frame.imageHeight, frame.facing == Facing.FRONT)

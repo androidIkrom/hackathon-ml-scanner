@@ -129,6 +129,9 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     /** Every recognizer guess for the phrase being handled. */
     private var lastGuesses: List<String> = emptyList()
 
+    /** The recognizer's guesses for the last phrase, the one it trusts most first (Find: a misheard saved name). */
+    fun heardGuesses(): List<String> = lastGuesses
+
     /**
      * What [place] may have been: the recognizer's other guesses for the same phrase, as places
      * ("Go so" came with "Go Seoul"; "Soul" with "Seoul"). [place] first, commands left out.
