@@ -16,9 +16,13 @@ import java.util.Locale
  * Search camera target "a saved item": squares all over the frame (ItemWindows) are compared with the saved
  * samples, and the item is where the squares that look like it are. A square counts only when [itemId] is its
  * best match among all saved items, and the best square gets a closer look (smaller, bigger, a little to each
- * side). The detector is not used: it gave no box for things it does not know. The square that found the item
- * holds some of what is around it; the box shown is the outline of the thing in its middle (ItemSegmenter) when
- * there is one inside the square, so the user sees the item, not its surroundings.
+ * side). The detector is not used: it gave no box for things it does not know.
+ *
+ * A square holds the item and whatever it stands on, so on another background the squares only half know it:
+ * 86 of 115 such frames were found (measured). There the thing in the middle of the best square is cut out
+ * (ItemSegmenter) and compared alone with the samples of the item alone, which found 108 of them and nothing
+ * in a view without the item. That check adds finds and never takes one away (ItemMatcher.seen). The box shown
+ * is the outline of the thing, so the user sees the item, not its surroundings.
  */
 class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatcher {
     private val embedder = ItemEmbedder(context)
@@ -34,6 +38,15 @@ class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatc
     /** The square the item was found in last frame, if any: it is kept at [ItemMatcher.KEEP_THRESHOLD]. */
     private var lastSquare: Box? = null
 
+    /** The thing in the middle of a square: its outline, the square it would be learned in, how much it alone looks like the item. */
+    private class Thing(val box: Box, val square: Box, val score: Float)
+
+    /**
+     * What one place comes to: whether the item is there, the [square] to look around in the next frame, the
+     * box [shown] ([outlined] when it is the thing's outline) and the thing's score [alone] (null: no thing).
+     */
+    private class Verdict(val seen: ItemMatcher.Seen, val square: Box, val shown: Box, val outlined: Boolean, val alone: Float?)
+
     override val slow: Boolean = true
 
     override fun locate(frame: VisionFrame): Box? {
@@ -41,21 +54,21 @@ class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatc
         val started = SystemClock.elapsedRealtime()
         val kept = lastSquare
         val needs = if (kept != null) ItemMatcher.KEEP_THRESHOLD else ItemMatcher.FIND_THRESHOLD
+        var looked = 0
+        val scored = mutableListOf<String>()
+        var verdict: Verdict? = null
 
         // Seen a moment ago: look only around where it was (ten squares, not forty). The whole frame is
         // searched again only when it is not there any more; every frame took a second otherwise (the logs).
-        var looked = 0
-        var found: Box? = null
-        var text = ""
         if (kept != null) {
             val near = ItemWindows.around(kept)
             val nearScores = FloatArray(near.size) { score(bitmap, near[it]) }
             val best = nearScores.indices.maxBy { nearScores[it] }
             looked += near.size
-            if (nearScores[best] >= needs) found = near[best]
-            text = String.format(Locale.US, "near %.2f", nearScores[best])
+            scored += String.format(Locale.US, "near %.2f", nearScores[best])
+            if (nearScores[best] >= ItemMatcher.LOOK_CLOSER) verdict = judge(bitmap, near[best], nearScores[best], needs)
         }
-        if (found == null) {
+        if (verdict == null || verdict.seen == ItemMatcher.Seen.NO) {
             val windows = ItemWindows.grid(bitmap.width, bitmap.height)
             val scores = FloatArray(windows.size) { score(bitmap, windows[it]) }
             val best = scores.indices.maxBy { scores[it] }
@@ -74,40 +87,65 @@ class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatc
                     }
                 }
             }
-            found = closer?.takeIf { closerScore >= needs && closerScore > scores[best] }
+            scored += String.format(Locale.US, "grid %.2f, closer %.2f", scores[best], closerScore)
+            val bySquares = closer?.takeIf { closerScore >= needs && closerScore > scores[best] }
                 ?: ItemWindows.locate(windows, scores, needs)
-            text = listOf(text, String.format(Locale.US, "grid %.2f, closer %.2f", scores[best], closerScore)).filter { it.isNotEmpty() }.joinToString(", ")
+            val top = maxOf(scores[best], closerScore)
+            // Where the squares say it is; else their best guess, when it is worth a look at the thing there.
+            val place = bySquares
+                ?: (closer?.takeIf { closerScore > scores[best] } ?: windows[best]).takeIf { top >= ItemMatcher.LOOK_CLOSER }
+            if (place != null) verdict = judge(bitmap, place, top, needs)
         }
-        lastSquare = found
-        val outline = found?.let { outline(bitmap, it) }
+        val hit = verdict?.takeIf { it.seen != ItemMatcher.Seen.NO }
+        lastSquare = hit?.square
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastLogMs >= LOG_EVERY_MS) {
             lastLogMs = now
-            val shown = if (found == null) "not seen" else if (outline != null) "seen, outlined" else "seen"
-            Log.i(TAG, "Item search: $looked squares in ${now - started} ms, $text (needs ${String.format(Locale.US, "%.2f", needs)}), $shown")
+            val alone = verdict?.alone?.let { String.format(Locale.US, "%.2f", it) } ?: "-"
+            val seen = when (hit?.seen) {
+                ItemMatcher.Seen.BY_SQUARES -> "seen by squares"
+                ItemMatcher.Seen.BY_ITEM_ALONE -> "seen by the item alone"
+                else -> "not seen"
+            } + if (hit?.outlined == true) ", outlined" else ""
+            val limits = String.format(Locale.US, "(needs %.2f), alone %s (needs %.2f)", needs, alone, ItemMatcher.ALONE_MIN)
+            Log.i(TAG, "Item search: $looked squares in ${now - started} ms, ${scored.joinToString(", ")} $limits, $seen")
         }
-        return outline ?: found
+        return hit?.shown
     }
 
     /**
-     * The outline of the thing in the middle of [square], when it is a thing inside the square: its box is
-     * smaller than the square and its middle is in the square. Null without a segmenter or when the thing there
-     * is the table or the wall.
+     * [square] scored [squareScore] against the samples: is the item there, where is it looked for in the next
+     * frame, and what is shown. When the thing in its middle is the item by itself, that thing's outline is
+     * shown and its own square (the one it would be learned in) is tracked. Else the squares decide as they did,
+     * and the outline is shown only when it is a thing inside the square: smaller than it, its middle in it.
      */
-    private fun outline(bitmap: Bitmap, square: Box): Box? {
+    private fun judge(bitmap: Bitmap, square: Box, squareScore: Float, needs: Float): Verdict {
+        val thing = thingIn(bitmap, square)
+        val seen = ItemMatcher.seen(squareScore, needs, thing?.score)
+        if (thing == null) return Verdict(seen, square, square, false, null)
+        if (thing.score >= ItemMatcher.ALONE_MIN) return Verdict(seen, thing.square, thing.box, true, thing.score)
+        val inside = thing.box.area < square.area &&
+            thing.box.centerX in square.left..square.right && thing.box.centerY in square.top..square.bottom
+        return Verdict(seen, square, if (inside) thing.box else square, inside, thing.score)
+    }
+
+    /**
+     * The thing in the middle of [square], or null without a segmenter or when what is there is the table, the
+     * wall or a speck.
+     */
+    private fun thingIn(bitmap: Bitmap, square: Box): Thing? {
         val answer = segmenter?.at(bitmap, square.centerX, square.centerY) ?: return null
         val mask = ItemMask.of(answer.values, answer.width, answer.height, square.centerX, square.centerY) ?: return null
-        val box = mask.box
-        val inside = box.centerX in square.left..square.right && box.centerY in square.top..square.bottom
-        return box.takeIf { inside && it.area < square.area }
+        val own = ItemWindows.square(mask.box, bitmap.width, bitmap.height)
+        return Thing(mask.box, own, embedder.embedAlone(bitmap, own, mask)?.let { score(it) } ?: 0f)
     }
 
     /** How much the part of [bitmap] in [window] looks like the item; 0 when it looks more like another saved item. */
-    private fun score(bitmap: Bitmap, window: Box): Float {
-        val vector = embedder.embed(bitmap, window) ?: return 0f
-        return recognizer.identify(vector, 0f)?.takeIf { it.id == itemId }?.score ?: 0f
-    }
+    private fun score(bitmap: Bitmap, window: Box): Float = embedder.embed(bitmap, window)?.let { score(it) } ?: 0f
+
+    private fun score(vector: FloatArray): Float =
+        recognizer.identify(vector, 0f)?.takeIf { it.id == itemId }?.score ?: 0f
 
     override fun close() {
         embedder.close()
