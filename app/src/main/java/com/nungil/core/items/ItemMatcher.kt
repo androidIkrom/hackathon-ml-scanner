@@ -23,6 +23,28 @@ object ItemMatcher {
     /** A grid window that scores at least this is worth a closer look (ItemWindows.around). */
     const val LOOK_CLOSER = 0.35f
 
+    /**
+     * The thing in the middle of a square, cut out and compared alone (ItemMask.alone), is the item from this
+     * score: the item alone scored 0.70 and more, a view without it 0.28 at most (measured).
+     */
+    const val ALONE_MIN = 0.6f
+
+    /** How the item was seen in a frame, if it was. */
+    enum class Seen { BY_SQUARES, BY_ITEM_ALONE, NO }
+
+    /**
+     * Whether the item is at a place whose square scored [square] against the samples, where [needs] is the
+     * score that finds or keeps it and [alone] is the score of the thing there cut out (null when the segmenter
+     * gave nothing usable). The squares decide as they always did; where they only half know the place
+     * ([LOOK_CLOSER] and up) the thing alone can say yes. It never says no: a square's middle is not always
+     * on the item, and a veto would have dropped 12 of 115 good finds (measured).
+     */
+    fun seen(square: Float, needs: Float, alone: Float?): Seen = when {
+        square >= needs -> Seen.BY_SQUARES
+        square >= LOOK_CLOSER && alone != null && alone >= ALONE_MIN -> Seen.BY_ITEM_ALONE
+        else -> Seen.NO
+    }
+
     data class Match(val id: Long, val score: Float)
 
     /** Best saved item for [vector] by its closest sample, or null below [threshold]. */
