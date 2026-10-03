@@ -16,6 +16,9 @@ object SearchResolver {
     const val MAX_TYPOS = 2
     const val MIN_FUZZY_LENGTH = 4
 
+    /** How many other words may stand between the words of a saved name. */
+    const val MAX_SLIPPED = 2
+
     private val EN_SYNONYMS = mapOf(
         "phone" to "cell phone", "cellphone" to "cell phone", "mobile" to "cell phone",
         "desk" to "dining table", "table" to "dining table",
@@ -117,15 +120,26 @@ object SearchResolver {
         return false
     }
 
-    /** All the words of a name of two words or more appear in [words] in their order, with others between them. */
+    /**
+     * All the words of a name of two words or more appear in [words] in their order, with at most [MAX_SLIPPED]
+     * other words between the first and the last: "my new black box" is "My black box", "my phone in the bag"
+     * is not "My bag".
+     */
     private fun containsNameWords(words: List<String>, name: String): Boolean {
         val nameWords = name.split(' ')
         if (nameWords.size < 2 || nameWords.size > words.size) return false
-        var next = 0
-        for (word in words) {
-            if (next < nameWords.size && wordIs(word, nameWords[next], next == nameWords.lastIndex)) next++
+        for (start in words.indices) {
+            if (!wordIs(words[start], nameWords[0], false)) continue
+            var next = 1
+            var slipped = 0
+            var i = start + 1
+            while (i < words.size && next < nameWords.size && slipped <= MAX_SLIPPED) {
+                if (wordIs(words[i], nameWords[next], next == nameWords.lastIndex)) next++ else slipped++
+                i++
+            }
+            if (next == nameWords.size && slipped <= MAX_SLIPPED) return true
         }
-        return next == nameWords.size
+        return false
     }
 
     /**

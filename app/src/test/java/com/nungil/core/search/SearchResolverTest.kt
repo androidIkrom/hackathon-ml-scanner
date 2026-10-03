@@ -70,6 +70,10 @@ class SearchResolverTest {
         assertNull(SearchResolver.resolve("my box black", listOf(box), Lang.EN))
         assertNull(SearchResolver.resolve("my new box", listOf(box), Lang.EN))
         assertNull(SearchResolver.resolve("alo", listOf(ali), Lang.EN))
+        // A longer sentence that happens to hold the name's words is about something else.
+        val bag = SavedName(22, "My bag", TargetType.ITEM, "object")
+        assertEquals("cell phone", SearchResolver.resolve("find my phone in the bag", listOf(bag), Lang.EN)?.label)
+        assertEquals(22L, SearchResolver.resolve("find my big red bag", listOf(bag), Lang.EN)?.id)
     }
 
     @Test fun hangulNamesWithParticlesAndGivenName() {
