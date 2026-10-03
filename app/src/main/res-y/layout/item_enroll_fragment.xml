@@ -60,6 +60,14 @@
                     android:layout_height="match_parent"
                     app:implementationMode="compatible" />
 
+                <!-- The tint on the thing being learned. centerCrop places it as the preview's FILL_CENTER does. -->
+                <ImageView
+                    android:id="@+id/item_enroll_mask"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:scaleType="centerCrop" />
+
                 <com.nungil.scan.OverlayView
                     android:id="@+id/item_enroll_overlay"
                     android:layout_width="match_parent"

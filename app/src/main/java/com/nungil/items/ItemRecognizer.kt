@@ -29,7 +29,8 @@ class ItemRecognizer(context: Context) {
             .groupBy({ it.itemId }, { VectorBytes.toFloats(it.vector) })
     }
 
-    fun identify(vector: FloatArray): ItemMatcher.Match? = ItemMatcher.bestMatch(vector, known)
+    fun identify(vector: FloatArray, threshold: Float = ItemMatcher.THRESHOLD): ItemMatcher.Match? =
+        ItemMatcher.bestMatch(vector, known, threshold)
 
     fun nameOf(itemId: Long): String? = names[itemId]
 

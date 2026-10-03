@@ -23,6 +23,7 @@ import com.nungil.core.search.SavedName
 import com.nungil.core.search.SearchPhrases
 import com.nungil.core.search.SearchResolver
 import com.nungil.databinding.SearchFragmentBinding
+import com.nungil.shell.MainActivity
 import kotlinx.coroutines.launch
 
 /**
@@ -101,6 +102,10 @@ class SearchFragment : Fragment(), VoiceHandler {
     /** Ask, then treat the next words as the query. */
     private fun listen() {
         services.speaker.say(SearchPhrases.askWhat(lang))
+        listenForQuery()
+    }
+
+    private fun listenForQuery() {
         services.askForWords(viewLifecycleOwner) { text ->
             if (_binding == null) return@askForWords
             binding.searchInput.setText(text)
@@ -127,10 +132,13 @@ class SearchFragment : Fragment(), VoiceHandler {
     }
 
     private fun resolveAndGo(text: String) {
-        val target = SearchResolver.resolve(text, saved, lang)
+        val guesses = (activity as? MainActivity)?.heardGuesses().orEmpty()
+        val target = SearchResolver.resolve(text, guesses, saved, lang)
         if (target == null) {
             binding.searchInputLayout.error = getString(R.string.search_not_understood)
             services.speaker.say(SearchPhrases.unknown(lang))
+            // "Say it another way": the next words are the query, not a command nobody understands (the logs).
+            listenForQuery()
             return
         }
         binding.searchInputLayout.error = null

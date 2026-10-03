@@ -12,6 +12,7 @@
     <string name="item_enroll_title">Learning %1$s</string>
     <string name="item_enroll_start">Start</string>
     <string name="item_enroll_pause">Pause</string>
+    <string name="item_enroll_yes">Yes, this is it</string>
     <string name="item_enroll_resume">Continue</string>
     <string name="item_enroll_model_missing">Object recognition is not available on this phone.</string>
     <string name="item_enroll_progress">Progress</string>

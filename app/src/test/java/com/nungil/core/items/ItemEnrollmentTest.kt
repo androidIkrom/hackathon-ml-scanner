@@ -2,7 +2,6 @@ package com.nungil.core.items
 
 import com.nungil.contract.Box
 import com.nungil.contract.Detection
-import com.nungil.contract.ItemKind
 import com.nungil.contract.Lang
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -10,65 +9,99 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.cos
+import kotlin.math.sin
 
 class ItemEnrollmentTest {
     private fun det(label: String, l: Float, t: Float, r: Float, b: Float) = Detection(label, 0.9f, Box(l, t, r, b))
 
-    @Test fun twelveSamplesInThreeSteps() {
+    private fun at(deg: Double) = floatArrayOf(cos(Math.toRadians(deg)).toFloat(), sin(Math.toRadians(deg)).toFloat())
+
+    /** The thing seen at [deg] on the embedding circle, with its middle at ([x], [y]) and [area] of the frame. */
+    private fun view(deg: Double, x: Float = 0.5f, y: Float = 0.5f, area: Float = 0.1f) =
+        ItemEnrollmentGuide.View(at(deg), x, y, area)
+
+    @Test fun twelveSamplesInFourSteps() {
         val g = ItemEnrollmentGuide()
         assertEquals(12, g.total)
         assertEquals(ItemStep.STILL, g.step)
-        repeat(3) { assertFalse(g.add(0.5f)) }
-        assertTrue(g.add(0.5f))
+        repeat(2) { assertFalse(g.add(view(0.0))) }
+        assertTrue(g.add(view(0.0)))
         assertEquals(ItemStep.LEFT, g.step)
-        repeat(4) { g.add(0.6f) }
+        repeat(3) { g.add(view(20.0, x = 0.6f)) }   // phone moved left: the thing is to the right
         assertEquals(ItemStep.RIGHT, g.step)
-        repeat(4) { g.add(0.4f) }
+        repeat(3) { g.add(view(-20.0, x = 0.4f)) }  // phone moved right: the thing is to the left
+        assertEquals(ItemStep.UP, g.step)
+        repeat(3) { g.add(view(10.0, y = 0.6f)) }   // phone lifted: the thing is lower
         assertTrue(g.isDone)
         assertNull(g.step)
         assertEquals(100, g.percent())
-        assertFalse(g.add(0.5f))
+        assertEquals(12, g.samples.size)
+        assertFalse(g.add(view(0.0)))
     }
 
-    @Test fun standingStillNeverFinishes() {
+    @Test fun standingStillDoesNotFinishTheMovedSteps() {
         val g = ItemEnrollmentGuide()
-        repeat(4) { g.add(0.5f) }
-        repeat(20) { assertFalse(g.add(0.53f)) } // within 0.08 of where it was held
+        repeat(3) { g.add(view(0.0)) }
+        repeat(10) { assertFalse(g.add(view(0.0, x = 0.55f))) } // within 0.08 of where it was held
         assertEquals(ItemStep.LEFT, g.step)
-        assertEquals(4, g.taken)
+        assertTrue(g.isTheItem(view(0.0, x = 0.55f)))
+        assertFalse(g.hasMoved(view(0.0, x = 0.55f)))
     }
 
-    @Test fun leftAndRightNeedTheItemToShiftTheRightWay() {
+    @Test fun comingBackToTheStartIsNotRight() {
+        // The logs: after LEFT, the phone going back to where it started counted as RIGHT.
         val g = ItemEnrollmentGuide()
-        g.add(0.4f); g.add(0.5f); g.add(0.5f); g.add(0.6f)
-        assertEquals(0.5f, g.stillCenterX!!, 1e-6f)
-        // Phone moved left: the item moves right in the image.
-        assertFalse(g.accepts(0.42f))
-        assertFalse(g.accepts(0.57f))
-        assertTrue(g.accepts(0.59f))
-        repeat(4) { assertTrue(g.accepts(0.6f)); g.add(0.6f) }
-        // Phone moved right: the item moves left.
+        repeat(3) { g.add(view(0.0, x = 0.5f)) }
+        repeat(3) { g.add(view(0.0, x = 0.62f)) }
         assertEquals(ItemStep.RIGHT, g.step)
-        assertFalse(g.accepts(0.6f))
-        assertTrue(g.accepts(0.41f))
+        assertFalse(g.accepts(view(0.0, x = 0.5f)))
+        assertFalse(g.accepts(view(0.0, x = 0.45f)))
+        assertTrue(g.accepts(view(0.0, x = 0.42f)))
         assertEquals(0.08f, ItemEnrollmentGuide.MIN_SHIFT, 0f)
     }
 
-    @Test fun centerPickPrefersTheMiddleAndIgnoresTinyBoxes() {
-        val side = det("cup", 0.0f, 0.0f, 0.4f, 0.4f)         // area 0.16, centre far from the middle
-        val middle = det("bottle", 0.4f, 0.4f, 0.6f, 0.6f)    // area 0.04 < 5%: ignored
-        val bigMiddle = det("backpack", 0.3f, 0.3f, 0.7f, 0.7f)
-        assertEquals(2, CenterPick.pick(listOf(side, middle, bigMiddle)))
-        assertEquals(0, CenterPick.pick(listOf(side, middle)))
-        assertEquals(-1, CenterPick.pick(listOf(middle)))
-        assertEquals(-1, CenterPick.pick(emptyList()))
+    @Test fun upMeansTheThingIsLowerInTheFrame() {
+        val g = ItemEnrollmentGuide()
+        repeat(3) { g.add(view(0.0)) }
+        repeat(3) { g.add(view(0.0, x = 0.6f)) }
+        repeat(3) { g.add(view(0.0, x = 0.4f)) }
+        assertEquals(ItemStep.UP, g.step)
+        assertFalse(g.accepts(view(0.0, y = 0.45f)))
+        assertTrue(g.accepts(view(0.0, y = 0.6f)))
     }
 
-    @Test fun kinds() {
-        assertTrue(ItemKinds.allows(ItemKind.CAR, "truck"))
-        assertFalse(ItemKinds.allows(ItemKind.CAR, "backpack"))
-        assertTrue(ItemKinds.allows(ItemKind.OBJECT, "backpack"))
-        assertFalse(ItemKinds.allows(ItemKind.OBJECT, "person"))
+    @Test fun somethingElseIsNotASample() {
+        val g = ItemEnrollmentGuide()
+        assertTrue(g.accepts(view(0.0))) // the first view is the item
+        repeat(3) { g.add(view(0.0)) }
+        assertTrue(g.isTheItem(view(60.0, x = 0.6f)))   // cos 60 = 0.5: the item, moved
+        assertFalse(g.isTheItem(view(70.0, x = 0.6f)))  // cos 70 = 0.34: the table, a jar
+        // Looks alike but is two and a half times the size, or under 0.4 of it: the bottle behind, a corner of it.
+        assertFalse(g.isTheItem(view(0.0, x = 0.6f, area = 0.26f)))
+        assertTrue(g.isTheItem(view(0.0, x = 0.6f, area = 0.24f)))
+        assertFalse(g.isTheItem(view(0.0, x = 0.6f, area = 0.03f)))
+        assertFalse(g.add(view(70.0, x = 0.6f)))
+        assertEquals(3, g.taken)
+        assertEquals(0.4f, ItemEnrollmentGuide.SAME_MIN, 0f)
+    }
+
+    @Test fun laterSamplesAreComparedWithTheOnesHeldStill() {
+        val g = ItemEnrollmentGuide()
+        repeat(3) { g.add(view(0.0)) }
+        repeat(3) { g.add(view(60.0, x = 0.6f)) }
+        // 60 degrees from the last sample but 120 from the ones held still: drifted away.
+        assertFalse(g.isTheItem(view(120.0, x = 0.4f)))
+        assertTrue(g.isTheItem(view(-60.0, x = 0.4f)))
+    }
+
+    @Test fun restartForgetsEverything() {
+        val g = ItemEnrollmentGuide()
+        repeat(2) { g.add(view(0.0)) }
+        assertFalse(g.accepts(view(90.0)))
+        g.restart()
+        assertEquals(0, g.taken)
+        assertTrue(g.accepts(view(90.0)))
     }
 
     @Test fun cropRects() {
@@ -90,9 +123,15 @@ class ItemEnrollmentTest {
     }
 
     @Test fun phrases() {
-        assertEquals("Hold the phone still, pointing at it.", ItemPhrases.prompt(ItemStep.STILL, Lang.EN))
+        assertEquals("Hold the phone still.", ItemPhrases.prompt(ItemStep.STILL, Lang.EN))
+        assertEquals("Now to the right, past where you started.", ItemPhrases.prompt(ItemStep.RIGHT, Lang.EN))
+        assertEquals("Now lift the phone a little.", ItemPhrases.prompt(ItemStep.UP, Lang.EN))
         assertEquals("휴대폰을 왼쪽으로 조금 옮겨 주세요.", ItemPhrases.prompt(ItemStep.LEFT, Lang.KO))
-        assertEquals("내 가방을 등록할게요. 카메라로 비춰 주세요.", ItemPhrases.start("내 가방", Lang.KO))
+        assertEquals("내 가방을 등록할게요. 물건을 향해 비추고 가만히 들어 주세요.", ItemPhrases.start("내 가방", Lang.KO))
+        assertEquals("Learning my bag. Point the camera at it and hold still.", ItemPhrases.start("my bag", Lang.EN))
         assertEquals("다 됐어요. 열쇠를 기억할게요.", ItemPhrases.done("열쇠", Lang.KO))
+        assertEquals("Great! Hold the phone still.", ItemPhrases.confirmed(Lang.EN))
+        assertEquals("I lost it. Point the camera at it again.", ItemPhrases.lost(Lang.EN))
+        assertEquals("맞는 물건을 향해 비추고 가만히 들어 주세요.", ItemPhrases.notThat(Lang.KO))
     }
 }
