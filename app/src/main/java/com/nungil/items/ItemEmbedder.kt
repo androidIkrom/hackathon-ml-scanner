@@ -9,6 +9,7 @@ import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.imageembedder.ImageEmbedder
 import com.nungil.contract.Box
 import com.nungil.core.items.ItemCrop
+import com.nungil.core.items.ItemMask
 import java.io.Closeable
 
 /**
@@ -30,6 +31,21 @@ class ItemEmbedder(context: Context) : Closeable {
     fun embed(frame: Bitmap, box: Box): FloatArray? {
         val r = ItemCrop.rect(box, frame.width, frame.height) ?: return null
         return embed(Bitmap.createBitmap(frame, r[0], r[1], r[2] - r[0], r[3] - r[1]))
+    }
+
+    /**
+     * Embedding of the thing alone: the part of [frame] inside [square] with everything that is not on [mask]
+     * painted over (ItemMask.alone). Learning and finding both make the picture here, so they make the same one.
+     * Null as [embed].
+     */
+    fun embedAlone(frame: Bitmap, square: Box, mask: ItemMask): FloatArray? {
+        val r = ItemCrop.rect(square, frame.width, frame.height) ?: return null
+        val w = r[2] - r[0]
+        val h = r[3] - r[1]
+        val pixels = IntArray(w * h)
+        frame.getPixels(pixels, 0, w, r[0], r[1], w, h)
+        mask.alone(pixels, r[0], r[1], w, h, frame.width, frame.height)
+        return embed(Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888))
     }
 
     fun embed(image: Bitmap): FloatArray? = try {

@@ -441,14 +441,17 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         }
     }
 
-    /** Worker thread: the item and its 12 samples are written in one transaction on the process-wide scope. */
+    /**
+     * Worker thread: the item and its samples (the square and the thing alone of each) are written in one
+     * transaction on the process-wide scope.
+     */
     private fun finish() {
         phase = Phase.FINISHED
         running = false
         val vectors = guide.samples.toList()
         // No detector here, so no kind of thing to show under the name; saved items are found by their look.
         val label = if (kind == ItemKind.CAR) "car" else "object"
-        Log.i(TAG, "Item enrolled: ${vectors.size} samples, ${(SystemClock.elapsedRealtime() - openedMs) / 1000} s on the screen")
+        Log.i(TAG, "Item enrolled: ${guide.taken} samples, ${vectors.size} vectors, ${(SystemClock.elapsedRealtime() - openedMs) / 1000} s on the screen")
         val image = photo
         val context = appContext
         val itemName = name
