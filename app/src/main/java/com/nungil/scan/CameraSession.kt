@@ -3,11 +3,18 @@ package com.nungil.scan
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureResult
+import android.hardware.camera2.TotalCaptureResult
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.util.Size
+import androidx.annotation.OptIn
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -64,6 +71,36 @@ class CameraSession(
 
     @Volatile
     private var fov = DEFAULT_HFOV_DEG
+
+    /**
+     * How far away the lens is focused, in metres, or null while it is not in focus or does not say. Rough at
+     * best: many phones report their focus distance as uncalibrated. Only what is near (under 2 m) says much.
+     */
+    val focusDistanceM: Float?
+        get() {
+            val diopters = focusDiopters
+            if (diopters <= 0f || SystemClock.elapsedRealtime() - focusAtMs > FOCUS_FRESH_MS) return null
+            return 1f / diopters
+        }
+
+    @Volatile
+    private var focusDiopters = 0f
+
+    @Volatile
+    private var focusAtMs = 0L
+
+    /** Camera thread: keeps the focus distance of the last frame that was in focus. */
+    private val focusReader = object : CameraCaptureSession.CaptureCallback() {
+        override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+            val state = result.get(CaptureResult.CONTROL_AF_STATE)
+            val focused = state == CaptureResult.CONTROL_AF_STATE_PASSIVE_FOCUSED ||
+                state == CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED
+            val diopters = result.get(CaptureResult.LENS_FOCUS_DISTANCE) ?: return
+            if (!focused || diopters <= 0f) return
+            focusDiopters = diopters
+            focusAtMs = SystemClock.elapsedRealtime()
+        }
+    }
 
     @Volatile
     private var running = false
@@ -150,6 +187,7 @@ class CameraSession(
         }
     }
 
+    @OptIn(ExperimentalCamera2Interop::class)
     private fun bind() {
         val p = provider ?: return
         val ex = executor ?: return
@@ -166,11 +204,12 @@ class CameraSession(
                 ResolutionStrategy(Size(ANALYSIS_WIDTH, ANALYSIS_HEIGHT), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
             )
             .build()
-        val newAnalysis = ImageAnalysis.Builder()
+        val analysisBuilder = ImageAnalysis.Builder()
             .setResolutionSelector(analysisSelector)
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
-            .build()
+        Camera2Interop.Extender(analysisBuilder).setSessionCaptureCallback(focusReader)
+        val newAnalysis = analysisBuilder.build()
         newAnalysis.setAnalyzer(ex) { image -> analyze(image) }
         val selector = if (facing == Facing.FRONT) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
         try {
@@ -254,6 +293,9 @@ class CameraSession(
         const val DEFAULT_HFOV_DEG = 65f
         private const val ANALYSIS_WIDTH = 640
         private const val ANALYSIS_HEIGHT = 480
+
+        /** A focus distance older than this is no longer where the lens is. */
+        private const val FOCUS_FRESH_MS = 1_500L
         private const val TAG = "Nungil"
     }
 }
