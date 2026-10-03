@@ -72,6 +72,47 @@ class ItemMaskTest {
         assertTrue("anchor $ax,$ay is not on the bar", onBroken.inside[ay * 20 + ax])
     }
 
+    @Test fun theItemAloneKeepsItsPixelsAndGraysTheRest() {
+        val mask = ItemMask.of(square(20, 6, 13), 20, 20)!!
+        val pixels = IntArray(400) { 0xFF000000.toInt() or it }
+        mask.alone(pixels, 0, 0, 20, 20, 20, 20)
+        assertEquals(ItemMask.ALONE_FILL, pixels[2 * 20 + 2])
+        assertEquals(0xFF000000.toInt() or (10 * 20 + 10), pixels[10 * 20 + 10])
+        assertEquals(ItemMask.ALONE_FILL, pixels[10 * 20 + 5])
+        assertEquals(0xFF000000.toInt() or (10 * 20 + 6), pixels[10 * 20 + 6])
+    }
+
+    @Test fun aPartOfTheFrame() {
+        // The 10 x 10 part that starts at (5, 5): the item is its columns and rows 1..8.
+        val mask = ItemMask.of(square(20, 6, 13), 20, 20)!!
+        val pixels = IntArray(100) { 0xFF123456.toInt() }
+        mask.alone(pixels, 5, 5, 10, 10, 20, 20)
+        assertEquals(ItemMask.ALONE_FILL, pixels[0])
+        assertEquals(0xFF123456.toInt(), pixels[1 * 10 + 1])
+        assertEquals(0xFF123456.toInt(), pixels[8 * 10 + 8])
+        assertEquals(ItemMask.ALONE_FILL, pixels[9 * 10 + 9])
+    }
+
+    @Test fun aMaskOfAnotherSizeIsStretchedOverTheFrame() {
+        // A 20 x 20 mask over a 40 x 40 frame: the item is frame pixels 12..27.
+        val mask = ItemMask.of(square(20, 6, 13), 20, 20)!!
+        val pixels = IntArray(1600) { 0xFF123456.toInt() }
+        mask.alone(pixels, 0, 0, 40, 40, 40, 40)
+        assertEquals(ItemMask.ALONE_FILL, pixels[20 * 40 + 11])
+        assertEquals(0xFF123456.toInt(), pixels[20 * 40 + 12])
+        assertEquals(0xFF123456.toInt(), pixels[20 * 40 + 27])
+        assertEquals(ItemMask.ALONE_FILL, pixels[20 * 40 + 28])
+    }
+
+    @Test fun aSquareAtTheEdgeOfTheFrame() {
+        // The last 8 columns and rows of the frame: nothing is read past its edge.
+        val mask = ItemMask.of(square(20, 6, 13), 20, 20)!!
+        val pixels = IntArray(64) { 0xFF123456.toInt() }
+        mask.alone(pixels, 12, 12, 8, 8, 20, 20)
+        assertEquals(0xFF123456.toInt(), pixels[0])          // frame (12, 12)
+        assertEquals(ItemMask.ALONE_FILL, pixels[7 * 8 + 7]) // frame (19, 19)
+    }
+
     @Test fun theItemsBox() {
         val box = ItemMask.of(square(20, 6, 13), 20, 20)!!.box
         assertEquals(0.3f, box.left, 1e-6f)
