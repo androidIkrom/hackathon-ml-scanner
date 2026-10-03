@@ -66,6 +66,7 @@ def models = [
     'efficientdet-lite0-int8.tflite': 'https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/int8/1/efficientdet_lite0.tflite',
     'efficientnet-lite0.tflite'     : 'https://storage.googleapis.com/mediapipe-models/image_classifier/efficientnet_lite0/float32/1/efficientnet_lite0.tflite',
     'mobilenet_v3_small.tflite'     : 'https://storage.googleapis.com/mediapipe-models/image_embedder/mobilenet_v3_small/float32/1/mobilenet_v3_small.tflite',
+    'magic_touch.tflite'            : 'https://storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/1/magic_touch.tflite',
     'facenet_512.tflite'            : 'https://raw.githubusercontent.com/shubham0204/FaceRecognition_With_FaceNet_Android/master/app/src/main/assets/facenet_512.tflite',
 ]
 def downloadTasks = models.collect { fileName, url ->
