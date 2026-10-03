@@ -21,6 +21,28 @@ class ItemEnrollmentTest {
     private fun view(deg: Double, x: Float = 0.5f, y: Float = 0.5f, area: Float = 0.1f) =
         ItemEnrollmentGuide.View(at(deg), x, y, area)
 
+    @Test fun everySampleIsKeptAsItsSquareAndAsTheItemAlone() {
+        val g = ItemEnrollmentGuide()
+        fun both(deg: Double, x: Float = 0.5f, y: Float = 0.5f) = ItemEnrollmentGuide.View(at(deg), x, y, 0.1f, alone = at(deg + 90))
+        repeat(3) { g.add(both(0.0)) }
+        repeat(3) { g.add(both(20.0, x = 0.6f)) }
+        repeat(3) { g.add(both(-20.0, x = 0.4f)) }
+        repeat(3) { g.add(both(10.0, y = 0.6f)) }
+        assertTrue(g.isDone)
+        assertEquals(12, g.taken)
+        assertEquals(24, g.samples.size)
+        assertArrayEquals(at(0.0), g.samples[0], 1e-6f)     // the squares first
+        assertArrayEquals(at(90.0), g.samples[12], 1e-6f)   // then the item alone
+    }
+
+    @Test fun aSampleWithoutItsItemAlonePicture() {
+        val g = ItemEnrollmentGuide()
+        g.add(ItemEnrollmentGuide.View(at(0.0), 0.5f, 0.5f, 0.1f, alone = at(90.0)))
+        g.add(view(0.0))
+        assertEquals(2, g.taken)
+        assertEquals(3, g.samples.size)
+    }
+
     @Test fun twelveSamplesInFourSteps() {
         val g = ItemEnrollmentGuide()
         assertEquals(12, g.total)

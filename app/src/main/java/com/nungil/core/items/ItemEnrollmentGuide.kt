@@ -13,16 +13,25 @@ enum class ItemStep { STILL, LEFT, RIGHT, UP }
  * the table is never learned as the item. Moving the phone left shifts the thing right in the frame, and so on;
  * a LEFT, RIGHT or UP sample counts only once the thing has shifted at least [MIN_SHIFT] of the frame that way
  * from where it was held still. Coming back to where it was after LEFT is not RIGHT (the logs).
+ *
+ * Each sample is kept twice: the square around the thing, and the same square with everything that is not the
+ * thing painted over (ItemMask.alone). The square is 19 to 41% item, and the same item on another background
+ * scored 0.50 against it (measured); the thing alone does not know where it stood.
  */
 class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
-    /** The thing as one frame shows it: its embedding, the middle of its outline (0..1) and its area (0..1 of the frame). */
-    class View(val vector: FloatArray, val centerX: Float, val centerY: Float, val area: Float)
+    /**
+     * The thing as one frame shows it: the embedding of its square, the middle of its outline (0..1), its area
+     * (0..1 of the frame) and the embedding of the thing [alone], when that picture could be made.
+     */
+    class View(val vector: FloatArray, val centerX: Float, val centerY: Float, val area: Float, val alone: FloatArray? = null)
 
     private val kept = mutableListOf<View>()
 
     val total: Int = samplesPerStep * ItemStep.entries.size
     val taken: Int get() = kept.size
-    val samples: List<FloatArray> get() = kept.map { it.vector }
+
+    /** What is saved: the square of every sample, then the thing alone of every sample that has it. */
+    val samples: List<FloatArray> get() = kept.map { it.vector } + kept.mapNotNull { it.alone }
 
     /** The step being collected; null when done. */
     val step: ItemStep? get() = ItemStep.entries.getOrNull(kept.size / samplesPerStep)
