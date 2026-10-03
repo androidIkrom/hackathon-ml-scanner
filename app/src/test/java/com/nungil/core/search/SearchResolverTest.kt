@@ -85,6 +85,19 @@ class SearchResolverTest {
         assertNull(label("우주선", Lang.KO))
     }
 
+    @Test fun aMisheardNameIsFoundAmongTheOtherGuesses() {
+        // The logs: "Find Dopey" was heard as "Find Dorothy", with "Find Dopey" as the second guess.
+        val dopey = SavedName(20, "Dopey", TargetType.ITEM, "object")
+        val guesses = listOf("Find Dorothy", "Find Dopey", "Find Dope", "Find Dolphy")
+        assertNull(SearchResolver.resolve("Dorothy", listOf(dopey), Lang.EN))
+        assertEquals(20L, SearchResolver.resolve("Dorothy", guesses, listOf(dopey), Lang.EN)?.id)
+        // What was heard wins when it means something, and only saved names are taken from the other guesses.
+        assertEquals("chair", SearchResolver.resolve("chair", listOf("Find chair", "Find Dopey"), listOf(dopey), Lang.EN)?.label)
+        assertNull(SearchResolver.resolve("Dorothy", listOf("Find Dorothy", "Find chair"), listOf(dopey), Lang.EN))
+        // Guesses for some other phrase (the query was typed later) are not used.
+        assertNull(SearchResolver.resolve("spaceship", guesses, listOf(dopey), Lang.EN))
+    }
+
     @Test fun labelForChips() {
         assertEquals("backpack", SearchResolver.labelFor("가방"))
         assertEquals("cell phone", SearchResolver.labelFor("Phone"))

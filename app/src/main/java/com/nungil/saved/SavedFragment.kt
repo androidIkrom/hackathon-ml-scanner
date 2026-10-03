@@ -41,6 +41,9 @@ class SavedFragment : Fragment(), VoiceHandler {
     private lateinit var lang: Lang
     private val adapter = SavedAdapter { open(it) }
     private var tab = SavedTab.PEOPLE
+
+    /** The view was shown before: coming back from adding an item keeps the tab the user was on. */
+    private var shown = false
     private var collecting: Job? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -61,6 +64,7 @@ class SavedFragment : Fragment(), VoiceHandler {
         tabs.addTab(tabs.newTab().setText(R.string.saved_tab_cars))
         tabs.addTab(tabs.newTab().setText(R.string.saved_tab_objects))
         val start = savedInstanceState?.getInt(KEY_TAB)
+            ?: tab.ordinal.takeIf { shown }
             ?: args.tab.takeIf { it in SavedTab.entries.indices }
             ?: SavedTab.PEOPLE.ordinal
         tabs.getTabAt(start)?.select()
@@ -92,6 +96,7 @@ class SavedFragment : Fragment(), VoiceHandler {
 
     private fun show(newTab: SavedTab) {
         tab = newTab
+        shown = true
         binding.savedAdd.setText(
             when (newTab) {
                 SavedTab.PEOPLE -> R.string.saved_add_person

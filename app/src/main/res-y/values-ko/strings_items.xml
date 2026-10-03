@@ -12,6 +12,7 @@
     <string name="item_enroll_title">%1$s 등록 중</string>
     <string name="item_enroll_start">시작하기</string>
     <string name="item_enroll_pause">잠시 멈춤</string>
+    <string name="item_enroll_yes">네, 이거예요</string>
     <string name="item_enroll_resume">계속하기</string>
     <string name="item_enroll_model_missing">이 휴대폰에서는 물건 인식을 쓸 수 없어요.</string>
     <string name="item_enroll_progress">진행률</string>

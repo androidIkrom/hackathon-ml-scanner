@@ -28,9 +28,10 @@ class ItemMatcherTest {
         assertNull(ItemMatcher.bestMatch(at(0.0), mapOf(1L to emptyList())))
     }
 
-    @Test fun mostCommonLabel() {
-        assertEquals("backpack", ItemMatcher.mostCommon(listOf("suitcase", "backpack", "handbag", "backpack")))
-        assertEquals("suitcase", ItemMatcher.mostCommon(listOf("suitcase", "backpack")))
-        assertNull(ItemMatcher.mostCommon(emptyList()))
+    @Test fun findingTakesALooserMatchThanNaming() {
+        // The same hat seen a little to the side scored 0.5 to 0.75 against its samples (the logs), other things 0.25.
+        val known = mapOf(1L to listOf(at(0.0)))
+        assertEquals(1L, ItemMatcher.bestMatch(at(56.0), known, ItemMatcher.FIND_THRESHOLD)?.id) // cos 56 = 0.559
+        assertNull(ItemMatcher.bestMatch(at(57.0), known, ItemMatcher.FIND_THRESHOLD))            // cos 57 = 0.545
     }
 }

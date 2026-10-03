@@ -10,6 +10,6 @@ object TargetMatchers {
     fun create(context: Context, type: TargetType, id: Long, label: String): TargetMatcher = when (type) {
         TargetType.LABEL -> LabelMatcher(label)
         TargetType.PERSON -> PersonTargetMatcher(context, id)
-        TargetType.ITEM -> ItemTargetMatcher(context, id, label)
+        TargetType.ITEM -> ItemTargetMatcher(context, id)
     }
 }

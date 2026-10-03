@@ -1,5 +1,6 @@
 package com.nungil.search
 
+import com.nungil.contract.Box
 import com.nungil.contract.app.VisionFrame
 import java.io.Closeable
 
@@ -8,8 +9,8 @@ interface TargetMatcher : Closeable {
     /** true = slow (faces, embeddings): run on the extras thread and drop frames while it is busy. */
     val slow: Boolean
 
-    /** Index into [VisionFrame.detections] of the target, or -1. Called by one thread at a time. */
-    fun find(frame: VisionFrame): Int
+    /** Where the target is in the upright image, or null. Called by one thread at a time. */
+    fun locate(frame: VisionFrame): Box?
 
     override fun close() = Unit
 }
@@ -18,15 +19,6 @@ interface TargetMatcher : Closeable {
 class LabelMatcher(private val label: String) : TargetMatcher {
     override val slow: Boolean = false
 
-    override fun find(frame: VisionFrame): Int {
-        var best = -1
-        var bestScore = -1f
-        frame.detections.forEachIndexed { i, d ->
-            if (d.label == label && d.score > bestScore) {
-                best = i
-                bestScore = d.score
-            }
-        }
-        return best
-    }
+    override fun locate(frame: VisionFrame): Box? =
+        frame.detections.filter { it.label == label }.maxByOrNull { it.score }?.box
 }
