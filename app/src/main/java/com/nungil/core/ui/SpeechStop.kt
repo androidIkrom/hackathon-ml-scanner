@@ -19,8 +19,10 @@ object SpeechStop {
     )
 
     fun isBare(text: String): Boolean {
-        val words = text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+        val said = text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
             .dropWhile { it in FILLERS }.dropLastWhile { it in FILLERS }
+        // "Stop stop": said twice is said once (it stopped the route instead of the talking, the logs).
+        val words = said.filterIndexed { i, w -> i == 0 || w != said[i - 1] }
         return words.isNotEmpty() && (words.joinToString(" ") in EN || words.joinToString("") in KO)
     }
 }

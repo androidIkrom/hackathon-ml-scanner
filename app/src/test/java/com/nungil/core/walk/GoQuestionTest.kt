@@ -17,10 +17,16 @@ class GoQuestionTest {
         assertEquals(List(4) { GoQuestion.QUIET }, q("quiet updates", "fewer updates", "updates off", "stop updates"))
         assertEquals(List(2) { GoQuestion.UPDATES_ON }, q("updates on", "more updates"))
         assertEquals(GoQuestion.HOW_FAR, GoQuestion.of("please, how far"))
+        // Asked on the phone and not understood (the logs).
+        assertEquals(
+            List(8) { GoQuestion.HOW_FAR },
+            q("How much time left", "How many kilometers", "How much left", "how many kilometres left", "how much time is left", "how much is left", "how long left", "when will we arrive"),
+        )
     }
 
     @Test fun korean() {
         assertEquals(List(4) { GoQuestion.HOW_FAR }, q("얼마나 남았어", "몇 분 남았어요", "언제 도착해", "거리"))
+        assertEquals(List(4) { GoQuestion.HOW_FAR }, q("몇 킬로 남았어", "시간 얼마나 남았어", "얼마나 더 가야 돼", "몇 킬로미터 남았어요"))
         assertEquals(List(2) { GoQuestion.NEXT }, q("다음은", "다음 안내"))
         assertEquals(List(3) { GoQuestion.REPEAT }, q("다시", "반복", "뭐라고"))
         assertEquals(List(2) { GoQuestion.WHICH_WAY }, q("어느 쪽", "어디로 가"))

@@ -17,6 +17,11 @@ enum class GoQuestion {
                 "how much further", "how much farther", "how much longer", "how much more", "how many minutes",
                 "how many minutes left", "how many metres", "how many meters", "when will i arrive",
                 "when do i arrive", "when will i get there", "distance", "distance left", "time left",
+                // Asked on the phone and not understood (the logs), and their like.
+                "how much time left", "how much time is left", "how much time", "how much left", "how much is left",
+                "how many kilometers", "how many kilometres", "how many kilometers left", "how many kilometres left",
+                "how many km", "how long left", "how long is left", "how long to go", "how far to go now",
+                "when will we arrive", "when do we arrive", "when will we get there", "how much distance left",
             ),
             NEXT to setOf("whats next", "what is next", "what next", "next turn", "next instruction", "next step"),
             REPEAT to setOf("repeat", "repeat that", "say again", "say that again", "what did you say", "pardon"),
@@ -33,7 +38,8 @@ enum class GoQuestion {
             HOW_FAR to setOf(
                 "얼마나남았어", "얼마나남았어요", "얼마나남았지", "몇분남았어", "몇분남았어요", "몇미터남았어",
                 "몇미터남았어요", "언제도착", "언제도착해", "언제도착해요", "얼마나걸려", "얼마나걸려요", "거리",
-                "남은거리", "남은시간",
+                "남은거리", "남은시간", "몇킬로남았어", "몇킬로남았어요", "몇킬로미터남았어", "몇킬로미터남았어요",
+                "시간얼마나남았어", "시간얼마나남았어요", "얼마나더가야돼", "얼마나더가야해", "얼마나더가야돼요",
             ),
             NEXT to setOf("다음은", "다음안내", "다음은뭐야", "다음은어디야"),
             REPEAT to setOf("다시", "반복", "뭐라고", "뭐라고요", "다시말해", "다시말해줘", "다시한번"),
