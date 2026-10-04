@@ -95,9 +95,9 @@ speech ◄─ TtsSpeaker (queue, barge-in, captions) · haptics · beeps
 | **I**: interface, voice and walk mode | design system, screens, speech, voice commands, accessibility, walk mode |
 | **Y**: find and recognise | search, faces, saved objects, reader |
 
-Every folder has one owner (`OWNERS`). A pre-commit hook (`git config core.hooksPath .githooks`) and CI
-refuse changes to someone else's files. Branches are `a/…`, `i/…`, `y/…`; contract changes go on `c/…`
-and need all three. Everything reaches `main` through a pull request with green CI.
+That split was the hackathon's. Since 2026-10-04 one developer works on all of it: nothing is owned, and a
+branch may have any name. Everything reaches `main` through a pull request with green CI (unit tests and a
+debug build); a pre-commit hook (`git config core.hooksPath .githooks`) refuses commits on `main` itself.
 
 ## Documents
 

@@ -1,18 +1,8 @@
 #!/usr/bin/env bash
-# Blocks commits that touch another person's files. Enable once per clone:
+# main changes only through a pull request, so CI runs the unit tests first. Enable once per clone:
 #   git config core.hooksPath .githooks
-branch="$(git rev-parse --abbrev-ref HEAD)"
-case "$branch" in
-    a/*) who=A ;;
-    i/*) who=I ;;
-    y/*) who=Y ;;
-    c/*) who=C ;;
-    *)
-        echo "Commit on a branch named a/..., i/..., y/... (or c/... for an agreed contract change)."
-        exit 1
-        ;;
-esac
-files="$(git diff --cached --name-only --no-renames)"
-[ -z "$files" ] && exit 0
-# shellcheck disable=SC2086
-bash "$(git rev-parse --show-toplevel)/tools/check-ownership.sh" "$who" $files
+# One developer since 2026-10-04: every file is theirs, and a branch may have any name.
+if [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]; then
+    echo "Commit on a branch and open a pull request: main changes only through one."
+    exit 1
+fi
