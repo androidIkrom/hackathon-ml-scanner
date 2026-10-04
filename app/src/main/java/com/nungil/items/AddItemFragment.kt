@@ -206,6 +206,8 @@ class AddItemFragment : Fragment(), VoiceHandler {
     private fun go() {
         val name = name()
         if (_binding == null || name.isEmpty()) return
+        // Start said and tapped, or one "start" heard twice: both checked the name and came here (the logs).
+        if (findNavController().currentDestination?.id != R.id.add_item) return
         (activity as? MainActivity)?.dropWords()
         binding.itemAddNameLayout.error = null
         findNavController().navigate(R.id.item_enroll, ItemEnrollFragmentArgs(name, args.kind).toBundle())
