@@ -20,14 +20,30 @@ class VoiceBargeInTest {
     @Test fun theAppHearingItselfKeepsTalking() =
         assertEquals(BargeIn.KEEP_TALKING, VoiceBargeIn.onPartial("3 blue chairs in", saying))
 
-    @Test fun aWordTheAppIsNotSayingStopsIt() =
-        assertEquals(BargeIn.STOP_ALL_SOUND, VoiceBargeIn.onPartial("stop", saying))
+    @Test fun wordsTheAppIsNotSayingStopIt() =
+        assertEquals(BargeIn.STOP_ALL_SOUND, VoiceBargeIn.onPartial("stop that", saying))
+
+    @Test fun oneWordTheAppIsNotSayingMayBeItsOwnMisheard() {
+        // The logs: "Hold the phone still." began as "Call" in the microphone, and the app went silent for 8 s.
+        // The user's "stop" looks the same, so one such word alone waits for what comes next.
+        assertEquals(BargeIn.UNSURE, VoiceBargeIn.onPartial("stop", saying))
+        assertEquals(BargeIn.UNSURE, VoiceBargeIn.onPartial("Call", "Great! Hold the phone still."))
+    }
+
+    @Test fun theAppsOwnSentenceWithOneWordMisheardKeepsTalking() {
+        assertEquals(BargeIn.KEEP_TALKING, VoiceBargeIn.onPartial("Call the phone", "Great! Hold the phone still."))
+        assertEquals(BargeIn.KEEP_TALKING, VoiceBargeIn.onPartial("Glue the", "Hold the phone still."))
+        assertEquals(BargeIn.KEEP_TALKING, VoiceBargeIn.onPartial("Close the phone a little", "Move the phone a little to the left."))
+        assertEquals(BargeIn.STOP_ALL_SOUND, VoiceBargeIn.onPartial("find my bag", "Hold the phone still."))
+    }
 
     @Test fun koreanSpacingDifferencesStillCountAsEcho() =
         assertEquals(BargeIn.KEEP_TALKING, VoiceBargeIn.onPartial("파란 의자 세개", "앞에 파란 의자 세 개가 있어요."))
 
-    @Test fun koreanUserWordStopsTheApp() =
-        assertEquals(BargeIn.STOP_ALL_SOUND, VoiceBargeIn.onPartial("멈춰", "앞에 파란 의자 세 개가 있어요."))
+    @Test fun koreanUserWordsStopTheApp() {
+        assertEquals(BargeIn.UNSURE, VoiceBargeIn.onPartial("멈춰", "앞에 파란 의자 세 개가 있어요."))
+        assertEquals(BargeIn.STOP_ALL_SOUND, VoiceBargeIn.onPartial("그만 멈춰", "앞에 파란 의자 세 개가 있어요."))
+    }
 
     @Test fun finalEchoIsIgnored() {
         assertTrue(VoiceBargeIn.isEcho("three blue chairs in front", "Around you: three blue chairs in front."))
@@ -88,7 +104,9 @@ class VoiceBargeInTest {
 
     @Test fun theStartOfTheAppsOwnSentenceIsNotTheUserTalking() {
         // The logs: "Is", from the app's own "Is this it?", kept a session that then heard nothing for 10 s.
-        assertEquals(BargeIn.KEEP_TALKING, VoiceBargeIn.onPartial("Is", "It is black and oblong. Is this it?"))
-        assertEquals(BargeIn.STOP_ALL_SOUND, VoiceBargeIn.onPartial("Yes it is", "It is black and oblong. Is this it?"))
+        assertFalse(VoiceBargeIn.hasOtherWords("Is", "It is black and oblong. Is this it?"))
+        assertTrue(VoiceBargeIn.hasOtherWords("Yes it is", "It is black and oblong. Is this it?"))
+        assertTrue(VoiceBargeIn.hasOtherWords("yes", null))
+        assertFalse(VoiceBargeIn.hasOtherWords("", null))
     }
 }

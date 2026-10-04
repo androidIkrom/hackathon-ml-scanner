@@ -66,8 +66,11 @@ class RecognizerPolicy {
         /** "I did not understand" is said at most once in this long (people nearby are heard too). */
         const val NOT_UNDERSTOOD_GAP_MS = 10_000L
 
-        /** An answer in words still being said is taken once the words have stood this long unchanged. */
+        /** An answer in words still being said is taken once it has been in them this long. */
         const val EARLY_ANSWER_MS = 600L
+
+        /** One word the app is not saying, alone this long, is the user's: all app sound stops. */
+        const val UNSURE_WORD_MS = 500L
 
         /** A session that has only just started is not dropped again. */
         const val FRESH_SESSION_MIN_MS = 400L

@@ -1,7 +1,10 @@
 package com.nungil.core.ui
 
-/** What to do with the app's own sound when the microphone picks up words. */
-enum class BargeIn { KEEP_TALKING, STOP_ALL_SOUND }
+/**
+ * What to do with the app's own sound when the microphone picks up words. UNSURE: one word that the app is not
+ * saying, alone, is the user's or the start of the app's own sentence misheard; what comes next decides.
+ */
+enum class BargeIn { KEEP_TALKING, STOP_ALL_SOUND, UNSURE }
 
 /**
  * Tells the user's voice apart from the app's own voice coming back through the microphone: the
@@ -16,13 +19,31 @@ object VoiceBargeIn {
     /** The most words of an answer taken from the end of what was heard ("yes it is"). */
     const val MAX_ANSWER_WORDS = 3
 
-    /** A partial result: any word the app is not saying right now means a person is talking. */
+    /** A partial result: words the app is not saying right now mean a person is talking. */
     fun onPartial(heard: String, appSaying: String?): BargeIn {
         val words = words(heard)
         if (words.isEmpty()) return BargeIn.KEEP_TALKING
         if (appSaying == null) return BargeIn.STOP_ALL_SOUND
         val said = joined(appSaying)
-        return if (words.any { it !in said }) BargeIn.STOP_ALL_SOUND else BargeIn.KEEP_TALKING
+        val others = words.count { it !in said }
+        // The recognizer mishears the app too: "Hold the phone still." came back as "Call the phone", "Glue
+        // the", and "Move the phone a little" as "Close the phone a little". Each silenced the app for the 8 to
+        // 10 s that session lasted (the logs). All words but one its own is its own sentence; one word alone
+        // may be either, so it waits for the next.
+        return when {
+            others == 0 -> BargeIn.KEEP_TALKING
+            words.size == 1 -> BargeIn.UNSURE
+            others == 1 -> BargeIn.KEEP_TALKING
+            else -> BargeIn.STOP_ALL_SOUND
+        }
+    }
+
+    /** Whether [heard] has a word the app did not say: the user may be talking (any word when the app is quiet). */
+    fun hasOtherWords(heard: String, appSaid: String?): Boolean {
+        val words = words(heard)
+        if (appSaid == null) return words.isNotEmpty()
+        val said = joined(appSaid)
+        return words.any { it !in said }
     }
 
     /**

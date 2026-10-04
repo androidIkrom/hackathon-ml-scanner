@@ -74,8 +74,15 @@ class VoiceInput(
     private val listenNow = Runnable { listen() }
     private val holdSafety = Runnable { endHold() }
 
-    /** The words so far have stood still and hold the answer a screen waits for: it is heard now. */
+    /** One word the app is not saying has stood alone: it was the user's, not the app's own misheard. */
+    private val unsureWord = Runnable {
+        if (!holding && isAwake() && VoiceBargeIn.onPartial(lastPartial, appSaying()) != BargeIn.KEEP_TALKING) beginHold()
+    }
+    private var earlyPending = false
+
+    /** The words so far have held the answer a screen waits for long enough: it is heard now. */
     private val earlyAnswer = Runnable {
+        earlyPending = false
         val answer = VoiceBargeIn.answerIn(lastPartial, appSaying(), answersNow)
         if (alwaysOn && oneShot == null && answer != null) {
             Log.i(TAG, "Answer \"$answer\" taken from the words so far: \"$lastPartial\"")
@@ -122,12 +129,12 @@ class VoiceInput(
         if (!alwaysOn || oneShot != null) return
         // The user's words are words the app did not say. A piece of its own sentence ("Is", from "Is this
         // it?") is not: taken for the user's, it kept a session that then heard nothing for 10 s (the logs).
-        if (lastPartial.isNotEmpty() && VoiceBargeIn.onPartial(lastPartial, appSaying()) == BargeIn.STOP_ALL_SOUND) {
+        if (lastPartial.isNotEmpty() && VoiceBargeIn.hasOtherWords(lastPartial, appSaying())) {
             Log.i(TAG, "Recognizer session kept after the app spoke: heard \"$lastPartial\"")
             return
         }
         if (SystemClock.elapsedRealtime() - listeningSince < RecognizerPolicy.FRESH_SESSION_MIN_MS) return
-        main.removeCallbacks(earlyAnswer)
+        dropTimers()
         recognizer?.cancel()
         schedule(RecognizerPolicy.DELAY_AFTER_SILENCE_MS)
     }
@@ -138,7 +145,7 @@ class VoiceInput(
         alwaysOn = false
         oneShot = null
         main.removeCallbacks(listenNow)
-        main.removeCallbacks(earlyAnswer)
+        dropTimers()
         recognizer?.cancel()
         endHold(force = true)
         muter.unmuteAll()
@@ -225,17 +232,33 @@ class VoiceInput(
         val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
         if (text.isNullOrEmpty()) return
         lastPartial = text
-        main.removeCallbacks(earlyAnswer)
-        if (oneShot == null && isAwake() && VoiceBargeIn.answerIn(text, appSaying(), answersNow) != null) {
+        // The answer is waited for from its first appearance, not from the last change of the words: in a room
+        // with other sound the words kept coming ("Yes", "Yes yes") and the wait began again each time.
+        val answered = oneShot == null && isAwake() && VoiceBargeIn.answerIn(text, appSaying(), answersNow) != null
+        if (answered && !earlyPending) {
+            earlyPending = true
             main.postDelayed(earlyAnswer, RecognizerPolicy.EARLY_ANSWER_MS)
+        } else if (!answered && earlyPending) {
+            earlyPending = false
+            main.removeCallbacks(earlyAnswer)
         }
         if (holding) return
-        val userTalking = if (isAwake()) {
-            VoiceBargeIn.onPartial(text, appSaying()) == BargeIn.STOP_ALL_SOUND
-        } else {
-            WakeWord.addressed(text)
+        main.removeCallbacks(unsureWord)
+        if (!isAwake()) {
+            if (WakeWord.addressed(text)) beginHold()
+            return
         }
-        if (userTalking) beginHold()
+        when (VoiceBargeIn.onPartial(text, appSaying())) {
+            BargeIn.STOP_ALL_SOUND -> beginHold()
+            BargeIn.UNSURE -> main.postDelayed(unsureWord, RecognizerPolicy.UNSURE_WORD_MS)
+            BargeIn.KEEP_TALKING -> Unit
+        }
+    }
+
+    private fun dropTimers() {
+        earlyPending = false
+        main.removeCallbacks(earlyAnswer)
+        main.removeCallbacks(unsureWord)
     }
 
     /**
@@ -246,7 +269,7 @@ class VoiceInput(
     override fun onEndOfSpeech() = muter.mute(includeMusic = holding)
 
     override fun onResults(results: Bundle?) {
-        main.removeCallbacks(earlyAnswer)
+        dropTimers()
         muter.unmuteMusicNow()
         muter.unmuteSoon()
         val guesses = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
@@ -275,7 +298,7 @@ class VoiceInput(
     }
 
     override fun onError(error: Int) {
-        main.removeCallbacks(earlyAnswer)
+        dropTimers()
         // Speech was heard but no words came out of it: worth a line, plain silence is not.
         if (speechBegan && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
             val seconds = (SystemClock.elapsedRealtime() - listeningSince) / 1000
