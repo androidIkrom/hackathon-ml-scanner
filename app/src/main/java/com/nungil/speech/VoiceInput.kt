@@ -37,6 +37,8 @@ import com.nungil.core.voice.WakeWord
  * @param appSaying what the app is saying now or has just said (for echo detection).
  * @param isAwake true between the wake word and "Eye stop".
  * @param understood true when a recognizer guess would do something; such a guess beats a misheard first one.
+ * @param answersNow true for words that are the short answer a screen waits for; it is taken while they are
+ *   still being said (VoiceBargeIn.answerIn), not at the end of the phrase.
  * @param onGuesses every guess for the phrase, just before [onHeard] gets the chosen one.
  * @param bias words the recognizer should lean towards right now (place names while a place is expected).
  */
@@ -48,6 +50,7 @@ class VoiceInput(
     private val holdSound: () -> Unit,
     private val releaseSound: () -> Unit,
     private val understood: (String) -> Boolean,
+    private val answersNow: (String) -> Boolean,
     private val onGuesses: (List<String>) -> Unit,
     private val bias: () -> List<String>,
     private val onHeard: (String) -> Unit,
@@ -70,6 +73,31 @@ class VoiceInput(
     private var talkUntil = 0L
     private val listenNow = Runnable { listen() }
     private val holdSafety = Runnable { endHold() }
+
+    /** One word the app is not saying has stood alone: it was the user's, not the app's own misheard. */
+    private val unsureWord = Runnable {
+        if (!holding && isAwake() && VoiceBargeIn.onPartial(lastPartial, appSaying()) != BargeIn.KEEP_TALKING) beginHold()
+    }
+    private var earlyPending = false
+
+    /** The words so far have held the answer a screen waits for long enough: it is heard now. */
+    private val earlyAnswer = Runnable {
+        earlyPending = false
+        val answer = VoiceBargeIn.answerIn(lastPartial, appSaying(), answersNow)
+        if (alwaysOn && oneShot == null && answer != null) {
+            Log.i(TAG, "Answer \"$answer\" taken from the words so far: \"$lastPartial\"")
+            recognizer?.cancel()
+            lastPartial = ""
+            speechBegan = false
+            muter.unmuteMusicNow()
+            muter.unmuteSoon()
+            val delay = policy.afterResult()
+            endHold(force = true)
+            onGuesses(listOf(answer))
+            onHeard(answer)
+            if (alwaysOn) schedule(delay)
+        }
+    }
 
     val isOn: Boolean get() = alwaysOn
 
@@ -99,8 +127,14 @@ class VoiceInput(
      */
     fun freshSession() {
         if (!alwaysOn || oneShot != null) return
-        if (lastPartial.isNotEmpty() && !VoiceBargeIn.isEcho(lastPartial, appSaying())) return
+        // The user's words are words the app did not say. A piece of its own sentence ("Is", from "Is this
+        // it?") is not: taken for the user's, it kept a session that then heard nothing for 10 s (the logs).
+        if (lastPartial.isNotEmpty() && VoiceBargeIn.hasOtherWords(lastPartial, appSaying())) {
+            Log.i(TAG, "Recognizer session kept after the app spoke: heard \"$lastPartial\"")
+            return
+        }
         if (SystemClock.elapsedRealtime() - listeningSince < RecognizerPolicy.FRESH_SESSION_MIN_MS) return
+        dropTimers()
         recognizer?.cancel()
         schedule(RecognizerPolicy.DELAY_AFTER_SILENCE_MS)
     }
@@ -111,6 +145,7 @@ class VoiceInput(
         alwaysOn = false
         oneShot = null
         main.removeCallbacks(listenNow)
+        dropTimers()
         recognizer?.cancel()
         endHold(force = true)
         muter.unmuteAll()
@@ -197,13 +232,33 @@ class VoiceInput(
         val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
         if (text.isNullOrEmpty()) return
         lastPartial = text
-        if (holding) return
-        val userTalking = if (isAwake()) {
-            VoiceBargeIn.onPartial(text, appSaying()) == BargeIn.STOP_ALL_SOUND
-        } else {
-            WakeWord.addressed(text)
+        // The answer is waited for from its first appearance, not from the last change of the words: in a room
+        // with other sound the words kept coming ("Yes", "Yes yes") and the wait began again each time.
+        val answered = oneShot == null && isAwake() && VoiceBargeIn.answerIn(text, appSaying(), answersNow) != null
+        if (answered && !earlyPending) {
+            earlyPending = true
+            main.postDelayed(earlyAnswer, RecognizerPolicy.EARLY_ANSWER_MS)
+        } else if (!answered && earlyPending) {
+            earlyPending = false
+            main.removeCallbacks(earlyAnswer)
         }
-        if (userTalking) beginHold()
+        if (holding) return
+        main.removeCallbacks(unsureWord)
+        if (!isAwake()) {
+            if (WakeWord.addressed(text)) beginHold()
+            return
+        }
+        when (VoiceBargeIn.onPartial(text, appSaying())) {
+            BargeIn.STOP_ALL_SOUND -> beginHold()
+            BargeIn.UNSURE -> main.postDelayed(unsureWord, RecognizerPolicy.UNSURE_WORD_MS)
+            BargeIn.KEEP_TALKING -> Unit
+        }
+    }
+
+    private fun dropTimers() {
+        earlyPending = false
+        main.removeCallbacks(earlyAnswer)
+        main.removeCallbacks(unsureWord)
     }
 
     /**
@@ -214,6 +269,7 @@ class VoiceInput(
     override fun onEndOfSpeech() = muter.mute(includeMusic = holding)
 
     override fun onResults(results: Bundle?) {
+        dropTimers()
         muter.unmuteMusicNow()
         muter.unmuteSoon()
         val guesses = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
@@ -242,10 +298,12 @@ class VoiceInput(
     }
 
     override fun onError(error: Int) {
+        dropTimers()
         // Speech was heard but no words came out of it: worth a line, plain silence is not.
         if (speechBegan && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {
             val seconds = (SystemClock.elapsedRealtime() - listeningSince) / 1000
-            Log.i(TAG, "Recognizer heard sound for $seconds s but no words" + if (appSaying() != null) " (the app was talking)" else "")
+            val partial = if (lastPartial.isEmpty()) "" else ", last words \"$lastPartial\""
+            Log.i(TAG, "Recognizer heard sound for $seconds s but no words" + (if (appSaying() != null) " (the app was talking)" else "") + partial)
         }
         speechBegan = false
         muter.unmuteSoon()

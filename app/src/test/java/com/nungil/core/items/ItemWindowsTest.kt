@@ -86,4 +86,28 @@ class ItemWindowsTest {
     }
 
     @Test fun nothingToLocate() = assertNull(ItemWindows.locate(emptyList(), FloatArray(0), 0.55f))
+
+    @Test fun followingTheItemKeepsTheWindowsSize() {
+        // Following with around() changed the window in every frame: it never holds the window itself, and its
+        // 0.75x and 1.3x sizes added up until the square was the whole frame (the logs: 8 squares, not 10).
+        val window = Box(0.3f, 0.3f, 0.6f, 0.525f)   // 144 x 144 px of 480 x 640
+        val near = ItemWindows.near(window)
+        assertEquals(9, near.size)
+        assertBox(0.3f, 0.3f, 0.6f, 0.525f, near.first())
+        assertTrue(near.all { Math.abs(it.width - window.width) < 1e-5f && Math.abs(it.height - window.height) < 1e-5f })
+        // A quarter of the window to each side, and to the corners.
+        assertTrue(near.any { Math.abs(it.left - 0.375f) < 1e-5f && Math.abs(it.top - 0.3f) < 1e-5f })
+        assertTrue(near.any { Math.abs(it.left - 0.225f) < 1e-5f && Math.abs(it.top - 0.24375f) < 1e-5f })
+    }
+
+    @Test fun followingAtTheEdgeOfTheFrame() {
+        // As wide as the frame: it can only move up and down.
+        val wide = ItemWindows.near(Box(0f, 0.125f, 1f, 0.875f))
+        assertEquals(3, wide.size)
+        assertTrue(wide.all { it.left == 0f && it.right == 1f })
+        // In a corner: the shifts that would leave the frame fall onto the window or a neighbour.
+        val corner = ItemWindows.near(Box(0f, 0f, 0.3f, 0.225f))
+        assertEquals(4, corner.size)
+        assertTrue(corner.all { it.left >= 0f && it.top >= 0f })
+    }
 }

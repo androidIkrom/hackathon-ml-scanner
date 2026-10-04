@@ -21,6 +21,51 @@ class ItemEnrollmentTest {
     private fun view(deg: Double, x: Float = 0.5f, y: Float = 0.5f, area: Float = 0.1f) =
         ItemEnrollmentGuide.View(at(deg), x, y, area)
 
+    @Test fun everySampleIsKeptAsItsSquareAndAsTheItemAlone() {
+        val g = ItemEnrollmentGuide()
+        fun both(deg: Double, x: Float = 0.5f, y: Float = 0.5f) = ItemEnrollmentGuide.View(at(deg), x, y, 0.1f, alone = at(deg + 90))
+        repeat(3) { g.add(both(0.0)) }
+        repeat(3) { g.add(both(20.0, x = 0.6f)) }
+        repeat(3) { g.add(both(-20.0, x = 0.4f)) }
+        repeat(3) { g.add(both(10.0, y = 0.6f)) }
+        assertTrue(g.isDone)
+        assertEquals(12, g.taken)
+        assertEquals(24, g.samples.size)
+        assertArrayEquals(at(0.0), g.samples[0], 1e-6f)     // the squares first
+        assertArrayEquals(at(90.0), g.samples[12], 1e-6f)   // then the item alone
+    }
+
+    @Test fun aSampleWithoutItsItemAlonePicture() {
+        val g = ItemEnrollmentGuide()
+        g.add(ItemEnrollmentGuide.View(at(0.0), 0.5f, 0.5f, 0.1f, alone = at(90.0)))
+        g.add(view(0.0))
+        assertEquals(2, g.taken)
+        assertEquals(3, g.samples.size)
+    }
+
+    @Test fun anItemLearnedAloneIsToldFromOneSavedBefore() {
+        assertFalse(ItemEnrollmentGuide.learnedAlone(12)) // the 12 squares of an item saved before
+        assertTrue(ItemEnrollmentGuide.learnedAlone(24))
+        assertTrue(ItemEnrollmentGuide.learnedAlone(14)) // 7 samples, two steps left early (the logs)
+        assertTrue(ItemEnrollmentGuide.learnedAlone(6)) // only the 3 held still
+        assertFalse(ItemEnrollmentGuide.learnedAlone(0))
+    }
+
+    @Test fun sixSamplesAreNotSavedAsTwelveVectors() {
+        // Held still and left, then right and up left early (the logs): 6 squares and 6 alone would read as old.
+        val g = ItemEnrollmentGuide()
+        fun both(deg: Double, x: Float) = ItemEnrollmentGuide.View(at(deg), x, 0.5f, 0.1f, alone = at(deg + 90))
+        repeat(3) { g.add(both(0.0, 0.5f)) }
+        repeat(3) { g.add(both(20.0, 0.6f)) }
+        assertTrue(g.skip())
+        assertTrue(g.skip())
+        assertTrue(g.isDone)
+        assertEquals(6, g.taken)
+        assertEquals(13, g.samples.size)
+        assertArrayEquals(at(110.0), g.samples[12], 1e-6f)
+        assertTrue(ItemEnrollmentGuide.learnedAlone(g.samples.size))
+    }
+
     @Test fun twelveSamplesInFourSteps() {
         val g = ItemEnrollmentGuide()
         assertEquals(12, g.total)
@@ -133,5 +178,50 @@ class ItemEnrollmentTest {
         assertEquals("Great! Hold the phone still.", ItemPhrases.confirmed(Lang.EN))
         assertEquals("I lost it. Point the camera at it again.", ItemPhrases.lost(Lang.EN))
         assertEquals("맞는 물건을 향해 비추고 가만히 들어 주세요.", ItemPhrases.notThat(Lang.KO))
+    }
+
+    @Test fun aThingThatFillsTheViewIsTooNearToLearn() {
+        // The logs: a towel at 53 to 93% of the frame took 155 s, a bottle and a box at 11 to 33% under a minute.
+        assertFalse(ItemEnrollmentGuide.fillsView(0.33f))
+        assertFalse(ItemEnrollmentGuide.fillsView(0.45f))
+        assertTrue(ItemEnrollmentGuide.fillsView(0.53f))
+    }
+
+    @Test fun aThingWhoseSquareLooksRightButWhichAloneIsSomethingElse() {
+        // The logs: three of the twelve samples of a bottle scored 0.47 to 0.54 as squares (the same table was
+        // around them) and 0.02 to 0.04 alone: not the bottle at all. Its real samples scored 0.43 to 0.89 alone.
+        val g = ItemEnrollmentGuide()
+        repeat(3) { g.add(ItemEnrollmentGuide.View(at(0.0), 0.5f, 0.5f, 0.1f, alone = at(0.0))) }
+        assertFalse(g.isTheItem(ItemEnrollmentGuide.View(at(57.0), 0.6f, 0.5f, 0.1f, alone = at(88.0))))  // square 0.54, alone 0.03
+        assertTrue(g.isTheItem(ItemEnrollmentGuide.View(at(57.0), 0.6f, 0.5f, 0.1f, alone = at(64.0))))   // alone 0.44
+        // Without the picture of the thing alone, the square decides as before.
+        assertTrue(g.isTheItem(ItemEnrollmentGuide.View(at(57.0), 0.6f, 0.5f, 0.1f)))
+    }
+
+    @Test fun aStepThatTakesTooLongIsLeftWithWhatItHas() {
+        // The logs: RIGHT took 55 s for a pillow on a sheet of its own pattern, the whole add 104 s.
+        val g = ItemEnrollmentGuide()
+        repeat(3) { g.add(view(0.0)) }
+        assertEquals(ItemStep.LEFT, g.step)
+        g.add(view(20.0, x = 0.6f))
+        assertTrue(g.skip())                       // LEFT is left with its one sample
+        assertEquals(ItemStep.RIGHT, g.step)
+        assertEquals(50, g.percent())
+        repeat(3) { g.add(view(-20.0, x = 0.4f)) }  // RIGHT is counted from where it was held still, as ever
+        assertEquals(ItemStep.UP, g.step)
+        assertTrue(g.skip())
+        assertTrue(g.isDone)
+        assertEquals(7, g.taken)
+        assertEquals(7, g.samples.size)
+        assertEquals(100, g.percent())
+        assertFalse(g.skip())
+    }
+
+    @Test fun holdingStillIsNeverLeftOut() {
+        val g = ItemEnrollmentGuide()
+        g.add(view(0.0))
+        assertFalse(g.skip())
+        assertEquals(ItemStep.STILL, g.step)
+        assertEquals(1, g.taken)
     }
 }

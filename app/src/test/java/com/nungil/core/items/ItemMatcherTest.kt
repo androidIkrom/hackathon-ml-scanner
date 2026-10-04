@@ -2,6 +2,8 @@ package com.nungil.core.items
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.cos
 import kotlin.math.sin
@@ -33,5 +35,41 @@ class ItemMatcherTest {
         val known = mapOf(1L to listOf(at(0.0)))
         assertEquals(1L, ItemMatcher.bestMatch(at(56.0), known, ItemMatcher.FIND_THRESHOLD)?.id) // cos 56 = 0.559
         assertNull(ItemMatcher.bestMatch(at(57.0), known, ItemMatcher.FIND_THRESHOLD))            // cos 57 = 0.545
+    }
+
+    @Test fun theItemAloneCanAddAFindAndNeverTakesOneAway() {
+        val find = ItemMatcher.FIND_THRESHOLD
+        assertEquals(ItemMatcher.Seen.BY_SQUARES, ItemMatcher.seen(0.55f, find, alone = 0.1f))
+        assertEquals(ItemMatcher.Seen.BY_ITEM_ALONE, ItemMatcher.seen(0.40f, find, alone = 0.60f))
+        assertEquals(ItemMatcher.Seen.NO, ItemMatcher.seen(0.40f, find, alone = 0.59f))
+        // An empty view scored 0.29 at most: not worth a look, whatever the segmenter found there.
+        assertEquals(ItemMatcher.Seen.NO, ItemMatcher.seen(0.34f, find, alone = 0.95f))
+        // Once found it is kept at the lower score, as before.
+        assertEquals(ItemMatcher.Seen.BY_SQUARES, ItemMatcher.seen(0.45f, ItemMatcher.KEEP_THRESHOLD, alone = null))
+    }
+
+    @Test fun oldItemsAreSeenBySquaresAlone() {
+        // Nothing usable from the segmenter, or an item saved with squares only: the squares decide as they did.
+        assertEquals(ItemMatcher.Seen.BY_SQUARES, ItemMatcher.seen(0.70f, ItemMatcher.FIND_THRESHOLD, alone = null))
+        assertEquals(ItemMatcher.Seen.NO, ItemMatcher.seen(0.54f, ItemMatcher.FIND_THRESHOLD, alone = null))
+    }
+
+    @Test fun anItemSavedTwiceUnderOneNameIsOneItem() {
+        // The logs: "My new white bottle" was saved twice. The search looked for the first, and every square
+        // that looked more like the second counted for nothing.
+        val names = mapOf(14L to "My new white bottle", 16L to " my new white bottle", 12L to "My white bottle")
+        assertEquals(setOf(14L, 16L), ItemMatcher.sameName(14L, names))
+        assertEquals(setOf(12L), ItemMatcher.sameName(12L, names))
+        assertEquals(setOf(99L), ItemMatcher.sameName(99L, names))
+    }
+
+    @Test fun theOutlineShownIsTheItemsOwn() {
+        // The logs: outlines of other things scored 0.36 to 0.47 alone and were drawn; the item 0.57 to 0.80.
+        assertTrue(ItemMatcher.outlined(alone = 0.57f, learnedAlone = true, inside = false))
+        assertFalse(ItemMatcher.outlined(alone = 0.47f, learnedAlone = true, inside = true))
+        assertFalse(ItemMatcher.outlined(alone = null, learnedAlone = true, inside = true))
+        // An item learned before there were samples of it alone: the outline inside its square, as before.
+        assertTrue(ItemMatcher.outlined(alone = 0.2f, learnedAlone = false, inside = true))
+        assertFalse(ItemMatcher.outlined(alone = 0.2f, learnedAlone = false, inside = false))
     }
 }

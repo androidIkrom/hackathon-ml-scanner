@@ -31,6 +31,7 @@ import com.nungil.core.items.ItemCrop
 import com.nungil.core.items.ItemEnrollmentGuide
 import com.nungil.core.items.ItemLook
 import com.nungil.core.items.ItemLooks
+import com.nungil.core.items.ItemNames
 import com.nungil.core.items.ItemPhrases
 import com.nungil.core.items.ItemStep
 import com.nungil.core.people.EnrollPhrases
@@ -61,7 +62,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Looking: the thing in the middle of the frame is outlined (ItemSegmenter) and tinted on the preview, and
  * once a few frames agree on what it looks like it is described and the user is asked whether it is the
- * right one: "I see something. It is black and round, about 15 centimetres across, about 40 centimetres away.
+ * right one: "It is black and round, about 15 centimetres across, about 40 centimetres away.
  * Is this it?" Yes (said, or the button) starts learning; no starts looking again.
  *
  * Learning: 3 samples held still, then 3 each with the phone moved left, right and up (ItemEnrollmentGuide).
@@ -125,6 +126,10 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
     private var photo: Bitmap? = null
     private var lastSampleMs = 0L
     private var lastSeenMs = 0L
+
+    /** When the step being learned began (0: with the next frame); see STEP_MAX_MS. */
+    @Volatile
+    private var stepSinceMs = 0L
     private var askedAtMs = 0L
     private var lastLogMs = 0L
 
@@ -223,7 +228,10 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
     /** Main thread: the question has been asked; the next words are the answer. */
     private fun listenForAnswer() {
         if (_binding == null || phase != Phase.LOOKING) return
-        (activity as? MainActivity)?.dictationAccepts = { RoutePhrases.isYes(it) || RoutePhrases.isNo(it) }
+        (activity as? MainActivity)?.let {
+            it.dictationAccepts = { text -> RoutePhrases.isYes(text) || RoutePhrases.isNo(text) }
+            it.dictationEarly = true
+        }
         services.askForWords(viewLifecycleOwner) { text -> answer(text) }
     }
 
@@ -276,6 +284,8 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
     private fun resume() {
         if (phase != Phase.LEARNING || running) return
         running = true
+        // A pause is not time spent on the step.
+        stepSinceMs = 0L
         waitUntilMs = SystemClock.elapsedRealtime() + PROMPT_WAIT_MS
         lastHintMs = waitUntilMs
         binding.itemEnrollButton.setText(R.string.item_enroll_pause)
@@ -352,11 +362,18 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
     private fun looking(seen: ItemSight.Sighting?, now: Long) {
         trackX = null
         trackY = null
-        if (seen == null) {
+        // Nothing there, or a thing so near that it fills the view: it is not asked about until it fits.
+        val tooNear = seen != null && ItemEnrollmentGuide.fillsView(seen.mask.cover)
+        if (seen == null || tooNear && !asked) {
             looks.clear()
             if (!asked && now >= waitUntilMs && now - lastHintMs >= NO_ITEM_HINT_MS) {
                 lastHintMs = now
-                services.speaker.say(ItemPhrases.noItem(lang))
+                val hint = when {
+                    tooNear -> ItemPhrases.tooNear(lang)
+                    sight?.filled == true -> ItemPhrases.wholeView(lang)
+                    else -> ItemPhrases.noItem(lang)
+                }
+                services.speaker.say(hint)
             }
             return
         }
@@ -390,8 +407,19 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
             learningStarted = true
             guide.restart()
             lastSeenMs = now
+            stepSinceMs = now
         }
         if (!running) return
+        // A step that is not done in time is left with what it has: the add must end.
+        val waiting = guide.step
+        if (stepSinceMs == 0L) stepSinceMs = now
+        if (waiting != null && waiting != ItemStep.STILL && now - stepSinceMs >= STEP_MAX_MS) {
+            Log.i(TAG, "Item step $waiting left after ${(now - stepSinceMs) / 1000} s, ${guide.taken} samples so far")
+            guide.skip()
+            stepSinceMs = now
+            stepDone(guide.step, now)
+            return
+        }
         if (seen == null || !guide.isTheItem(seen.view)) {
             // Lost, or something else (the bottle behind it) took its place: look in the middle again.
             trackX = null
@@ -422,40 +450,56 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
             }
         }
         val stepDone = guide.add(seen.view)
+        services.haptics.buzz(Buzz.TAP)
+        if (stepDone) {
+            stepSinceMs = now
+            stepDone(guide.step, now)
+        } else {
+            val percent = guide.percent()
+            main.post { _binding?.itemEnrollProgress?.setProgressCompat(percent, true) }
+        }
+    }
+
+    /** Worker thread: a step ended (done, or left early). Says the [next] one, or saves when there is none. */
+    private fun stepDone(next: ItemStep?, now: Long) {
         val percent = guide.percent()
-        val next = guide.step
         main.post {
             val b = _binding ?: return@post
             b.itemEnrollProgress.setProgressCompat(percent, true)
             if (next != null) b.itemEnrollPrompt.text = ItemPhrases.prompt(next, lang)
         }
-        services.haptics.buzz(Buzz.TAP)
-        when {
-            guide.isDone -> finish()
-            stepDone && next != null -> {
-                waitUntilMs = now + PROMPT_WAIT_MS
-                lastHintMs = waitUntilMs
-                // At once, not queued behind a gap: the wait for the user to follow it has already begun.
-                services.speaker.sayNow(ItemPhrases.prompt(next, lang))
-            }
+        if (next == null) {
+            finish()
+            return
         }
+        waitUntilMs = now + PROMPT_WAIT_MS
+        lastHintMs = waitUntilMs
+        // At once, not queued behind a gap: the wait for the user to follow it has already begun.
+        services.speaker.sayNow(ItemPhrases.prompt(next, lang))
     }
 
-    /** Worker thread: the item and its 12 samples are written in one transaction on the process-wide scope. */
+    /**
+     * Worker thread: the item and its samples (the square and the thing alone of each) are written in one
+     * transaction on the process-wide scope.
+     */
     private fun finish() {
         phase = Phase.FINISHED
         running = false
         val vectors = guide.samples.toList()
         // No detector here, so no kind of thing to show under the name; saved items are found by their look.
         val label = if (kind == ItemKind.CAR) "car" else "object"
-        Log.i(TAG, "Item enrolled: ${vectors.size} samples, ${(SystemClock.elapsedRealtime() - openedMs) / 1000} s on the screen")
+        Log.i(TAG, "Item enrolled: ${guide.taken} samples, ${vectors.size} vectors, ${(SystemClock.elapsedRealtime() - openedMs) / 1000} s on the screen")
         val image = photo
         val context = appContext
         val itemName = name
         val itemKind = kind
         AppScope.launch {
             val path = image?.let { PhotoFiles.save(context, PHOTO_FOLDER, it) }
-            AppDatabase.get(context).items().insertItemWithEmbeddings(
+            val dao = AppDatabase.get(context).items()
+            // Learning a name again takes the place of what was saved under it: the user was told it was
+            // saved and said "replace" (AddItemFragment). Two items of one name stole each other's squares.
+            val replaced = dao.allItems().filter { ItemNames.same(it.name, itemName) }
+            dao.insertItemWithEmbeddings(
                 ItemEntity(
                     name = itemName,
                     kind = itemKind.name,
@@ -465,6 +509,11 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
                 ),
                 vectors.map { ItemEmbeddingEntity(vector = VectorBytes.toBytes(it)) },
             )
+            replaced.forEach {
+                dao.deleteItem(it.id)
+                PhotoFiles.delete(it.photoPath)
+            }
+            if (replaced.isNotEmpty()) Log.i(TAG, "Item replaced ${replaced.size} saved under the same name")
             withContext(Dispatchers.Main) {
                 services.haptics.buzz(Buzz.DONE)
                 val done = ItemPhrases.done(itemName, lang)
@@ -491,6 +540,12 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
 
         /** Without the thing in view this long while learning, the user is told. */
         const val LOST_MS = 3_000L
+
+        /**
+         * A step (left, right, up) is left with the samples it has after this long. Steps that went well took
+         * 4 to 12 s; one that did not took 55 and 98 s (the logs).
+         */
+        const val STEP_MAX_MS = 20_000L
 
         /** Time to hear a prompt ("Move the phone a little to the left.") and do it. */
         const val PROMPT_WAIT_MS = 2_000L

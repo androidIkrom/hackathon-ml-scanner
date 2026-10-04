@@ -28,6 +28,10 @@ object ItemWindows {
     private val AROUND_SCALES = listOf(0.75f, 1f)
     private val AROUND_SHIFTS = listOf(0f to 0f, -0.25f to 0f, 0.25f to 0f, 0f to -0.25f, 0f to 0.25f)
     private const val AROUND_BIGGER = 1.3f
+
+    // Following (near): the window first, then its eight neighbours.
+    private val NEAR_SHIFTS = listOf(0f to 0f) +
+        listOf(-0.25f, 0f, 0.25f).flatMap { dy -> listOf(-0.25f, 0f, 0.25f).map { dx -> dx to dy } }.filter { it != 0f to 0f }
     private const val SAME = 1e-4f
 
     /** The square in the middle of a [width] x [height] image. */
@@ -92,6 +96,23 @@ object ItemWindows {
             val left = (window.centerX - width / 2f).coerceIn(0f, 1f - width)
             val top = (window.centerY - height / 2f).coerceIn(0f, 1f - height)
             out += Box(left, top, left + width, top + height)
+        }
+        return out
+    }
+
+    /**
+     * Where to look for an item that was in [window] a moment ago: the window itself, then the same window a
+     * quarter of its size to each side and corner, moved back inside the frame. The size stays: around() leaves
+     * the window out and tries other sizes, so following with it changed the window in every frame until it was
+     * the whole frame (the logs). An item that has come nearer or gone farther is found again by the grid.
+     */
+    fun near(window: Box): List<Box> {
+        val out = mutableListOf<Box>()
+        for ((dx, dy) in NEAR_SHIFTS) {
+            val left = (window.left + dx * window.width).coerceIn(0f, 1f - window.width)
+            val top = (window.top + dy * window.height).coerceIn(0f, 1f - window.height)
+            val box = Box(left, top, left + window.width, top + window.height)
+            if (out.none { same(it, box) }) out += box
         }
         return out
     }

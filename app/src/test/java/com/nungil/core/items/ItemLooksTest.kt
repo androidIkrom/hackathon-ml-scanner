@@ -122,11 +122,11 @@ class ItemLooksTest {
     @Test fun theQuestion() {
         val look = ItemLook(ColorName.BLACK, ItemShape.ROUND, 20, null, 40)
         assertEquals(
-            "I see something. It is black and round, about 20 centimetres across, about 40 centimetres away. Is this it? Say yes or no.",
+            "It is black and round, about 20 centimetres across, about 40 centimetres away. Is this it?",
             ItemPhrases.ask(look, Lang.EN),
         )
         assertEquals(
-            "물건이 보여요. 검은색이고 둥근 모양이에요. 크기는 약 20센티미터, 거리는 약 40센티미터예요. 이것인가요? 네 또는 아니요라고 말해 주세요.",
+            "검은색이고 둥근 모양이에요. 크기는 약 20센티미터, 거리는 약 40센티미터예요. 이것인가요?",
             ItemPhrases.ask(look, Lang.KO),
         )
         assertNull(ItemPhrases.ask(ItemLook(null, null, null, null, null), Lang.EN))
@@ -151,5 +151,13 @@ class ItemLooksTest {
             ItemPhrases.look(ItemLook(null, null, 10, null, 100), Lang.KO),
         )
         assertNull(ItemPhrases.look(ItemLook(null, null, null, null, null), Lang.KO))
+    }
+
+    @Test fun tooNear() {
+        assertEquals("It fills the view. Move the phone back a little.", ItemPhrases.tooNear(Lang.EN))
+        assertEquals("화면에 꽉 차요. 휴대폰을 조금 뒤로 빼 주세요.", ItemPhrases.tooNear(Lang.KO))
+        // The whole view is one thing: the item from too near, or the table it is not on.
+        assertEquals("One thing fills the whole view. Move the phone back, or point it at the thing.", ItemPhrases.wholeView(Lang.EN))
+        assertEquals("한 가지가 화면을 가득 채워요. 휴대폰을 뒤로 빼거나 물건 쪽으로 비춰 주세요.", ItemPhrases.wholeView(Lang.KO))
     }
 }

@@ -6,26 +6,50 @@ import com.nungil.core.people.FaceMatcher
 enum class ItemStep { STILL, LEFT, RIGHT, UP }
 
 /**
- * [samplesPerStep] samples held still, then with the phone moved left, right and up (12 by default).
+ * [samplesPerStep] samples held still, then with the phone moved left, right and up (12 by default; fewer when
+ * a step was left early, see [skip]).
  *
  * Every sample must still be the thing that was confirmed: it looks like the samples held still (cosine of at
- * least [SAME_MIN]) and is about their size ([SIZE_MIN]..[SIZE_MAX] of their area), so the bottle behind it or
+ * least [SAME_MIN] for its square and [ALONE_SAME_MIN] for the thing alone) and is about their size ([SIZE_MIN]..[SIZE_MAX] of their area), so the bottle behind it or
  * the table is never learned as the item. Moving the phone left shifts the thing right in the frame, and so on;
  * a LEFT, RIGHT or UP sample counts only once the thing has shifted at least [MIN_SHIFT] of the frame that way
  * from where it was held still. Coming back to where it was after LEFT is not RIGHT (the logs).
+ *
+ * Each sample is kept twice: the square around the thing, and the same square with everything that is not the
+ * thing painted over (ItemMask.alone). The square is 19 to 41% item, and the same item on another background
+ * scored 0.50 against it (measured); the thing alone does not know where it stood.
  */
 class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
-    /** The thing as one frame shows it: its embedding, the middle of its outline (0..1) and its area (0..1 of the frame). */
-    class View(val vector: FloatArray, val centerX: Float, val centerY: Float, val area: Float)
+    /**
+     * The thing as one frame shows it: the embedding of its square, the middle of its outline (0..1), its area
+     * (0..1 of the frame) and the embedding of the thing [alone], when that picture could be made.
+     */
+    class View(val vector: FloatArray, val centerX: Float, val centerY: Float, val area: Float, val alone: FloatArray? = null)
 
     private val kept = mutableListOf<View>()
 
+    /** The step being collected (an index into ItemStep) and how many samples it has. */
+    private var stepIndex = 0
+    private var inStep = 0
+
     val total: Int = samplesPerStep * ItemStep.entries.size
     val taken: Int get() = kept.size
-    val samples: List<FloatArray> get() = kept.map { it.vector }
+
+    /**
+     * What is saved: the square of every sample, then the thing alone of every sample that has it. Items saved
+     * before are told by their count ([learnedAlone]), so a list of that count with the thing alone in it keeps
+     * its last vector twice: 6 samples, two steps left early, made one (the logs). No score changes, as a
+     * score is the best over the vectors.
+     */
+    val samples: List<FloatArray>
+        get() {
+            val alone = kept.mapNotNull { it.alone }
+            val all = kept.map { it.vector } + alone
+            return if (alone.isNotEmpty() && all.size == SAVED_BEFORE) all + alone.last() else all
+        }
 
     /** The step being collected; null when done. */
-    val step: ItemStep? get() = ItemStep.entries.getOrNull(kept.size / samplesPerStep)
+    val step: ItemStep? get() = ItemStep.entries.getOrNull(stepIndex)
     val isDone: Boolean get() = step == null
 
     private val still: List<View> get() = kept.take(samplesPerStep)
@@ -40,7 +64,11 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
         if (kept.isEmpty()) return true
         val area = stillArea ?: return true
         val sized = view.area >= area * SIZE_MIN && view.area <= area * SIZE_MAX
-        return sized && still.any { FaceMatcher.cosine(view.vector, it.vector) >= SAME_MIN }
+        if (!sized || still.none { FaceMatcher.cosine(view.vector, it.vector) >= SAME_MIN }) return false
+        // The square holds the table too, and the table is the same under another thing.
+        val alone = view.alone ?: return true
+        val stills = still.mapNotNull { it.alone }
+        return stills.isEmpty() || stills.any { FaceMatcher.cosine(alone, it) >= ALONE_SAME_MIN }
     }
 
     /** Whether [view] has moved the way the current step asks (always true while held still). */
@@ -64,13 +92,38 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
         val current = step ?: return false
         if (!accepts(view)) return false
         kept += view
+        inStep++
+        if (inStep == samplesPerStep) next()
         return step != current
     }
 
-    /** Start again from nothing. */
-    fun restart() = kept.clear()
+    /**
+     * Leaves the current step with the samples it has and goes on to the next. A step that cannot be done is not
+     * waited for without end: RIGHT took 55 s for a pillow lying on a sheet of its own pattern, and the whole
+     * add 104 s (the logs). Not while held still: those samples say what the item is. False when nothing was
+     * left out.
+     */
+    fun skip(): Boolean {
+        val current = step ?: return false
+        if (current == ItemStep.STILL) return false
+        next()
+        return true
+    }
 
-    fun percent(): Int = taken * 100 / total
+    private fun next() {
+        stepIndex++
+        inStep = 0
+    }
+
+    /** Start again from nothing. */
+    fun restart() {
+        kept.clear()
+        stepIndex = 0
+        inStep = 0
+    }
+
+    /** How far through the steps, a step left early counted as done. */
+    fun percent(): Int = if (isDone) 100 else (stepIndex * samplesPerStep + inStep) * 100 / total
 
     companion object {
         const val SAMPLES_PER_STEP = 3
@@ -81,8 +134,36 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
          */
         const val SAME_MIN = 0.4f
 
+        /**
+         * The least the thing alone must look like the thing alone while it was held still. Three of the twelve
+         * samples of a bottle scored 0.47 to 0.54 as squares and 0.02 to 0.04 alone: something else on the same
+         * table. The real samples of four items scored 0.43 to 0.89 alone (the saved vectors).
+         */
+        const val ALONE_SAME_MIN = 0.35f
+
         /** How far (fraction of the frame) the thing must have shifted for a LEFT, RIGHT or UP sample. */
         const val MIN_SHIFT = 0.08f
+
+        /**
+         * A thing that covers more of the frame than this is too near to learn: the frame cuts its outline, so
+         * its middle hardly moves when the phone does, and a little nearer it is the whole view and is lost.
+         * A towel at 53 to 93% took 155 s, 98 of them for LEFT; a bottle and a box at 11 to 33% under a minute
+         * (the logs).
+         */
+        const val FILLS_VIEW = 0.45f
+
+        fun fillsView(cover: Float): Boolean = cover > FILLS_VIEW
+
+        /** How many vectors an item saved before the thing alone was learned has: the 12 squares, nothing else. */
+        const val SAVED_BEFORE = 12
+
+        /**
+         * Whether an item saved with [vectors] vectors has samples of the thing alone. Since items saved before
+         * ([SAVED_BEFORE]) every sample is kept twice, and a step left early keeps fewer samples (3 to 12: 6 to
+         * 24 vectors), so "more than 12" missed every item of 3 to 6 samples. A new list of 12 is saved as 13
+         * ([samples]).
+         */
+        fun learnedAlone(vectors: Int): Boolean = vectors > 0 && vectors != SAVED_BEFORE
 
         /** The thing's area, as a part of what it was while held still, that is still the same thing. */
         const val SIZE_MIN = 0.4f

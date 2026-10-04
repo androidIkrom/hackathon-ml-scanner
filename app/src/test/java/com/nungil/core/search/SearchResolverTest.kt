@@ -61,6 +61,21 @@ class SearchResolverTest {
         assertEquals(TargetType.LABEL, SearchResolver.resolve("cup", listOf(cupboard), Lang.EN)?.type)
     }
 
+    @Test fun aWordSlippedIntoTheName() {
+        // The logs: "Find my new black box" for the item "My black box".
+        val box = SavedName(21, "My black box", TargetType.ITEM, "object")
+        assertEquals(21L, SearchResolver.resolve("find my new black box", listOf(box), Lang.EN)?.id)
+        assertEquals(21L, SearchResolver.resolve("my big black box", listOf(box), Lang.EN)?.id)
+        // Not in another order, not with a word missing, and never for a one-word name.
+        assertNull(SearchResolver.resolve("my box black", listOf(box), Lang.EN))
+        assertNull(SearchResolver.resolve("my new box", listOf(box), Lang.EN))
+        assertNull(SearchResolver.resolve("alo", listOf(ali), Lang.EN))
+        // A longer sentence that happens to hold the name's words is about something else.
+        val bag = SavedName(22, "My bag", TargetType.ITEM, "object")
+        assertEquals("cell phone", SearchResolver.resolve("find my phone in the bag", listOf(bag), Lang.EN)?.label)
+        assertEquals(22L, SearchResolver.resolve("find my big red bag", listOf(bag), Lang.EN)?.id)
+    }
+
     @Test fun hangulNamesWithParticlesAndGivenName() {
         assertEquals(minjun.id, SearchResolver.resolve("김민준을 찾아줘", saved, Lang.KO)?.id)
         assertEquals(minjun.id, SearchResolver.resolve("민준 어디 있어", saved, Lang.KO)?.id)

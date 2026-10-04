@@ -6,7 +6,8 @@ import com.nungil.core.lang.LabelNames
 /**
  * Resolves a query to a saved person or item first, then to a COCO label.
  *
- * Saved names: exact, then containment, then at most [MAX_TYPOS] edits for names of [MIN_FUZZY_LENGTH]+
+ * Saved names: exact, then containment (the name's words in a row, or in their order with a word slipped in
+ * between for names of two words or more), then at most [MAX_TYPOS] edits for names of [MIN_FUZZY_LENGTH]+
  * characters (a Hangul syllable counts as one character). Names are also matched against the raw words, so a
  * name that is a filler word ("Me", "나") is never lost. Labels: the whole phrase, then two-word pairs, then
  * single words, each with Korean particles and English plurals stripped, through the synonym tables.
@@ -14,6 +15,9 @@ import com.nungil.core.lang.LabelNames
 object SearchResolver {
     const val MAX_TYPOS = 2
     const val MIN_FUZZY_LENGTH = 4
+
+    /** How many other words may stand between the words of a saved name. */
+    const val MAX_SLIPPED = 2
 
     private val EN_SYNONYMS = mapOf(
         "phone" to "cell phone", "cellphone" to "cell phone", "mobile" to "cell phone",
@@ -89,6 +93,8 @@ object SearchResolver {
         names.firstOrNull { (_, name) -> wordLists.any { containsName(it, name) } }?.let { return it.first }
         val phrase = cleaned.phrase
         if (phrase.isNotEmpty()) names.firstOrNull { (_, name) -> nameContains(name, phrase) }?.let { return it.first }
+        // 2b. A word slipped in: "my new black box" for "My black box" (the logs). Two-word names and longer only.
+        names.firstOrNull { (_, name) -> wordLists.any { containsNameWords(it, name) } }?.let { return it.first }
 
         // 3. Fuzzy: small typos in longer names.
         if (phrase.isEmpty()) return null
@@ -110,6 +116,28 @@ object SearchResolver {
         if (nameWords.size > words.size) return false
         for (start in 0..words.size - nameWords.size) {
             if (nameWords.indices.all { wordIs(words[start + it], nameWords[it], it == nameWords.lastIndex) }) return true
+        }
+        return false
+    }
+
+    /**
+     * All the words of a name of two words or more appear in [words] in their order, with at most [MAX_SLIPPED]
+     * other words between the first and the last: "my new black box" is "My black box", "my phone in the bag"
+     * is not "My bag".
+     */
+    private fun containsNameWords(words: List<String>, name: String): Boolean {
+        val nameWords = name.split(' ')
+        if (nameWords.size < 2 || nameWords.size > words.size) return false
+        for (start in words.indices) {
+            if (!wordIs(words[start], nameWords[0], false)) continue
+            var next = 1
+            var slipped = 0
+            var i = start + 1
+            while (i < words.size && next < nameWords.size && slipped <= MAX_SLIPPED) {
+                if (wordIs(words[i], nameWords[next], next == nameWords.lastIndex)) next++ else slipped++
+                i++
+            }
+            if (next == nameWords.size && slipped <= MAX_SLIPPED) return true
         }
         return false
     }

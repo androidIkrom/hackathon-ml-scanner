@@ -23,6 +23,53 @@ object ItemMatcher {
     /** A grid window that scores at least this is worth a closer look (ItemWindows.around). */
     const val LOOK_CLOSER = 0.35f
 
+    /**
+     * The thing in the middle of a square, cut out and compared alone (ItemMask.alone), is the item from this
+     * score: the item alone scored 0.70 and more, a view without it 0.28 at most (measured).
+     */
+    const val ALONE_MIN = 0.6f
+
+    /**
+     * The thing in the middle of a square is drawn as the item's outline from this score alone. Outlines of
+     * other things, drawn because they lay inside the square, scored 0.36 to 0.47; the item 0.57 to 0.80 (the
+     * logs).
+     */
+    const val OUTLINE_MIN = 0.5f
+
+    /**
+     * Whether the outline of the thing in a square is shown as the item's. [alone] is the thing's score by
+     * itself (null: no thing). An item that was [learnedAlone] is told from other things by that score; one
+     * learned before, with squares only, has the outline that lies [inside] its square, as it had.
+     */
+    fun outlined(alone: Float?, learnedAlone: Boolean, inside: Boolean): Boolean =
+        alone != null && alone >= OUTLINE_MIN || !learnedAlone && inside
+
+    /** How the item was seen in a frame, if it was. */
+    enum class Seen { BY_SQUARES, BY_ITEM_ALONE, NO }
+
+    /**
+     * Whether the item is at a place whose square scored [square] against the samples, where [needs] is the
+     * score that finds or keeps it and [alone] is the score of the thing there cut out (null when the segmenter
+     * gave nothing usable). The squares decide as they always did; where they only half know the place
+     * ([LOOK_CLOSER] and up) the thing alone can say yes. It never says no: a square's middle is not always
+     * on the item, and a veto would have dropped 12 of 115 good finds (measured).
+     */
+    fun seen(square: Float, needs: Float, alone: Float?): Seen = when {
+        square >= needs -> Seen.BY_SQUARES
+        square >= LOOK_CLOSER && alone != null && alone >= ALONE_MIN -> Seen.BY_ITEM_ALONE
+        else -> Seen.NO
+    }
+
+    /**
+     * The saved items that are [id] under the same name, [id] among them: saved twice, a thing is still one
+     * thing. Each square counts only for the saved item it looks most like, so a search for the first of two
+     * same-named items lost every square that looked more like the second (the logs).
+     */
+    fun sameName(id: Long, names: Map<Long, String>): Set<Long> {
+        val name = names[id] ?: return setOf(id)
+        return names.filterValues { ItemNames.same(it, name) }.keys + id
+    }
+
     data class Match(val id: Long, val score: Float)
 
     /** Best saved item for [vector] by its closest sample, or null below [threshold]. */

@@ -8,6 +8,12 @@
     <string name="item_add_ask">What should I call it?</string>
     <string name="item_add_start">Start</string>
     <string name="item_add_need_name">Tell me the name first.</string>
+    <string name="item_add_confirm">%1$s. Is that right?</string>
+    <string name="item_add_again">Say the name again.</string>
+    <string name="item_add_taken">%1$s is already saved. Say replace to learn it again, or say another name.</string>
+    <string name="item_add_yes">Yes, start</string>
+    <string name="item_add_replace">Replace and start</string>
+    <string name="item_add_other">Another name</string>
 
     <string name="item_enroll_title">Learning %1$s</string>
     <string name="item_enroll_start">Start</string>
