@@ -61,6 +61,7 @@ import java.util.Calendar
 import com.nungil.core.voice.VoiceCommandParser
 import com.nungil.core.voice.WakeResult
 import com.nungil.core.voice.WakeWord
+import com.nungil.core.walk.GoQuestion
 import com.nungil.core.walk.WalkCommand
 import com.nungil.core.walk.WalkCommands
 import com.nungil.walk.WalkFragment
@@ -605,7 +606,8 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         WalkCommands.parse(text) { VoiceCommandParser.parse(it) !is VoiceCommand.Unknown }
 
     private fun isCommand(text: String): Boolean =
-        VoiceCommandParser.parse(text) !is VoiceCommand.Unknown || walkCommand(text) != null || QuickAsk.of(text) != null
+        VoiceCommandParser.parse(text) !is VoiceCommand.Unknown || walkCommand(text) != null || QuickAsk.of(text) != null ||
+            GoQuestion.of(text) != null
 
     private fun answer(ask: QuickAsk) {
         val now = Calendar.getInstance()

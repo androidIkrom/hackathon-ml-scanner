@@ -1,6 +1,7 @@
 package com.nungil.core.walk
 
 import com.nungil.contract.Lang
+import com.nungil.core.lang.Josa
 import com.nungil.core.lang.KoNumbers
 import org.json.JSONArray
 import org.json.JSONObject
@@ -101,6 +102,12 @@ object OrsJson {
         }
     }.getOrDefault(emptyList())
 
+    /** The street of a reverse-geocode answer (spec §6), else the name of what is there; null when there is none. */
+    fun parseReverse(json: String): String? = runCatching {
+        val props = JSONObject(json).optJSONArray("features")?.optJSONObject(0)?.optJSONObject("properties") ?: return null
+        props.optString("street", "").ifBlank { props.optString("name", "") }.ifBlank { null }
+    }.getOrNull()
+
     /** Place search stays within walking reach of the user. */
     const val NEAR_KM = 20
 
@@ -115,6 +122,8 @@ sealed interface Announcement {
     data class Turn(override val text: String) : Announcement
     data class Arrived(override val text: String) : Announcement
     data class OffRoute(override val text: String) : Announcement
+    data class WrongWay(override val text: String) : Announcement
+    data class Approach(override val text: String) : Announcement
 }
 
 /**
@@ -135,14 +144,30 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
     private var farFixes = 0
     private val saidAt = HashMap<String, Long>()
 
+    /** From the end of the line to the destination: the route ends on the street, the place may be off it. */
+    private val endGap = Beacon.distanceMetres(route.line.last(), route.destination.point).toFloat()
+
+    /** The farthest along the line the walker has been, and whether "walking away" was said since. */
+    private var farthest = -1f
+    private var wrongWaySaid = false
+    private var behindFixes = 0
+    private val approach = GoApproach().also { it.next(along.last() + endGap) }
+
     var finished = false
         private set
 
-    fun update(nowMs: Long, at: LatLon): Announcement? {
+    /** Progress along the route at the last fix on it, in metres (for the walker's speed). */
+    var progressM = 0f
+        private set
+
+    /** Which side of the street the destination is on: against the direction of the route's last segment. */
+    val side: Side? = if (route.line.size >= 2) GoMath.side(route.line[route.line.size - 2], route.line.last(), route.destination.point) else null
+
+    fun update(nowMs: Long, at: LatLon, accuracyM: Float = 0f): Announcement? {
         if (finished) return null
         if (Beacon.distanceMetres(at, route.destination.point) <= ARRIVED_M) {
             finished = true
-            return Announcement.Arrived(RoutePhrases.arrived(route.destination.name, lang))
+            return Announcement.Arrived(RoutePhrases.arrived(route.destination.name, lang, side))
         }
         val p = project(at)
         val (offLine, myAlong) = nearest(p)
@@ -155,8 +180,46 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
             return null
         }
         farFixes = 0
+        progressM = myAlong
+        wrongWay(myAlong, accuracyM)?.let { return it }
         // Skip turns already behind the walker (a long GPS gap), silently.
         while (current < guided.size && along[guided[current].pointIndex] < myAlong - TURN_M) current++
+        turn(nowMs, myAlong)?.let { return it }
+        // After the last turn too: the destination on the way in.
+        val remaining = max(0f, along.last() - myAlong) + endGap
+        if (approach.next(remaining) != null) {
+            return Announcement.Approach(RoutePhrases.approach(route.destination.name, remaining, side, lang))
+        }
+        return null
+    }
+
+    /**
+     * Walking back along the route, still on it (spec §4): [WRONG_WAY_FIXES] fixes in a row at least
+     * [WRONG_WAY_M], or twice the fix's [accuracyM], behind the farthest point reached. One fix that far back is
+     * jitter (±8 m swings 16 m); more than [WRONG_WAY_SNAP_M] back is the GPS putting the walker on an earlier
+     * part of a route that comes back along the street, not a walker who turned. Said once, and again only after
+     * the farthest point is regained.
+     */
+    private fun wrongWay(myAlong: Float, accuracyM: Float): Announcement? {
+        if (myAlong >= farthest) {
+            farthest = myAlong
+            wrongWaySaid = false
+            behindFixes = 0
+            return null
+        }
+        val behind = farthest - myAlong
+        if (behind < max(WRONG_WAY_M, 2 * accuracyM) || behind > WRONG_WAY_SNAP_M) {
+            behindFixes = 0
+            return null
+        }
+        behindFixes++
+        if (wrongWaySaid || behindFixes < WRONG_WAY_FIXES) return null
+        wrongWaySaid = true
+        return Announcement.WrongWay(RoutePhrases.wrongWay(lang))
+    }
+
+    /** The next turn's announcement at [myAlong], if one is due and was not said in the last [REPEAT_MS]. */
+    private fun turn(nowMs: Long, myAlong: Float): Announcement? {
         if (current >= guided.size) return null
         val step = guided[current]
         val ahead = max(0f, along[step.pointIndex] - myAlong)
@@ -189,7 +252,7 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
         val remaining = max(0f, along.last() - myAlong) + Beacon.distanceMetres(route.line.last(), route.destination.point).toFloat()
         if (i >= guided.size) {
             val d = Beacon.distanceMetres(at, route.destination.point).toFloat()
-            return GoState(route.destination.point, RoutePhrases.headTo(route.destination.name, lang), d, max(d, 0f))
+            return GoState(route.destination.point, RoutePhrases.headTo(route.destination.name, lang), d, max(d, 0f), final = true)
         }
         val step = guided[i]
         return GoState(step.maneuver, RoutePhrases.display(step, lang), max(0f, along[step.pointIndex] - myAlong), remaining)
@@ -232,13 +295,24 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
         const val OFF_ROUTE_M = 40f
         const val OFF_ROUTE_FIXES = 3
         const val REPEAT_MS = 10_000L
+
+        /** This far back from the farthest point reached, still on the route, is walking the wrong way (spec §4). */
+        const val WRONG_WAY_M = 15f
+        const val WRONG_WAY_FIXES = 3
+        const val WRONG_WAY_SNAP_M = 60f
         private const val METRES_PER_DEG_LAT = 110_540.0
         private const val METRES_PER_DEG_LON = 111_320.0
     }
 }
 
-/** One screenful of Go-mode direction: where the arrow points and what to show under it. */
-data class GoState(val target: LatLon, val instruction: String, val toTargetM: Float, val remainingM: Float)
+/**
+ * One screenful of Go-mode direction: where the arrow points and what to show under it. [final]: the target is
+ * the destination, no turn is left.
+ */
+data class GoState(val target: LatLon, val instruction: String, val toTargetM: Float, val remainingM: Float, val final: Boolean = false)
+
+/** The side of the street a place is on, as the walker faces along the route. */
+enum class Side { LEFT, RIGHT }
 
 /** Arrow angle for the Go screen: the target's bearing relative to where the phone points, -180..180 (0 = straight ahead). */
 object GoMath {
@@ -248,6 +322,27 @@ object GoMath {
         if (rel <= -180f) rel += 360f
         return rel
     }
+
+    /**
+     * Which side of the line from [from] to [to] (walked that way) [point] is on; null within [SIDE_MIN_M] of the
+     * line, where "left" or "right" would be a guess.
+     */
+    fun side(from: LatLon, to: LatLon, point: LatLon): Side? {
+        val k = cos(Math.toRadians(to.lat)) * METRES_PER_DEG_LON
+        val dx = (to.lon - from.lon) * k
+        val dy = (to.lat - from.lat) * METRES_PER_DEG_LAT
+        val vx = (point.lon - to.lon) * k
+        val vy = (point.lat - to.lat) * METRES_PER_DEG_LAT
+        val length = sqrt(dx * dx + dy * dy)
+        if (length == 0.0) return null
+        val cross = dx * vy - dy * vx
+        if (kotlin.math.abs(cross) / length <= SIDE_MIN_M) return null
+        return if (cross > 0) Side.LEFT else Side.RIGHT
+    }
+
+    const val SIDE_MIN_M = 3.0
+    private const val METRES_PER_DEG_LAT = 110_540.0
+    private const val METRES_PER_DEG_LON = 111_320.0
 }
 
 /** At most one new route request every 30 s, and none for 60 s after a 429 (spec §4, §6). */
@@ -313,8 +408,68 @@ object RoutePhrases {
     fun turn(step: RouteStep, lang: Lang): String =
         if (lang == Lang.KO) "지금 ${typePhrase(step.type, lang)}." else "${typePhrase(step.type, lang).replaceFirstChar { it.uppercase() }} now."
 
-    fun arrived(name: String, lang: Lang): String =
-        if (lang == Lang.KO) "${name}에 도착했어요." else "You have arrived at $name."
+    fun arrived(name: String, lang: Lang, side: Side? = null): String = when {
+        lang == Lang.KO && side != null -> "${name}에 도착했어요. ${sideKo(side)}에 있어요."
+        lang == Lang.KO -> "${name}에 도착했어요."
+        side != null -> "You have arrived at $name, on your ${sideEn(side)}."
+        else -> "You have arrived at $name."
+    }
+
+    /** "Seoul Station in 50 metres, on your right." (spec §5) */
+    fun approach(name: String, metres: Float, side: Side?, lang: Lang): String {
+        val d = WalkPhrases.far(metres.toDouble(), lang)
+        if (lang == Lang.KO) return "$d 앞${side?.let { " ${sideKo(it)}" } ?: ""}에 ${Josa.iGa(name)} 있어요."
+        return "$name in $d" + (side?.let { ", on your ${sideEn(it)}" } ?: "") + "."
+    }
+
+    fun wrongWay(lang: Lang): String =
+        if (lang == Lang.KO) "경로에서 멀어지고 있어요. 뒤로 돌아가세요." else "You are walking away from the route. Turn around."
+
+    /** "Next, turn right onto Park Road in 80 metres." / after the last turn "Next, Seoul Station in 80 metres." */
+    fun next(state: GoState, name: String, lang: Lang): String {
+        val d = WalkPhrases.far(state.toTargetM.toDouble(), lang)
+        if (lang == Lang.KO) return if (state.final) "다음은 $d 앞 ${name}이에요." else "다음은 $d 후 ${state.instruction}."
+        val what = if (state.final) name else state.instruction.replaceFirstChar { it.lowercase() }
+        return "Next, $what in $d."
+    }
+
+    /** [name] null: the next turn; else the destination (after the last turn, or by beacon). */
+    fun whichWay(clock: Int, metres: Float, name: String?, lang: Lang): String {
+        val d = WalkPhrases.far(metres.toDouble(), lang)
+        if (lang == Lang.KO) return if (name == null) "다음 갈림길은 ${clock}시 방향, ${d}예요." else "${Josa.eunNeun(name)} ${clock}시 방향, ${d}예요."
+        return if (name == null) "The next turn is at $clock o'clock, $d." else "$name is at $clock o'clock, $d."
+    }
+
+    fun noHeading(lang: Lang): String =
+        if (lang == Lang.KO) "아직 방향을 알 수 없어요. 휴대폰을 세워 들고 다시 물어봐 주세요."
+        else "I can't tell the direction yet. Hold the phone up and ask again."
+
+    fun noRouteRunning(lang: Lang): String =
+        if (lang == Lang.KO) "안내 중인 경로가 없어요. 어디로 가자고 말해 주세요." else "No route is running. Say go to, and a place."
+
+    fun gpsWeak(lang: Lang): String =
+        if (lang == Lang.KO) "GPS 신호가 약해서 안내가 정확하지 않을 수 있어요." else "The GPS signal is weak, directions may be off."
+
+    /** "You are on Sejong-daero, near Seoul Station." [near]: a saved place or the destination within 300 m. */
+    fun whereAmI(street: String, near: String?, lang: Lang): String = when {
+        lang == Lang.KO && near != null -> "지금 ${street}에 있어요, $near 근처예요."
+        lang == Lang.KO -> "지금 ${street}에 있어요."
+        near != null -> "You are on $street, near $near."
+        else -> "You are on $street."
+    }
+
+    fun cannotLookUp(lang: Lang): String =
+        if (lang == Lang.KO) "지금은 거리 이름을 찾을 수 없어요." else "I can't look up the street now."
+
+    fun updatesOff(lang: Lang): String =
+        if (lang == Lang.KO) "1분마다 안내를 껐어요. 언제든 얼마나 남았는지 물어보세요." else "Minute updates off. Ask how far any time."
+
+    fun updatesOn(lang: Lang): String =
+        if (lang == Lang.KO) "1분마다 안내를 켰어요." else "Minute updates on."
+
+    private fun sideEn(side: Side) = if (side == Side.RIGHT) "right" else "left"
+
+    private fun sideKo(side: Side) = if (side == Side.RIGHT) "오른쪽" else "왼쪽"
 
     fun offRoute(lang: Lang): String =
         if (lang == Lang.KO) "경로를 벗어났어요. 새 경로를 찾을게요." else "Off the route, finding a new one."
@@ -344,6 +499,35 @@ object RoutePhrases {
         val left = WalkPhrases.far(remainingM.toDouble(), lang)
         return if (lang == Lang.KO) "$next 후 · $left 남았어요" else "In $next · $left left"
     }
+
+    /** "less than a minute" under 45 s, "about 6 minutes", "about 1 hour 20 minutes" (spec §1). */
+    fun timeLeft(seconds: Float, lang: Lang): String {
+        if (seconds < LESS_THAN_A_MINUTE_S) return if (lang == Lang.KO) "1분도 안 걸려요" else "less than a minute"
+        val minutes = (seconds / 60f).roundToInt().coerceAtLeast(1)
+        val h = minutes / 60
+        val m = minutes % 60
+        if (lang == Lang.KO) return if (h == 0) "약 ${m}분" else if (m == 0) "약 ${h}시간" else "약 ${h}시간 ${m}분"
+        fun unit(n: Int, one: String) = if (n == 1) "1 $one" else "$n ${one}s"
+        return "about " + when {
+            h == 0 -> unit(m, "minute")
+            m == 0 -> unit(h, "hour")
+            else -> unit(h, "hour") + " " + unit(m, "minute")
+        }
+    }
+
+    /** The minute update: "350 metres left, about 6 minutes." By beacon the distance is a straight line. */
+    fun progress(remainingM: Float, seconds: Float, straight: Boolean, lang: Lang): String {
+        val d = WalkPhrases.far(remainingM.toDouble(), lang)
+        val t = timeLeft(seconds, lang)
+        return when {
+            lang == Lang.KO && straight -> "직선으로 $d, $t."
+            lang == Lang.KO -> "$d 남았어요, $t."
+            straight -> "$d in a straight line, $t."
+            else -> "$d left, $t."
+        }
+    }
+
+    private const val LESS_THAN_A_MINUTE_S = 45f
 
     fun whereTo(lang: Lang): String = if (lang == Lang.KO) "어디로 갈까요?" else "Where to?"
 
