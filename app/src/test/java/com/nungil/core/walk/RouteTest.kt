@@ -273,6 +273,65 @@ class RouteTest {
         assertEquals("오른쪽으로 도세요", RoutePhrases.display(RouteStep("Turn right onto X", 1, 0f, o, 1), Lang.KO))
     }
 
+    // ---- progress, wrong way, approach, side --------------------------------------------------------
+
+    @Test fun walkingBackIsTheWrongWay() {
+        val n = Navigator(route(), null, Lang.EN)
+        n.update(0, at(60.0, 0.0))
+        assertEquals(60f, n.progressM, 1f)
+        assertNull(n.update(1_000, at(50.0, 0.0)))
+        assertEquals(Announcement.WrongWay("You are walking away from the route. Turn around."), n.update(2_000, at(44.0, 0.0)))
+        assertNull(n.update(3_000, at(30.0, 0.0))) // once
+        n.update(4_000, at(61.0, 0.0)) // back past the farthest point
+        assertTrue(n.update(5_000, at(45.0, 0.0)) is Announcement.WrongWay)
+    }
+
+    @Test fun jitterIsNotTheWrongWay() {
+        val n = Navigator(route(), null, Lang.EN)
+        for (i in 0..20) assertFalse(n.update(i * 1_000L, at(if (i % 2 == 0) 40.0 else 32.0, 3.0)) is Announcement.WrongWay)
+    }
+
+    @Test fun theDestinationOnTheWayInWithItsSide() {
+        // 3.5 m right of where the last segment (heading east) ends. Left along the line + 3.5 m: 48.5 at x 155,
+        // 19.5 at x 184 (16.4 m from it in a straight line: not yet arrived).
+        val dest = at(200.0, 96.5)
+        val n = Navigator(route(destination = dest), null, Lang.EN)
+        assertEquals(Side.RIGHT, n.side)
+        n.update(0, at(100.0, 60.0))
+        assertEquals(Announcement.Approach("home in 50 metres, on your right."), n.update(1_000, at(155.0, 100.0)))
+        assertEquals(Announcement.Approach("home in 20 metres, on your right."), n.update(2_000, at(184.0, 100.0)))
+        assertEquals(Announcement.Arrived("You have arrived at home, on your right."), n.update(3_000, at(195.0, 97.0)))
+    }
+
+    @Test fun aShortRouteDoesNotAnnounceAThresholdItStartedInside() {
+        val a = GoApproach()
+        assertNull(a.next(45f))
+        assertEquals(20, a.next(20f))
+        assertNull(a.next(10f))
+        val b = GoApproach()
+        assertNull(b.next(61f))
+        assertEquals(50, b.next(50f))
+    }
+
+    @Test fun noSideOnTheLine() {
+        assertNull(GoMath.side(at(0.0, 0.0), at(100.0, 0.0), at(110.0, 2.0)))
+        assertEquals(Side.LEFT, GoMath.side(at(0.0, 0.0), at(100.0, 0.0), at(100.0, 5.0)))
+    }
+
+    @Test fun nextAndWhichWaySentences() {
+        val turn = GoState(at(100.0, 100.0), "Turn right onto Park Road", 80f, 180f)
+        val end = GoState(at(200.0, 100.0), "Head to home", 80f, 80f, final = true)
+        assertEquals("Next, turn right onto Park Road in 80 metres.", RoutePhrases.next(turn, "home", Lang.EN))
+        assertEquals("Next, home in 80 metres.", RoutePhrases.next(end, "home", Lang.EN))
+        assertEquals("The next turn is at 2 o'clock, 80 metres.", RoutePhrases.whichWay(2, 80f, null, Lang.EN))
+        assertEquals("Seoul Station is at 2 o'clock, 350 metres.", RoutePhrases.whichWay(2, 350f, "Seoul Station", Lang.EN))
+        assertEquals("다음 갈림길은 2시 방향, 80미터예요.", RoutePhrases.whichWay(2, 80f, null, Lang.KO))
+        assertEquals("50미터 앞 오른쪽에 서울역이 있어요.", RoutePhrases.approach("서울역", 50f, Side.RIGHT, Lang.KO))
+        assertEquals("경로에서 멀어지고 있어요. 뒤로 돌아가세요.", RoutePhrases.wrongWay(Lang.KO))
+        assertEquals("No route is running. Say go to, and a place.", RoutePhrases.noRouteRunning(Lang.EN))
+        assertEquals("I can't tell the direction yet. Hold the phone up and ask again.", RoutePhrases.noHeading(Lang.EN))
+    }
+
     @Test fun numbersFromTheSpec() {
         assertEquals(25f, Navigator.PREPARE_M)
         assertEquals(5f, Navigator.TURN_M)
