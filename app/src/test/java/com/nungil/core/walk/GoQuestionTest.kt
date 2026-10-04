@@ -11,6 +11,8 @@ class GoQuestionTest {
         assertEquals(List(3) { GoQuestion.NEXT }, q("What's next?", "next turn", "next instruction"))
         assertEquals(List(3) { GoQuestion.REPEAT }, q("Repeat", "say again", "What did you say?"))
         assertEquals(List(3) { GoQuestion.WHICH_WAY }, q("Which way?", "where do I go", "direction"))
+        // "Where to go" opened the Search screen in the middle of a route (the logs).
+        assertEquals(List(3) { GoQuestion.WHICH_WAY }, q("Where to go?", "which way to go", "where do I go now"))
         assertEquals(List(3) { GoQuestion.WHERE_AM_I }, q("Where am I?", "what street is this", "my location"))
         assertEquals(List(4) { GoQuestion.QUIET }, q("quiet updates", "fewer updates", "updates off", "stop updates"))
         assertEquals(List(2) { GoQuestion.UPDATES_ON }, q("updates on", "more updates"))

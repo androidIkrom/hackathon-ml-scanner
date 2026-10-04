@@ -879,10 +879,10 @@ class WalkFragment : Fragment(), VoiceHandler {
         }
     }
 
-    /** [withLocation], but a last known place older than FixAge.FRESH_MS waits for the next fix. */
+    /** [withLocation], but a last known place from before the updates started waits for the next fix (FixAge.usable). */
     private fun withFreshLocation(block: (LatLon) -> Unit) {
         withLocation { here ->
-            if (FixAge.fresh(location.fixAtMs, SystemClock.elapsedRealtime())) {
+            if (FixAge.usable(location.fixAtMs, location.liveSinceMs, SystemClock.elapsedRealtime())) {
                 block(here)
             } else {
                 onFirstFix = block
