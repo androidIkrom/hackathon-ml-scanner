@@ -8,6 +8,12 @@
     <string name="item_add_ask">뭐라고 부를까요?</string>
     <string name="item_add_start">시작하기</string>
     <string name="item_add_need_name">이름을 먼저 알려 주세요.</string>
+    <string name="item_add_confirm">%1$s. 맞나요?</string>
+    <string name="item_add_again">이름을 다시 말해 주세요.</string>
+    <string name="item_add_taken">%1$s, 이미 저장되어 있어요. 다시 배우려면 바꾸기라고 말하고, 아니면 다른 이름을 말해 주세요.</string>
+    <string name="item_add_yes">네, 시작하기</string>
+    <string name="item_add_replace">바꾸고 시작하기</string>
+    <string name="item_add_other">다른 이름</string>
 
     <string name="item_enroll_title">%1$s 등록 중</string>
     <string name="item_enroll_start">시작하기</string>

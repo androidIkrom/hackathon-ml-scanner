@@ -31,6 +31,7 @@ import com.nungil.core.items.ItemCrop
 import com.nungil.core.items.ItemEnrollmentGuide
 import com.nungil.core.items.ItemLook
 import com.nungil.core.items.ItemLooks
+import com.nungil.core.items.ItemNames
 import com.nungil.core.items.ItemPhrases
 import com.nungil.core.items.ItemStep
 import com.nungil.core.people.EnrollPhrases
@@ -223,7 +224,10 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
     /** Main thread: the question has been asked; the next words are the answer. */
     private fun listenForAnswer() {
         if (_binding == null || phase != Phase.LOOKING) return
-        (activity as? MainActivity)?.dictationAccepts = { RoutePhrases.isYes(it) || RoutePhrases.isNo(it) }
+        (activity as? MainActivity)?.let {
+            it.dictationAccepts = { text -> RoutePhrases.isYes(text) || RoutePhrases.isNo(text) }
+            it.dictationEarly = true
+        }
         services.askForWords(viewLifecycleOwner) { text -> answer(text) }
     }
 
@@ -465,7 +469,11 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         val itemKind = kind
         AppScope.launch {
             val path = image?.let { PhotoFiles.save(context, PHOTO_FOLDER, it) }
-            AppDatabase.get(context).items().insertItemWithEmbeddings(
+            val dao = AppDatabase.get(context).items()
+            // Learning a name again takes the place of what was saved under it: the user was told it was
+            // saved and said "replace" (AddItemFragment). Two items of one name stole each other's squares.
+            val replaced = dao.allItems().filter { ItemNames.same(it.name, itemName) }
+            dao.insertItemWithEmbeddings(
                 ItemEntity(
                     name = itemName,
                     kind = itemKind.name,
@@ -475,6 +483,11 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
                 ),
                 vectors.map { ItemEmbeddingEntity(vector = VectorBytes.toBytes(it)) },
             )
+            replaced.forEach {
+                dao.deleteItem(it.id)
+                PhotoFiles.delete(it.photoPath)
+            }
+            if (replaced.isNotEmpty()) Log.i(TAG, "Item replaced ${replaced.size} saved under the same name")
             withContext(Dispatchers.Main) {
                 services.haptics.buzz(Buzz.DONE)
                 val done = ItemPhrases.done(itemName, lang)

@@ -51,8 +51,8 @@ object ItemMatcher {
      * same-named items lost every square that looked more like the second (the logs).
      */
     fun sameName(id: Long, names: Map<Long, String>): Set<Long> {
-        val name = names[id]?.trim() ?: return setOf(id)
-        return names.filterValues { it.trim().equals(name, ignoreCase = true) }.keys + id
+        val name = names[id] ?: return setOf(id)
+        return names.filterValues { ItemNames.same(it, name) }.keys + id
     }
 
     data class Match(val id: Long, val score: Float)
