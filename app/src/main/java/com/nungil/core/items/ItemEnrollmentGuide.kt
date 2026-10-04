@@ -6,7 +6,8 @@ import com.nungil.core.people.FaceMatcher
 enum class ItemStep { STILL, LEFT, RIGHT, UP }
 
 /**
- * [samplesPerStep] samples held still, then with the phone moved left, right and up (12 by default).
+ * [samplesPerStep] samples held still, then with the phone moved left, right and up (12 by default; fewer when
+ * a step was left early, see [skip]).
  *
  * Every sample must still be the thing that was confirmed: it looks like the samples held still (cosine of at
  * least [SAME_MIN] for its square and [ALONE_SAME_MIN] for the thing alone) and is about their size ([SIZE_MIN]..[SIZE_MAX] of their area), so the bottle behind it or
@@ -27,6 +28,10 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
 
     private val kept = mutableListOf<View>()
 
+    /** The step being collected (an index into ItemStep) and how many samples it has. */
+    private var stepIndex = 0
+    private var inStep = 0
+
     val total: Int = samplesPerStep * ItemStep.entries.size
     val taken: Int get() = kept.size
 
@@ -34,7 +39,7 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
     val samples: List<FloatArray> get() = kept.map { it.vector } + kept.mapNotNull { it.alone }
 
     /** The step being collected; null when done. */
-    val step: ItemStep? get() = ItemStep.entries.getOrNull(kept.size / samplesPerStep)
+    val step: ItemStep? get() = ItemStep.entries.getOrNull(stepIndex)
     val isDone: Boolean get() = step == null
 
     private val still: List<View> get() = kept.take(samplesPerStep)
@@ -77,13 +82,38 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
         val current = step ?: return false
         if (!accepts(view)) return false
         kept += view
+        inStep++
+        if (inStep == samplesPerStep) next()
         return step != current
     }
 
-    /** Start again from nothing. */
-    fun restart() = kept.clear()
+    /**
+     * Leaves the current step with the samples it has and goes on to the next. A step that cannot be done is not
+     * waited for without end: RIGHT took 55 s for a pillow lying on a sheet of its own pattern, and the whole
+     * add 104 s (the logs). Not while held still: those samples say what the item is. False when nothing was
+     * left out.
+     */
+    fun skip(): Boolean {
+        val current = step ?: return false
+        if (current == ItemStep.STILL) return false
+        next()
+        return true
+    }
 
-    fun percent(): Int = taken * 100 / total
+    private fun next() {
+        stepIndex++
+        inStep = 0
+    }
+
+    /** Start again from nothing. */
+    fun restart() {
+        kept.clear()
+        stepIndex = 0
+        inStep = 0
+    }
+
+    /** How far through the steps, a step left early counted as done. */
+    fun percent(): Int = if (isDone) 100 else (stepIndex * samplesPerStep + inStep) * 100 / total
 
     companion object {
         const val SAMPLES_PER_STEP = 3

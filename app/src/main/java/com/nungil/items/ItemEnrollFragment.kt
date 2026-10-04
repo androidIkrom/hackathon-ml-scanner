@@ -126,6 +126,10 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
     private var photo: Bitmap? = null
     private var lastSampleMs = 0L
     private var lastSeenMs = 0L
+
+    /** When the step being learned began (0: with the next frame); see STEP_MAX_MS. */
+    @Volatile
+    private var stepSinceMs = 0L
     private var askedAtMs = 0L
     private var lastLogMs = 0L
 
@@ -280,6 +284,8 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
     private fun resume() {
         if (phase != Phase.LEARNING || running) return
         running = true
+        // A pause is not time spent on the step.
+        stepSinceMs = 0L
         waitUntilMs = SystemClock.elapsedRealtime() + PROMPT_WAIT_MS
         lastHintMs = waitUntilMs
         binding.itemEnrollButton.setText(R.string.item_enroll_pause)
@@ -401,8 +407,19 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
             learningStarted = true
             guide.restart()
             lastSeenMs = now
+            stepSinceMs = now
         }
         if (!running) return
+        // A step that is not done in time is left with what it has: the add must end.
+        val waiting = guide.step
+        if (stepSinceMs == 0L) stepSinceMs = now
+        if (waiting != null && waiting != ItemStep.STILL && now - stepSinceMs >= STEP_MAX_MS) {
+            Log.i(TAG, "Item step $waiting left after ${(now - stepSinceMs) / 1000} s, ${guide.taken} samples so far")
+            guide.skip()
+            stepSinceMs = now
+            stepDone(guide.step, now)
+            return
+        }
         if (seen == null || !guide.isTheItem(seen.view)) {
             // Lost, or something else (the bottle behind it) took its place: look in the middle again.
             trackX = null
@@ -433,23 +450,32 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
             }
         }
         val stepDone = guide.add(seen.view)
+        services.haptics.buzz(Buzz.TAP)
+        if (stepDone) {
+            stepSinceMs = now
+            stepDone(guide.step, now)
+        } else {
+            val percent = guide.percent()
+            main.post { _binding?.itemEnrollProgress?.setProgressCompat(percent, true) }
+        }
+    }
+
+    /** Worker thread: a step ended (done, or left early). Says the [next] one, or saves when there is none. */
+    private fun stepDone(next: ItemStep?, now: Long) {
         val percent = guide.percent()
-        val next = guide.step
         main.post {
             val b = _binding ?: return@post
             b.itemEnrollProgress.setProgressCompat(percent, true)
             if (next != null) b.itemEnrollPrompt.text = ItemPhrases.prompt(next, lang)
         }
-        services.haptics.buzz(Buzz.TAP)
-        when {
-            guide.isDone -> finish()
-            stepDone && next != null -> {
-                waitUntilMs = now + PROMPT_WAIT_MS
-                lastHintMs = waitUntilMs
-                // At once, not queued behind a gap: the wait for the user to follow it has already begun.
-                services.speaker.sayNow(ItemPhrases.prompt(next, lang))
-            }
+        if (next == null) {
+            finish()
+            return
         }
+        waitUntilMs = now + PROMPT_WAIT_MS
+        lastHintMs = waitUntilMs
+        // At once, not queued behind a gap: the wait for the user to follow it has already begun.
+        services.speaker.sayNow(ItemPhrases.prompt(next, lang))
     }
 
     /**
@@ -514,6 +540,12 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
 
         /** Without the thing in view this long while learning, the user is told. */
         const val LOST_MS = 3_000L
+
+        /**
+         * A step (left, right, up) is left with the samples it has after this long. Steps that went well took
+         * 4 to 12 s; one that did not took 55 and 98 s (the logs).
+         */
+        const val STEP_MAX_MS = 20_000L
 
         /** Time to hear a prompt ("Move the phone a little to the left.") and do it. */
         const val PROMPT_WAIT_MS = 2_000L

@@ -174,4 +174,31 @@ class ItemEnrollmentTest {
         // Without the picture of the thing alone, the square decides as before.
         assertTrue(g.isTheItem(ItemEnrollmentGuide.View(at(57.0), 0.6f, 0.5f, 0.1f)))
     }
+
+    @Test fun aStepThatTakesTooLongIsLeftWithWhatItHas() {
+        // The logs: RIGHT took 55 s for a pillow on a sheet of its own pattern, the whole add 104 s.
+        val g = ItemEnrollmentGuide()
+        repeat(3) { g.add(view(0.0)) }
+        assertEquals(ItemStep.LEFT, g.step)
+        g.add(view(20.0, x = 0.6f))
+        assertTrue(g.skip())                       // LEFT is left with its one sample
+        assertEquals(ItemStep.RIGHT, g.step)
+        assertEquals(50, g.percent())
+        repeat(3) { g.add(view(-20.0, x = 0.4f)) }  // RIGHT is counted from where it was held still, as ever
+        assertEquals(ItemStep.UP, g.step)
+        assertTrue(g.skip())
+        assertTrue(g.isDone)
+        assertEquals(7, g.taken)
+        assertEquals(7, g.samples.size)
+        assertEquals(100, g.percent())
+        assertFalse(g.skip())
+    }
+
+    @Test fun holdingStillIsNeverLeftOut() {
+        val g = ItemEnrollmentGuide()
+        g.add(view(0.0))
+        assertFalse(g.skip())
+        assertEquals(ItemStep.STILL, g.step)
+        assertEquals(1, g.taken)
+    }
 }
