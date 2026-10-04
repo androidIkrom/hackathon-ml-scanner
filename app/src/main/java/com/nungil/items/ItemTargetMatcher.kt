@@ -33,7 +33,7 @@ class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatc
     private val targets: Set<Long> = recognizer.sameName(itemId)
 
     /** The item has samples of itself alone (two per sample taken), not squares only. */
-    private val learnedAlone: Boolean = targets.any { recognizer.samples(it) > ItemEnrollmentGuide().total }
+    private val learnedAlone: Boolean = targets.any { ItemEnrollmentGuide.learnedAlone(recognizer.samples(it)) }
 
     private val segmenter: ItemSegmenter? = try {
         ItemSegmenter(context)

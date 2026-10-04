@@ -35,8 +35,18 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
     val total: Int = samplesPerStep * ItemStep.entries.size
     val taken: Int get() = kept.size
 
-    /** What is saved: the square of every sample, then the thing alone of every sample that has it. */
-    val samples: List<FloatArray> get() = kept.map { it.vector } + kept.mapNotNull { it.alone }
+    /**
+     * What is saved: the square of every sample, then the thing alone of every sample that has it. Items saved
+     * before are told by their count ([learnedAlone]), so a list of that count with the thing alone in it keeps
+     * its last vector twice: 6 samples, two steps left early, made one (the logs). No score changes, as a
+     * score is the best over the vectors.
+     */
+    val samples: List<FloatArray>
+        get() {
+            val alone = kept.mapNotNull { it.alone }
+            val all = kept.map { it.vector } + alone
+            return if (alone.isNotEmpty() && all.size == SAVED_BEFORE) all + alone.last() else all
+        }
 
     /** The step being collected; null when done. */
     val step: ItemStep? get() = ItemStep.entries.getOrNull(stepIndex)
@@ -143,6 +153,17 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
         const val FILLS_VIEW = 0.45f
 
         fun fillsView(cover: Float): Boolean = cover > FILLS_VIEW
+
+        /** How many vectors an item saved before the thing alone was learned has: the 12 squares, nothing else. */
+        const val SAVED_BEFORE = 12
+
+        /**
+         * Whether an item saved with [vectors] vectors has samples of the thing alone. Since items saved before
+         * ([SAVED_BEFORE]) every sample is kept twice, and a step left early keeps fewer samples (3 to 12: 6 to
+         * 24 vectors), so "more than 12" missed every item of 3 to 6 samples. A new list of 12 is saved as 13
+         * ([samples]).
+         */
+        fun learnedAlone(vectors: Int): Boolean = vectors > 0 && vectors != SAVED_BEFORE
 
         /** The thing's area, as a part of what it was while held still, that is still the same thing. */
         const val SIZE_MIN = 0.4f

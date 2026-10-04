@@ -43,6 +43,29 @@ class ItemEnrollmentTest {
         assertEquals(3, g.samples.size)
     }
 
+    @Test fun anItemLearnedAloneIsToldFromOneSavedBefore() {
+        assertFalse(ItemEnrollmentGuide.learnedAlone(12)) // the 12 squares of an item saved before
+        assertTrue(ItemEnrollmentGuide.learnedAlone(24))
+        assertTrue(ItemEnrollmentGuide.learnedAlone(14)) // 7 samples, two steps left early (the logs)
+        assertTrue(ItemEnrollmentGuide.learnedAlone(6)) // only the 3 held still
+        assertFalse(ItemEnrollmentGuide.learnedAlone(0))
+    }
+
+    @Test fun sixSamplesAreNotSavedAsTwelveVectors() {
+        // Held still and left, then right and up left early (the logs): 6 squares and 6 alone would read as old.
+        val g = ItemEnrollmentGuide()
+        fun both(deg: Double, x: Float) = ItemEnrollmentGuide.View(at(deg), x, 0.5f, 0.1f, alone = at(deg + 90))
+        repeat(3) { g.add(both(0.0, 0.5f)) }
+        repeat(3) { g.add(both(20.0, 0.6f)) }
+        assertTrue(g.skip())
+        assertTrue(g.skip())
+        assertTrue(g.isDone)
+        assertEquals(6, g.taken)
+        assertEquals(13, g.samples.size)
+        assertArrayEquals(at(110.0), g.samples[12], 1e-6f)
+        assertTrue(ItemEnrollmentGuide.learnedAlone(g.samples.size))
+    }
+
     @Test fun twelveSamplesInFourSteps() {
         val g = ItemEnrollmentGuide()
         assertEquals(12, g.total)
