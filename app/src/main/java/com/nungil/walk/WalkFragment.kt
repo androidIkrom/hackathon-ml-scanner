@@ -106,6 +106,7 @@ class WalkFragment : Fragment(), VoiceHandler {
             if (_binding == null || !goMode) return
             updateDirection()
             goUpdate()
+            goDirection()
             main.postDelayed(this, GO_TICK_MS)
         }
     }
@@ -147,6 +148,9 @@ class WalkFragment : Fragment(), VoiceHandler {
     // Go progress: the minute update, the walker's speed, questions, weak GPS (spec 2026-10-04-go-progress).
     private lateinit var goSettings: GoSettings
     private lateinit var progress: GoProgress
+
+    /** The direction every 10 s (goDirection). */
+    private val direction = GoProgress(everyMs = DIRECTION_EVERY_MS)
     private val pace = GoPace()
     private val gps = GpsSignal()
     private var beaconApproach = GoApproach()
@@ -371,7 +375,8 @@ class WalkFragment : Fragment(), VoiceHandler {
             lastBuzzAt = now
             services.haptics.buzz(Buzz.OBSTACLE)
         }
-        val candidates = report.alerts + listOfNotNull(pendingNav, beaconAlert())
+        beaconArrival()
+        val candidates = report.alerts + listOfNotNull(pendingNav)
         alerts.choose(now, candidates) { pacing.allows(now, it) }?.let { chosen ->
             android.util.Log.i("Nungil", "Walk said [${chosen.kind} ${chosen.key}] ${chosen.text}")
             if (chosen === pendingNav) pendingNav = null
@@ -382,20 +387,16 @@ class WalkFragment : Fragment(), VoiceHandler {
         }
     }
 
-    /** Straight-line guidance when a place is set but there is no route (no key, no network, route failed). */
-    private fun beaconAlert(): Alert? {
-        val place = target ?: return null
-        if (navigator != null) return null
-        val here = location.last ?: return null
-        val metres = Beacon.distanceMetres(here, place.point)
-        if (metres <= arrivalRadius()) {
-            arrived(place)
-            return null
-        }
-        val h = heading.headingDeg ?: return null
-        val clock = Beacon.clock(Beacon.bearingDeg(here, place.point) - h)
-        val text = WalkPhrases.beacon(place.name, metres, clock, services.lang)
-        return Alert(AlertKind.BEACON, "beacon:$clock:${WalkPhrases.far(metres, services.lang)}", text)
+    /**
+     * Arrival when a place is set but there is no route (no key, no network, route failed). Its direction is
+     * the one said every 10 s (goDirection): the sentence said at every change of the clock came nine times in
+     * 50 s while the walker turned (the logs).
+     */
+    private fun beaconArrival() {
+        val place = target ?: return
+        if (navigator != null) return
+        val here = location.last ?: return
+        if (Beacon.distanceMetres(here, place.point) <= arrivalRadius()) arrived(place)
     }
 
     /** Within 15 m, or within the GPS accuracy when that is worse (indoors it often is). */
@@ -409,6 +410,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         pendingNav = null
         lastNav = null
         progress.stop()
+        direction.stop()
         location.stop()
         services.haptics.buzz(Buzz.DONE)
         services.speaker.sayNow(text)
@@ -804,6 +806,24 @@ class WalkFragment : Fragment(), VoiceHandler {
         }
     }
 
+    /**
+     * Every 10 s, the way to go as a clock direction, so the walker does not stray from the route: towards the
+     * point 20 m ahead on it (Navigator.aheadPoint), or the place itself without a route. Any other navigation
+     * sentence or answer moves it 10 s on. Not while a new route is fetched, nor without a compass heading.
+     */
+    private fun goDirection() {
+        val place = target ?: return
+        val here = location.last ?: return
+        val h = heading.headingDeg ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (direction.check(now, null, Long.MIN_VALUE / 2, rerouting) != GoProgress.Verdict.SAY) return
+        val towards = navigator?.aheadPoint(here) ?: place.point
+        val clock = Beacon.clock(Beacon.bearingDeg(here, towards) - h)
+        if (!queueNavigation(RoutePhrases.goClock(clock, services.lang), cue = true)) return
+        direction.said(now)
+        Log.i(TAG, "Go direction: $clock o'clock")
+    }
+
     /** A walker's question (spec §3), answered at once. */
     private fun answer(question: GoQuestion) {
         val lang = services.lang
@@ -811,6 +831,7 @@ class WalkFragment : Fragment(), VoiceHandler {
             Log.i(TAG, "Go asked: $question -> \"$text\"")
             // Asked just now: said at once, and the warnings that may wait (WalkPacing) wait for it.
             pacing.said(SystemClock.elapsedRealtime(), Alert(AlertKind.INFO, "asked:$question", text))
+            direction.said(SystemClock.elapsedRealtime())
             services.speaker.sayNow(text)
             _binding?.walkingAnnouncement?.text = text
         }
@@ -893,13 +914,21 @@ class WalkFragment : Fragment(), VoiceHandler {
 
     /**
      * Navigation waits for the next frame so obstacle warnings go first; without frames, or with the warnings
-     * paused (no frame is ever spoken then), it speaks at once.
+     * paused (no frame is ever spoken then), it speaks at once. A [cue] (the direction every 10 s) never takes
+     * the place of a sentence still waiting, is not what "repeat" repeats, and does not hold the minute update
+     * back; any other sentence moves the next cue 10 s on. False when the cue was not queued.
      */
-    private fun queueNavigation(text: String) {
-        lastNav = text
-        lastNavAt = SystemClock.elapsedRealtime()
+    private fun queueNavigation(text: String, cue: Boolean = false): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (cue && pendingNav != null) return false
+        if (!cue) {
+            lastNav = text
+            lastNavAt = now
+            direction.said(now)
+        }
         val alert = Alert(AlertKind.NAVIGATION, "nav:$text", text)
-        if (!running || lastNavAt - lastReportAt > REPORT_STALE_MS) say(text) else pendingNav = alert
+        if (!running || now - lastReportAt > REPORT_STALE_MS) say(text) else pendingNav = alert
+        return true
     }
 
     private fun startNavigation(name: String, here: LatLon, heard: List<String> = listOf(name)) {
@@ -999,7 +1028,10 @@ class WalkFragment : Fragment(), VoiceHandler {
                 navigator = Navigator(result.route, stepM, lang)
                 // A new route measures progress from its own start; the speed found so far stays.
                 pace.restart()
-                if (!reroute) progress.start(SystemClock.elapsedRealtime())
+                if (!reroute) {
+                    progress.start(SystemClock.elapsedRealtime())
+                    direction.start(SystemClock.elapsedRealtime())
+                }
                 if (goMode) showGoRoute(place)
                 status(getString(R.string.walking_status_navigating, place.name))
                 if (!reroute) {
@@ -1030,6 +1062,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         beaconStartM = null
         pace.restart()
         if (!progress.started) progress.start(SystemClock.elapsedRealtime())
+        if (!direction.started) direction.start(SystemClock.elapsedRealtime())
         if (goMode) showGoRoute(place)
         status(getString(R.string.walking_status_beacon, place.name))
     }
@@ -1040,6 +1073,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         lastNav = null
         rerouting = false
         progress.stop()
+        direction.stop()
         if (offer != null) (activity as? MainActivity)?.dropWords()
         offer = null
         pendingNav = null
@@ -1085,6 +1119,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         const val FALLBACK_MIN_SCORE = 0.5f
         const val WATCHDOG_EVERY_MS = 1_000L
         const val GO_TICK_MS = 200L
+        const val DIRECTION_EVERY_MS = 10_000L
         const val TAG = "Nungil"
 
         /** "Where am I" names a saved place or the destination this near (spec §6). */
