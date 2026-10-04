@@ -27,6 +27,20 @@ class TapHelpOffer {
         return true
     }
 
+    /** What a short tap leads to: the question, the voice guide naming what is there, or nothing. */
+    enum class Tap { ASK, DESCRIBE, NOTHING }
+
+    /**
+     * A short tap, [empty] when on nothing that can be pressed. With the [voiceGuide] on, a tap on nothing asks
+     * first, as without it, and names the screen once the question has been asked (or cannot be heard); any
+     * other tap is named as before.
+     */
+    fun onTap(empty: Boolean, voiceGuide: Boolean, canHear: Boolean): Tap = when {
+        empty && ask(canHear) -> Tap.ASK
+        voiceGuide -> Tap.DESCRIBE
+        else -> Tap.NOTHING
+    }
+
     companion object {
         fun question(lang: Lang): String =
             if (lang == Lang.KO) "이 화면 사용법을 알려 드릴까요?" else "Do you want instructions for this screen?"

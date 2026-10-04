@@ -559,10 +559,13 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                     if (still && ev.eventTime - downAt < ViewConfiguration.getLongPressTimeout()) {
                         val x = ev.rawX.toInt()
                         val y = ev.rawY.toInt()
-                        when {
-                            // The voice guide names what is under the finger, the screen on a tap on nothing.
-                            prefs.voiceGuideOn -> guide.describeAt(binding.navHost, x, y, lang)?.let { tts.say(it) }
-                            guide.isEmptyAt(binding.navHost, x, y) -> offerHelp()
+                        // A tap on nothing asks first (TapHelpOffer); the voice guide names what is under the finger.
+                        val owner = currentScreen()?.takeIf { it.view != null }?.viewLifecycleOwner
+                        val canHear = owner != null && dictation == null && (awakeState.value || !voice.isOn)
+                        when (tapHelp.onTap(guide.isEmptyAt(binding.navHost, x, y), prefs.voiceGuideOn, canHear)) {
+                            TapHelpOffer.Tap.ASK -> owner?.let { offerHelp(it) }
+                            TapHelpOffer.Tap.DESCRIBE -> guide.describeAt(binding.navHost, x, y, lang)?.let { tts.say(it) }
+                            TapHelpOffer.Tap.NOTHING -> Unit
                         }
                     }
                 }
@@ -576,10 +579,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
      * "yes". Not while asleep (only the wake word is heard then) or while another question waits. An answer that
      * does not come in [HELP_ANSWER_MS] lets the microphone go, so the next words are not taken for it.
      */
-    private fun offerHelp() {
-        val owner = currentScreen()?.viewLifecycleOwner ?: return
-        val canHear = dictation == null && (awakeState.value || !voice.isOn)
-        if (!tapHelp.ask(canHear)) return
+    private fun offerHelp(owner: LifecycleOwner) {
         Log.i(TAG, "Tap on nothing: the screen's instructions offered")
         tts.say(TapHelpOffer.question(lang))
         dictationAccepts = { HelpAnswer.of(it) != null }
