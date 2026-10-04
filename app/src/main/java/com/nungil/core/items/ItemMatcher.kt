@@ -29,6 +29,21 @@ object ItemMatcher {
      */
     const val ALONE_MIN = 0.6f
 
+    /**
+     * The thing in the middle of a square is drawn as the item's outline from this score alone. Outlines of
+     * other things, drawn because they lay inside the square, scored 0.36 to 0.47; the item 0.57 to 0.80 (the
+     * logs).
+     */
+    const val OUTLINE_MIN = 0.5f
+
+    /**
+     * Whether the outline of the thing in a square is shown as the item's. [alone] is the thing's score by
+     * itself (null: no thing). An item that was [learnedAlone] is told from other things by that score; one
+     * learned before, with squares only, has the outline that lies [inside] its square, as it had.
+     */
+    fun outlined(alone: Float?, learnedAlone: Boolean, inside: Boolean): Boolean =
+        alone != null && alone >= OUTLINE_MIN || !learnedAlone && inside
+
     /** How the item was seen in a frame, if it was. */
     enum class Seen { BY_SQUARES, BY_ITEM_ALONE, NO }
 

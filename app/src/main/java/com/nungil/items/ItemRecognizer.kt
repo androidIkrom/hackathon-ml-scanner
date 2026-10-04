@@ -34,6 +34,9 @@ class ItemRecognizer(context: Context) {
 
     fun nameOf(itemId: Long): String? = names[itemId]
 
+    /** How many samples are saved for [itemId]. */
+    fun samples(itemId: Long): Int = known[itemId]?.size ?: 0
+
     /** [itemId] and every other saved item of the same name (ItemMatcher.sameName). */
     fun sameName(itemId: Long): Set<Long> = ItemMatcher.sameName(itemId, names)
 

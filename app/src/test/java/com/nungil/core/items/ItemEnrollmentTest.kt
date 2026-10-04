@@ -163,4 +163,15 @@ class ItemEnrollmentTest {
         assertFalse(ItemEnrollmentGuide.fillsView(0.45f))
         assertTrue(ItemEnrollmentGuide.fillsView(0.53f))
     }
+
+    @Test fun aThingWhoseSquareLooksRightButWhichAloneIsSomethingElse() {
+        // The logs: three of the twelve samples of a bottle scored 0.47 to 0.54 as squares (the same table was
+        // around them) and 0.02 to 0.04 alone: not the bottle at all. Its real samples scored 0.43 to 0.89 alone.
+        val g = ItemEnrollmentGuide()
+        repeat(3) { g.add(ItemEnrollmentGuide.View(at(0.0), 0.5f, 0.5f, 0.1f, alone = at(0.0))) }
+        assertFalse(g.isTheItem(ItemEnrollmentGuide.View(at(57.0), 0.6f, 0.5f, 0.1f, alone = at(88.0))))  // square 0.54, alone 0.03
+        assertTrue(g.isTheItem(ItemEnrollmentGuide.View(at(57.0), 0.6f, 0.5f, 0.1f, alone = at(64.0))))   // alone 0.44
+        // Without the picture of the thing alone, the square decides as before.
+        assertTrue(g.isTheItem(ItemEnrollmentGuide.View(at(57.0), 0.6f, 0.5f, 0.1f)))
+    }
 }

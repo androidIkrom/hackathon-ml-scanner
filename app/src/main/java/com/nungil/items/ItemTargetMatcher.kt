@@ -6,6 +6,7 @@ import android.os.SystemClock
 import android.util.Log
 import com.nungil.contract.Box
 import com.nungil.contract.app.VisionFrame
+import com.nungil.core.items.ItemEnrollmentGuide
 import com.nungil.core.items.ItemMask
 import com.nungil.core.items.ItemMatcher
 import com.nungil.core.items.ItemWindows
@@ -30,6 +31,9 @@ class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatc
 
     /** The item looked for, and any other saved under its name: one thing to the search. */
     private val targets: Set<Long> = recognizer.sameName(itemId)
+
+    /** The item has samples of itself alone (two per sample taken), not squares only. */
+    private val learnedAlone: Boolean = targets.any { recognizer.samples(it) > ItemEnrollmentGuide().total }
 
     private val segmenter: ItemSegmenter? = try {
         ItemSegmenter(context)
@@ -123,7 +127,7 @@ class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatc
      * [square] scored [squareScore] against the samples: is the item there, where is it looked for in the next
      * frame, and what is shown. When the thing in its middle is the item by itself, that thing's outline is
      * shown and its own square (the one it would be learned in) is tracked. Else the squares decide as they did,
-     * and the outline is shown only when it is a thing inside the square: smaller than it, its middle in it.
+     * and the outline is shown only when it is the item's (ItemMatcher.outlined), the square otherwise.
      */
     private fun judge(bitmap: Bitmap, square: Box, squareScore: Float, needs: Float): Verdict {
         val thing = thingIn(bitmap, square)
@@ -132,7 +136,8 @@ class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatc
         if (thing.score >= ItemMatcher.ALONE_MIN) return Verdict(seen, thing.square, thing.box, true, thing.score)
         val inside = thing.box.area < square.area &&
             thing.box.centerX in square.left..square.right && thing.box.centerY in square.top..square.bottom
-        return Verdict(seen, square, if (inside) thing.box else square, inside, thing.score)
+        val outlined = ItemMatcher.outlined(thing.score, learnedAlone, inside)
+        return Verdict(seen, square, if (outlined) thing.box else square, outlined, thing.score)
     }
 
     /**

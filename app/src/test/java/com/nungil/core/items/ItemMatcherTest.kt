@@ -2,6 +2,8 @@ package com.nungil.core.items
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.cos
 import kotlin.math.sin
@@ -59,5 +61,15 @@ class ItemMatcherTest {
         assertEquals(setOf(14L, 16L), ItemMatcher.sameName(14L, names))
         assertEquals(setOf(12L), ItemMatcher.sameName(12L, names))
         assertEquals(setOf(99L), ItemMatcher.sameName(99L, names))
+    }
+
+    @Test fun theOutlineShownIsTheItemsOwn() {
+        // The logs: outlines of other things scored 0.36 to 0.47 alone and were drawn; the item 0.57 to 0.80.
+        assertTrue(ItemMatcher.outlined(alone = 0.57f, learnedAlone = true, inside = false))
+        assertFalse(ItemMatcher.outlined(alone = 0.47f, learnedAlone = true, inside = true))
+        assertFalse(ItemMatcher.outlined(alone = null, learnedAlone = true, inside = true))
+        // An item learned before there were samples of it alone: the outline inside its square, as before.
+        assertTrue(ItemMatcher.outlined(alone = 0.2f, learnedAlone = false, inside = true))
+        assertFalse(ItemMatcher.outlined(alone = 0.2f, learnedAlone = false, inside = false))
     }
 }
