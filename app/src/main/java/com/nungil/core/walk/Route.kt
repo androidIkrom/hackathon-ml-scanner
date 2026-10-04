@@ -345,6 +345,35 @@ object RoutePhrases {
         return if (lang == Lang.KO) "$next 후 · $left 남았어요" else "In $next · $left left"
     }
 
+    /** "less than a minute" under 45 s, "about 6 minutes", "about 1 hour 20 minutes" (spec §1). */
+    fun timeLeft(seconds: Float, lang: Lang): String {
+        if (seconds < LESS_THAN_A_MINUTE_S) return if (lang == Lang.KO) "1분도 안 걸려요" else "less than a minute"
+        val minutes = (seconds / 60f).roundToInt().coerceAtLeast(1)
+        val h = minutes / 60
+        val m = minutes % 60
+        if (lang == Lang.KO) return if (h == 0) "약 ${m}분" else if (m == 0) "약 ${h}시간" else "약 ${h}시간 ${m}분"
+        fun unit(n: Int, one: String) = if (n == 1) "1 $one" else "$n ${one}s"
+        return "about " + when {
+            h == 0 -> unit(m, "minute")
+            m == 0 -> unit(h, "hour")
+            else -> unit(h, "hour") + " " + unit(m, "minute")
+        }
+    }
+
+    /** The minute update: "350 metres left, about 6 minutes." By beacon the distance is a straight line. */
+    fun progress(remainingM: Float, seconds: Float, straight: Boolean, lang: Lang): String {
+        val d = WalkPhrases.far(remainingM.toDouble(), lang)
+        val t = timeLeft(seconds, lang)
+        return when {
+            lang == Lang.KO && straight -> "직선으로 $d, $t."
+            lang == Lang.KO -> "$d 남았어요, $t."
+            straight -> "$d in a straight line, $t."
+            else -> "$d left, $t."
+        }
+    }
+
+    private const val LESS_THAN_A_MINUTE_S = 45f
+
     fun whereTo(lang: Lang): String = if (lang == Lang.KO) "어디로 갈까요?" else "Where to?"
 
     fun headTo(name: String, lang: Lang): String =
