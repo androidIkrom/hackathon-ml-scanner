@@ -26,6 +26,14 @@ object ItemColor {
     const val MIN_WHITE_LEVEL = 0.6f
 
     /**
+     * White balance takes a cast away and never paints one on: a pixel the camera shows with less saturation
+     * than this (scan's line between white or gray and a colour) stays white, gray or black. A white charger,
+     * a little cool (0.11), on a light wooden table that filled the frame was taken to 0.2 by the frame's
+     * gains and called blue (the logs).
+     */
+    const val NEUTRAL_S = 0.15f
+
+    /**
      * The most common colour of [pixels] (ARGB) under the frame's white-balance [gains], with brightness read
      * against the frame's [whiteLevel]; null in a dark frame or with no pixels.
      */
@@ -41,11 +49,12 @@ object ItemColor {
         val counts = IntArray(ColorName.entries.size)
         val stretch = 1f / whiteLevel.coerceIn(MIN_WHITE_LEVEL, 1f)
         for (p in pixels) {
+            val neutral = ColorMapper.hsv((p shr 16) and 0xFF, (p shr 8) and 0xFF, p and 0xFF)[1] < NEUTRAL_S
             val q = WhiteBalance.apply(p, gains)
             val r = (((q shr 16) and 0xFF) * stretch).toInt().coerceAtMost(255)
             val g = (((q shr 8) and 0xFF) * stretch).toInt().coerceAtMost(255)
             val b = ((q and 0xFF) * stretch).toInt().coerceAtMost(255)
-            val name = of(r, g, b) ?: continue
+            val name = of(r, g, b, neutral) ?: continue
             counts[name.ordinal]++
         }
         return counts
@@ -74,10 +83,11 @@ object ItemColor {
             .joinToString(", ") { "${it.en} ${counts[it.ordinal] * 100 / total}%" }
     }
 
-    /** One pixel's name. */
-    fun of(r: Int, g: Int, b: Int): ColorName? {
+    /** One pixel's name; one that was [neutral] before white balance is named by its brightness alone. */
+    fun of(r: Int, g: Int, b: Int, neutral: Boolean = false): ColorName? {
         val hsv = ColorMapper.hsv(r, g, b)
-        if (hsv[2] < DARK_V && hsv[1] < DARK_S) return ColorName.BLACK
-        return ColorMapper.nameFromHsv(hsv[0], hsv[1], hsv[2], frameIsDark = false)
+        val s = if (neutral) 0f else hsv[1]
+        if (hsv[2] < DARK_V && s < DARK_S) return ColorName.BLACK
+        return ColorMapper.nameFromHsv(hsv[0], s, hsv[2], frameIsDark = false)
     }
 }
