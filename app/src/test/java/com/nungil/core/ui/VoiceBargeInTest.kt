@@ -73,4 +73,22 @@ class VoiceBargeInTest {
         assertNull(VoiceBargeIn.answerIn("say yes or no", "Is this it? Say yes or no.", yesNo))
         assertNull(VoiceBargeIn.answerIn("is this it say yes or no", "Is this it? Say yes or no.", yesNo))
     }
+
+    @Test fun aCommandMadeOfTheAppsOwnWordsButOneIsItsEcho() {
+        // The logs: "Hold the phone still." came back as "Glue the phone | Close the phone", and "close" went
+        // Back in the middle of learning an item.
+        assertTrue(VoiceBargeIn.mostlyEcho("Close the phone", "Hold the phone still."))
+        assertTrue(VoiceBargeIn.mostlyEcho("Call the phone", "Great! Hold the phone still."))
+        // Short commands, and words of the user's own, are not.
+        assertFalse(VoiceBargeIn.mostlyEcho("go back", "Hold the phone still."))
+        assertFalse(VoiceBargeIn.mostlyEcho("close", "Hold the phone still."))
+        assertFalse(VoiceBargeIn.mostlyEcho("find my bag", "Hold the phone still."))
+        assertFalse(VoiceBargeIn.mostlyEcho("close the phone", null))
+    }
+
+    @Test fun theStartOfTheAppsOwnSentenceIsNotTheUserTalking() {
+        // The logs: "Is", from the app's own "Is this it?", kept a session that then heard nothing for 10 s.
+        assertEquals(BargeIn.KEEP_TALKING, VoiceBargeIn.onPartial("Is", "It is black and oblong. Is this it?"))
+        assertEquals(BargeIn.STOP_ALL_SOUND, VoiceBargeIn.onPartial("Yes it is", "It is black and oblong. Is this it?"))
+    }
 }

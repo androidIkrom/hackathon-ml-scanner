@@ -189,6 +189,11 @@ class TtsSpeaker(
     override fun stop() = onMain {
         queue.clear()
         currentId = null
+        // What was cut off is still in the air: the microphone may hand it back as words (recentSpeech).
+        currentText?.let {
+            lastEndText = it
+            lastEndAt = SystemClock.elapsedRealtime()
+        }
         currentText = null
         runCatching { tts.stop() }
         finishFinal()

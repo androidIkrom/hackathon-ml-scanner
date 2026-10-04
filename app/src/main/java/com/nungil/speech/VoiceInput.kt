@@ -120,7 +120,9 @@ class VoiceInput(
      */
     fun freshSession() {
         if (!alwaysOn || oneShot != null) return
-        if (lastPartial.isNotEmpty() && !VoiceBargeIn.isEcho(lastPartial, appSaying())) {
+        // The user's words are words the app did not say. A piece of its own sentence ("Is", from "Is this
+        // it?") is not: taken for the user's, it kept a session that then heard nothing for 10 s (the logs).
+        if (lastPartial.isNotEmpty() && VoiceBargeIn.onPartial(lastPartial, appSaying()) == BargeIn.STOP_ALL_SOUND) {
             Log.i(TAG, "Recognizer session kept after the app spoke: heard \"$lastPartial\"")
             return
         }

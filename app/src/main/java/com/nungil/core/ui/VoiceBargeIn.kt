@@ -60,6 +60,19 @@ object VoiceBargeIn {
         return null
     }
 
+    /**
+     * A phrase of [MIN_ECHO_WORDS] words or more of which all but one are the app's own: its sentence with one
+     * word misheard. For commands only: "Hold the phone still." came back as "Close the phone" and went Back
+     * (the logs). An answer may share words with the question ("Yes it is" to "Is this it?").
+     */
+    fun mostlyEcho(heard: String, appSaid: String?): Boolean {
+        if (appSaid == null) return false
+        val words = words(heard)
+        if (words.size < MIN_ECHO_WORDS) return false
+        val said = joined(appSaid)
+        return words.count { it in said } >= words.size - 1
+    }
+
     private fun endsWhatWasSaid(text: String, appSaid: String?): Boolean =
         appSaid != null && joined(text).isNotEmpty() && joined(appSaid).endsWith(joined(text))
 
