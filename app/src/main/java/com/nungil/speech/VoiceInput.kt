@@ -80,12 +80,19 @@ class VoiceInput(
     }
     private var earlyPending = false
 
+    /**
+     * This session's phrase was taken from the words so far. Its result can still arrive after the cancel, and
+     * is not heard a second time: "Yes start" was, 9 ms apart, and started the enrolment twice (the logs).
+     */
+    private var answeredEarly = false
+
     /** The words so far have held the answer a screen waits for long enough: it is heard now. */
     private val earlyAnswer = Runnable {
         earlyPending = false
         val answer = VoiceBargeIn.answerIn(lastPartial, appSaying(), answersNow)
         if (alwaysOn && oneShot == null && answer != null) {
             Log.i(TAG, "Answer \"$answer\" taken from the words so far: \"$lastPartial\"")
+            answeredEarly = true
             recognizer?.cancel()
             lastPartial = ""
             speechBegan = false
@@ -188,6 +195,7 @@ class VoiceInput(
         }
         lastPartial = ""
         speechBegan = false
+        answeredEarly = false
         listeningSince = SystemClock.elapsedRealtime()
         // Hide the recognizer's start beep. Music (the TTS stream) is muted only while the user is talking.
         muter.mute(includeMusic = holding)
@@ -269,6 +277,7 @@ class VoiceInput(
     override fun onEndOfSpeech() = muter.mute(includeMusic = holding)
 
     override fun onResults(results: Bundle?) {
+        if (answeredEarly) return
         dropTimers()
         muter.unmuteMusicNow()
         muter.unmuteSoon()
@@ -298,6 +307,8 @@ class VoiceInput(
     }
 
     override fun onError(error: Int) {
+        // The cancelled session's end: the next one is already scheduled.
+        if (answeredEarly) return
         dropTimers()
         // Speech was heard but no words came out of it: worth a line, plain silence is not.
         if (speechBegan && (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT)) {

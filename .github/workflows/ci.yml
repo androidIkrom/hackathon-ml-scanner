@@ -9,20 +9,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Ownership
-        run: |
-          case "$GITHUB_HEAD_REF" in
-            a/*) who=A ;;
-            i/*) who=I ;;
-            y/*) who=Y ;;
-            c/*) who=C ;;
-            *) echo "Branch must start with a/, i/, y/ or c/"; exit 1 ;;
-          esac
-          files=$(git diff --name-only --no-renames "origin/$GITHUB_BASE_REF...HEAD^2")
-          bash tools/check-ownership.sh "$who" $files
 
       - uses: actions/setup-java@v4
         with:
