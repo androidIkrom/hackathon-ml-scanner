@@ -13,7 +13,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.Surface
 import android.view.View
@@ -36,15 +35,9 @@ import com.nungil.core.walk.Alert
 import com.nungil.core.walk.AlertKind
 import com.nungil.core.walk.Announcement
 import com.nungil.core.walk.Beacon
-import com.nungil.core.walk.GoApproach
 import com.nungil.core.walk.GoMath
-import com.nungil.core.walk.GoPace
-import com.nungil.core.walk.GoProgress
-import com.nungil.core.walk.GoQuestion
 import com.nungil.core.walk.GoAnswer
 import com.nungil.core.walk.GoState
-import com.nungil.core.walk.FixAge
-import com.nungil.core.walk.GpsSignal
 import com.nungil.core.walk.LatLon
 import com.nungil.core.walk.Navigator
 import com.nungil.core.walk.Place
@@ -65,7 +58,6 @@ import com.nungil.scan.HeadingProvider
 import com.nungil.shell.MainActivity
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -105,7 +97,6 @@ class WalkFragment : Fragment(), VoiceHandler {
         override fun run() {
             if (_binding == null || !goMode) return
             updateDirection()
-            goUpdate()
             main.postDelayed(this, GO_TICK_MS)
         }
     }
@@ -137,28 +128,12 @@ class WalkFragment : Fragment(), VoiceHandler {
 
     private val alerts = WalkAlerts()
     private val pacing = WalkPacing()
-    private var network: ExecutorService = Executors.newSingleThreadExecutor()
+    private val network: ExecutorService = Executors.newSingleThreadExecutor()
     private val source: RouteSource? = BuildConfig.ORS_API_KEY.takeIf { it.isNotBlank() }?.let { OrsRouteSource(it) }
     private val gate = RerouteGate()
     private var navigator: Navigator? = null
     private var target: Place? = null
     private var pendingNav: Alert? = null
-
-    // Go progress: the minute update, the walker's speed, questions, weak GPS (spec 2026-10-04-go-progress).
-    private lateinit var goSettings: GoSettings
-    private lateinit var progress: GoProgress
-    private val pace = GoPace()
-    private val gps = GpsSignal()
-    private var beaconApproach = GoApproach()
-    private var beaconStartM: Float? = null
-    private var rerouting = false
-
-    /** The last navigation sentence, for "repeat", and when it was queued (the minute update waits after one). */
-    private var lastNav: String? = null
-    private var lastNavAt = Long.MIN_VALUE / 2
-
-    /** Why the minute update last waited: logged when it changes, not five times a second. */
-    private var lastPutOff: GoProgress.Verdict? = null
 
     /** A found place that was read out and waits for "yes", "next", "the second one" or another place. */
     private class Offer(val candidates: List<Place>, val index: Int, val here: LatLon, var askedAgain: Boolean = false)
@@ -209,11 +184,6 @@ class WalkFragment : Fragment(), VoiceHandler {
         stepM = if (hasStepDetector(context)) StepLength.metres() else null
         heading = HeadingProvider(context)
         places = PlaceStore(context)
-        goSettings = GoSettings(context)
-        // Back from another screen this is the same fragment: its route, timer and network thread carry on
-        // (onDestroyView shut the thread down, and "where am I" crashed on it, the review).
-        if (!::progress.isInitialized) progress = GoProgress(goSettings.quietUpdates)
-        if (network.isShutdown) network = Executors.newSingleThreadExecutor()
         location = LocationTracker(context) { onFix(it) }
         vision = WalkVision(context, { services.lang }, stepM, { steps.getAndSet(0) }, { heading.headingDeg }) { onReport(it) }
         renderer = WalkRenderer({ binding.walkingGl.display?.rotation ?: Surface.ROTATION_0 }, vision)
@@ -242,10 +212,6 @@ class WalkFragment : Fragment(), VoiceHandler {
         val pending = (activity as? MainActivity)?.takePendingWalkCommand()
         if (pending !is WalkCommand.GoMode && pending !is WalkCommand.GoTo) say(WalkPhrases.started(services.lang))
         pending?.let { onWalkCommand(it) }
-        if (goMode) {
-            main.removeCallbacks(goTicker)
-            main.post(goTicker)
-        }
     }
 
     /**
@@ -401,18 +367,15 @@ class WalkFragment : Fragment(), VoiceHandler {
     /** Within 15 m, or within the GPS accuracy when that is worse (indoors it often is). */
     private fun arrivalRadius(): Double = maxOf(Navigator.ARRIVED_M, location.accuracyM.toDouble())
 
-    /** Arrival is always said at once, never queued behind other alerts, with the side the place is on. */
+    /** Arrival is always said at once, never queued behind other alerts. */
     private fun arrived(place: Place) {
-        val text = RoutePhrases.arrived(place.name, services.lang, navigator?.side)
         navigator = null
         target = null
         pendingNav = null
-        lastNav = null
-        progress.stop()
         location.stop()
         services.haptics.buzz(Buzz.DONE)
-        services.speaker.sayNow(text)
-        _binding?.walkingAnnouncement?.text = text
+        services.speaker.sayNow(RoutePhrases.arrived(place.name, services.lang))
+        _binding?.walkingAnnouncement?.text = RoutePhrases.arrived(place.name, services.lang)
         status(getString(R.string.walking_subtitle))
         if (goMode) showGoSearch()
     }
@@ -646,13 +609,6 @@ class WalkFragment : Fragment(), VoiceHandler {
             onGoAnswer(asked, answer)
             return true
         }
-        // "How far", "what's next", "where am I": before a place on "Where to?", and in walk mode too.
-        GoQuestion.of(t)?.let { question ->
-            // Nothing to repeat of a route that is not running: "repeat" keeps its meaning for the whole app.
-            if (question == GoQuestion.REPEAT && !navigating()) return false
-            answer(question)
-            return true
-        }
         if (!onGoSearch()) return false
         // "Go save" and "Save" were Seoul (the logs) and opened the Saved screen in the middle of Go.
         val place = t.replace(Regex("^(?:go|goto)\\s+(?:to\\s+)?", RegexOption.IGNORE_CASE), "")
@@ -740,19 +696,8 @@ class WalkFragment : Fragment(), VoiceHandler {
             onFirstFix = null
             it(p)
         }
-        val now = SystemClock.elapsedRealtime()
-        if (target != null && gps.update(now, location.accuracyM)) {
-            Log.i(TAG, String.format(Locale.US, "Go GPS weak: %.0f m", location.accuracyM))
-            queueNavigation(RoutePhrases.gpsWeak(services.lang))
-        }
-        val nav = navigator
-        if (nav == null) {
-            beaconFix(p, now)
-            return
-        }
-        val announcement = nav.update(now, p, location.accuracyM)
-        pace.add(now, nav.progressM, location.accuracyM)
-        if (announcement == null) return
+        val nav = navigator ?: return
+        val announcement = nav.update(SystemClock.elapsedRealtime(), p) ?: return
         when (announcement) {
             is Announcement.Arrived -> {
                 target?.let { arrived(it) } ?: run { navigator = null }
@@ -762,144 +707,18 @@ class WalkFragment : Fragment(), VoiceHandler {
                 // Said only when a new route is really asked for: indoors the GPS wanders and "off the route"
                 // came every five seconds.
                 val place = target
-                if (place == null || !gate.allow(now)) return
+                if (place == null || !gate.allow(SystemClock.elapsedRealtime())) return
                 requestRoute(p, place, reroute = true)
             }
-            is Announcement.WrongWay -> Log.i(TAG, String.format(Locale.US, "Go wrong way at %.0f m along the route", nav.progressM))
             else -> Unit
         }
         queueNavigation(announcement.text)
     }
 
-    /** By beacon (no route): the walker's speed from the shrinking distance, and the destination on the way in. */
-    private fun beaconFix(p: LatLon, now: Long) {
-        val place = target ?: return
-        val metres = Beacon.distanceMetres(p, place.point).toFloat()
-        val start = beaconStartM ?: metres.also { beaconStartM = it }
-        pace.add(now, start - metres, location.accuracyM)
-        if (beaconApproach.next(metres) != null) queueNavigation(RoutePhrases.approach(place.name, metres, null, services.lang))
-    }
-
-    /** The minute update: distance and time left, when GoProgress says it is time (spec §1). */
-    private fun goUpdate() {
-        val place = target ?: return
-        val here = location.last ?: return
-        val now = SystemClock.elapsedRealtime()
-        val nav = navigator
-        val state = nav?.peek(here)
-        val remaining = state?.remainingM ?: Beacon.distanceMetres(here, place.point).toFloat()
-        when (val verdict = progress.check(now, state?.takeIf { !it.final }?.toTargetM, lastNavAt, rerouting)) {
-            GoProgress.Verdict.SAY -> {
-                lastPutOff = null
-                val seconds = pace.secondsFor(remaining)
-                queueNavigation(RoutePhrases.progress(remaining, seconds, straight = nav == null, services.lang))
-                progress.said(now)
-                Log.i(TAG, String.format(Locale.US, "Go update: %.0f m left, %.2f m/s, %.1f min", remaining, pace.speedMps, seconds / 60))
-            }
-            GoProgress.Verdict.TURN_NEAR, GoProgress.Verdict.JUST_SPOKE, GoProgress.Verdict.REROUTING -> {
-                if (verdict != lastPutOff) Log.i(TAG, "Go update put off: $verdict")
-                lastPutOff = verdict
-            }
-            else -> Unit
-        }
-    }
-
-    /** A walker's question (spec §3), answered at once. */
-    private fun answer(question: GoQuestion) {
-        val lang = services.lang
-        fun reply(text: String) {
-            Log.i(TAG, "Go asked: $question -> \"$text\"")
-            // Asked just now: said at once, and the warnings that may wait (WalkPacing) wait for it.
-            pacing.said(SystemClock.elapsedRealtime(), Alert(AlertKind.INFO, "asked:$question", text))
-            services.speaker.sayNow(text)
-            _binding?.walkingAnnouncement?.text = text
-        }
-        when (question) {
-            GoQuestion.WHERE_AM_I -> whereAmI()
-            GoQuestion.QUIET, GoQuestion.UPDATES_ON -> {
-                val quiet = question == GoQuestion.QUIET
-                progress.setQuiet(quiet, SystemClock.elapsedRealtime())
-                goSettings.quietUpdates = quiet
-                reply(if (quiet) RoutePhrases.updatesOff(lang) else RoutePhrases.updatesOn(lang))
-            }
-            else -> {
-                val place = target ?: return reply(RoutePhrases.noRouteRunning(lang))
-                val here = location.last ?: return reply(WalkPhrases.waitingForLocation(lang))
-                val state = navigator?.peek(here) ?: Beacon.distanceMetres(here, place.point).toFloat().let { d ->
-                    GoState(place.point, RoutePhrases.headTo(place.name, lang), d, d, final = true)
-                }
-                when (question) {
-                    GoQuestion.HOW_FAR -> {
-                        reply(RoutePhrases.progress(state.remainingM, pace.secondsFor(state.remainingM), navigator == null, lang))
-                        progress.said(SystemClock.elapsedRealtime())
-                    }
-                    GoQuestion.NEXT -> reply(RoutePhrases.next(state, place.name, lang))
-                    GoQuestion.REPEAT -> reply(lastNav ?: RoutePhrases.next(state, place.name, lang))
-                    GoQuestion.WHICH_WAY -> {
-                        val h = heading.headingDeg ?: return reply(RoutePhrases.noHeading(lang))
-                        val clock = Beacon.clock(Beacon.bearingDeg(here, state.target) - h)
-                        reply(RoutePhrases.whichWay(clock, state.toTargetM, if (state.final) place.name else null, lang))
-                    }
-                    else -> Unit
-                }
-            }
-        }
-    }
-
-    /**
-     * "Where am I": the street from openrouteservice, near a saved place or the destination within
-     * [NEAR_PLACE_M] (spec §6). Without it, the destination's distance and direction. Only from a fix of the
-     * last 10 s (FixAge), and the answer, which comes after the network, waits behind the warnings like a turn.
-     */
-    private fun whereAmI() {
-        withFreshLocation { here ->
-            val lang = services.lang
-            val near = (places.all() + listOfNotNull(target))
-                .map { it to Beacon.distanceMetres(here, it.point) }
-                .filter { it.second <= NEAR_PLACE_M }
-                .minByOrNull { it.second }?.first?.name
-            fun withoutStreet(): String {
-                val place = target ?: return RoutePhrases.cannotLookUp(lang)
-                val metres = Beacon.distanceMetres(here, place.point)
-                val where = heading.headingDeg?.let { h -> WalkPhrases.beacon(place.name, metres, Beacon.clock(Beacon.bearingDeg(here, place.point) - h), lang) }
-                    ?: "${place.name}, ${WalkPhrases.far(metres, lang)}."
-                return RoutePhrases.cannotLookUp(lang) + " " + where
-            }
-            // Started for the question only: stopped again, after the answer, when no route needs it.
-            fun done(text: String) {
-                Log.i(TAG, "Go asked: ${GoQuestion.WHERE_AM_I} -> \"$text\"")
-                queueNavigation(text)
-                if (!navigating()) location.stop()
-            }
-            val src = source ?: return@withFreshLocation done(withoutStreet())
-            network.execute {
-                val street = src.reverse(here)
-                main.post { if (_binding != null) done(street?.let { RoutePhrases.whereAmI(it, near, lang) } ?: withoutStreet()) }
-            }
-        }
-    }
-
-    /** [withLocation], but a last known place older than FixAge.FRESH_MS waits for the next fix. */
-    private fun withFreshLocation(block: (LatLon) -> Unit) {
-        withLocation { here ->
-            if (FixAge.fresh(location.fixAtMs, SystemClock.elapsedRealtime())) {
-                block(here)
-            } else {
-                onFirstFix = block
-                say(WalkPhrases.waitingForLocation(services.lang))
-            }
-        }
-    }
-
-    /**
-     * Navigation waits for the next frame so obstacle warnings go first; without frames, or with the warnings
-     * paused (no frame is ever spoken then), it speaks at once.
-     */
+    /** Navigation waits for the next frame so obstacle warnings go first; without frames it speaks at once. */
     private fun queueNavigation(text: String) {
-        lastNav = text
-        lastNavAt = SystemClock.elapsedRealtime()
         val alert = Alert(AlertKind.NAVIGATION, "nav:$text", text)
-        if (!running || lastNavAt - lastReportAt > REPORT_STALE_MS) say(text) else pendingNav = alert
+        if (SystemClock.elapsedRealtime() - lastReportAt > REPORT_STALE_MS) say(text) else pendingNav = alert
     }
 
     private fun startNavigation(name: String, here: LatLon, heard: List<String> = listOf(name)) {
@@ -984,7 +803,6 @@ class WalkFragment : Fragment(), VoiceHandler {
     private fun requestRoute(from: LatLon, place: Place, reroute: Boolean) {
         val src = source ?: return
         target = place
-        if (reroute) rerouting = true
         network.execute {
             val result = src.route(from, place)
             main.post { if (_binding != null) onRoute(result, place, reroute) }
@@ -993,13 +811,9 @@ class WalkFragment : Fragment(), VoiceHandler {
 
     private fun onRoute(result: RouteResult, place: Place, reroute: Boolean) {
         val lang = services.lang
-        rerouting = false
         when (result) {
             is RouteResult.Ok -> {
                 navigator = Navigator(result.route, stepM, lang)
-                // A new route measures progress from its own start; the speed found so far stays.
-                pace.restart()
-                if (!reroute) progress.start(SystemClock.elapsedRealtime())
                 if (goMode) showGoRoute(place)
                 status(getString(R.string.walking_status_navigating, place.name))
                 if (!reroute) {
@@ -1026,10 +840,6 @@ class WalkFragment : Fragment(), VoiceHandler {
     private fun beaconTo(place: Place) {
         navigator = null
         target = place
-        beaconApproach = GoApproach()
-        beaconStartM = null
-        pace.restart()
-        if (!progress.started) progress.start(SystemClock.elapsedRealtime())
         if (goMode) showGoRoute(place)
         status(getString(R.string.walking_status_beacon, place.name))
     }
@@ -1037,9 +847,6 @@ class WalkFragment : Fragment(), VoiceHandler {
     private fun stopNavigation() {
         navigator = null
         target = null
-        lastNav = null
-        rerouting = false
-        progress.stop()
         if (offer != null) (activity as? MainActivity)?.dropWords()
         offer = null
         pendingNav = null
@@ -1085,9 +892,5 @@ class WalkFragment : Fragment(), VoiceHandler {
         const val FALLBACK_MIN_SCORE = 0.5f
         const val WATCHDOG_EVERY_MS = 1_000L
         const val GO_TICK_MS = 200L
-        const val TAG = "Nungil"
-
-        /** "Where am I" names a saved place or the destination this near (spec §6). */
-        const val NEAR_PLACE_M = 300.0
     }
 }
