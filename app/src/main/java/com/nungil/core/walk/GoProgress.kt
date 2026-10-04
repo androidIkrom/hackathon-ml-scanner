@@ -1,13 +1,14 @@
 package com.nungil.core.walk
 
 /**
- * When Go mode says the distance and the time left (spec §1): every [EVERY_MS] while a destination is set. It
+ * When Go mode says something again and again: the distance and the time left (spec §1), every [EVERY_MS],
+ * or, with another [everyMs], the direction to go every 10 s. While a destination is set. The update
  * is put off, never dropped, while the next turn is within [TURN_NEAR_M] (its own announcement is near),
  * another navigation sentence was said in the last [QUIET_AFTER_NAV_MS], or a new route is being fetched; it is
  * said at the first moment none holds. An answer to "how far" counts as one ([said]). [quiet]: the walker said
  * "quiet updates"; turns and warnings are not this class's and go on.
  */
-class GoProgress(quiet: Boolean = false) {
+class GoProgress(quiet: Boolean = false, private val everyMs: Long = EVERY_MS) {
     enum class Verdict { OFF, QUIET, NOT_YET, TURN_NEAR, JUST_SPOKE, REROUTING, SAY }
 
     private var dueAt: Long? = null
@@ -26,7 +27,7 @@ class GoProgress(quiet: Boolean = false) {
 
     /** A destination is set: the first update a minute from now. */
     fun start(nowMs: Long) {
-        dueAt = nowMs + EVERY_MS
+        dueAt = nowMs + everyMs
     }
 
     /** No destination any more. */
@@ -51,7 +52,7 @@ class GoProgress(quiet: Boolean = false) {
 
     /** An update, or an answer to "how far", was said: the next one a minute from now. */
     fun said(nowMs: Long) {
-        if (dueAt != null) dueAt = nowMs + EVERY_MS
+        if (dueAt != null) dueAt = nowMs + everyMs
     }
 
     companion object {

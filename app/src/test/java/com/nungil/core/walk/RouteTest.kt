@@ -375,6 +375,41 @@ class RouteTest {
         assertEquals("Minute updates off. Ask how far any time.", RoutePhrases.updatesOff(Lang.EN))
     }
 
+    // ---- the direction every 10 s ----------------------------------------------------------------------
+
+    private fun assertNear(expected: LatLon, actual: LatLon) =
+        assertTrue("$actual is not $expected", Beacon.distanceMetres(expected, actual) < 0.5)
+
+    @Test fun theDirectionPointsTwentyMetresAheadOnTheRoute() {
+        assertNear(at(50.0, 0.0), Navigator(route(), null, Lang.EN).aheadPoint(at(30.0, 0.0)))
+    }
+
+    @Test fun offTheRouteItPointsBackToIt() {
+        assertNear(at(50.0, 0.0), Navigator(route(), null, Lang.EN).aheadPoint(at(30.0, 10.0)))
+    }
+
+    @Test fun itDoesNotCutTheCorner() {
+        // 10 m before the left turn: the corner, not a point in the next street through the building.
+        assertNear(at(100.0, 0.0), Navigator(route(), null, Lang.EN).aheadPoint(at(90.0, 0.0)))
+    }
+
+    @Test fun atTheTurnItLooksIntoTheNextStreet() {
+        // "Turn left now" is said 5 m before the corner: from there the direction is the next street.
+        assertNear(at(100.0, 17.0), Navigator(route(), null, Lang.EN).aheadPoint(at(97.0, 0.0)))
+    }
+
+    @Test fun nearTheEndItPointsAtThePlace() {
+        val dest = at(200.0, 96.5)
+        assertNear(dest, Navigator(route(destination = dest), null, Lang.EN).aheadPoint(at(190.0, 100.0)))
+    }
+
+    @Test fun directionSentences() {
+        assertEquals("Go at 2 o'clock.", RoutePhrases.goClock(2, Lang.EN))
+        assertEquals("Go straight ahead.", RoutePhrases.goClock(12, Lang.EN))
+        assertEquals("2시 방향으로 가세요.", RoutePhrases.goClock(2, Lang.KO))
+        assertEquals("앞으로 곧장 가세요.", RoutePhrases.goClock(12, Lang.KO))
+    }
+
     @Test fun numbersFromTheSpec() {
         assertEquals(25f, Navigator.PREPARE_M)
         assertEquals(5f, Navigator.TURN_M)

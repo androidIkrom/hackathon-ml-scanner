@@ -23,6 +23,15 @@ class GoProgressTest {
         assertEquals(GoProgress.Verdict.SAY, g.check(66_000, 30f, 50_000, false))
     }
 
+    @Test fun theDirectionEveryTenSeconds() {
+        val g = GoProgress(everyMs = 10_000).also { it.start(0) }
+        assertEquals(GoProgress.Verdict.NOT_YET, g.check(9_999, null, never, false))
+        assertEquals(GoProgress.Verdict.SAY, g.check(10_000, null, never, false))
+        g.said(13_000) // a turn was said: the next direction 10 s after it
+        assertEquals(GoProgress.Verdict.NOT_YET, g.check(20_000, null, never, false))
+        assertEquals(GoProgress.Verdict.SAY, g.check(23_000, null, never, false))
+    }
+
     @Test fun anAnswerToHowFarCountsAsAnUpdate() {
         val g = GoProgress().also { it.start(0) }
         g.said(40_000)

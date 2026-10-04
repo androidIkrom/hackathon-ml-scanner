@@ -258,6 +258,33 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
         return GoState(step.maneuver, RoutePhrases.display(step, lang), max(0f, along[step.pointIndex] - myAlong), remaining)
     }
 
+    /**
+     * Where to head now, for the direction said every 10 s: the point [AHEAD_M] further along the route, so a
+     * walker who drifted off it is pointed back to it. Never past the next turn before its "now" (5 m before
+     * it): that would point through the corner building. The destination once the route ends within reach.
+     */
+    fun aheadPoint(at: LatLon): LatLon {
+        val (_, myAlong) = nearest(project(at))
+        val nextTurn = guided.firstOrNull { along[it.pointIndex] > myAlong + TURN_M }?.let { along[it.pointIndex] }
+        val ahead = myAlong + AHEAD_M
+        if (nextTurn == null && ahead >= along.last()) return route.destination.point
+        return pointAt(minOf(ahead, nextTurn ?: along.last()))
+    }
+
+    /** The point [s] metres along the route line. */
+    private fun pointAt(s: Float): LatLon {
+        val last = route.line.size - 2
+        for (i in 0..last) {
+            if (s > along[i + 1] && i < last) continue
+            val length = along[i + 1] - along[i]
+            val t = if (length <= 0f) 0.0 else ((s - along[i]) / length).toDouble().coerceIn(0.0, 1.0)
+            val a = route.line[i]
+            val b = route.line[i + 1]
+            return LatLon(a.lat + (b.lat - a.lat) * t, a.lon + (b.lon - a.lon) * t)
+        }
+        return route.line.last()
+    }
+
     /** Distance to the line and progress along it, in metres. */
     private fun nearest(p: DoubleArray): Pair<Float, Float> {
         var best = Float.MAX_VALUE
@@ -299,6 +326,9 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
         /** This far back from the farthest point reached, still on the route, is walking the wrong way (spec §4). */
         const val WRONG_WAY_M = 15f
         const val WRONG_WAY_FIXES = 3
+
+        /** How far ahead on the route the direction every 10 s points: about 20 s of walking. */
+        const val AHEAD_M = 20f
         const val WRONG_WAY_SNAP_M = 60f
         private const val METRES_PER_DEG_LAT = 110_540.0
         private const val METRES_PER_DEG_LON = 111_320.0
@@ -438,6 +468,14 @@ object RoutePhrases {
         val d = WalkPhrases.far(metres.toDouble(), lang)
         if (lang == Lang.KO) return if (name == null) "다음 갈림길은 ${clock}시 방향, ${d}예요." else "${Josa.eunNeun(name)} ${clock}시 방향, ${d}예요."
         return if (name == null) "The next turn is at $clock o'clock, $d." else "$name is at $clock o'clock, $d."
+    }
+
+    /** The direction said every 10 s, so the walker stays on the way: "Go at 2 o'clock." / "Go straight ahead." */
+    fun goClock(clock: Int, lang: Lang): String = when {
+        lang == Lang.KO && clock == 12 -> "앞으로 곧장 가세요."
+        lang == Lang.KO -> "${clock}시 방향으로 가세요."
+        clock == 12 -> "Go straight ahead."
+        else -> "Go at $clock o'clock."
     }
 
     fun noHeading(lang: Lang): String =
