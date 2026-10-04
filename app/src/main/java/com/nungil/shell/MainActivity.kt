@@ -395,6 +395,15 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     }
 
     private fun onHeard(heard: String) {
+        // The answer to the help offer, though "ok", "go ahead" or "help" are commands too, and with no wake
+        // word: the tap that asked was the user's, and the app is mostly asleep on Home (the phone).
+        helpAsked?.let { asked ->
+            if (HelpAnswer.of(heard) != null) {
+                dropWords()
+                asked(heard)
+                return
+            }
+        }
         val wake = WakeWord.decide(heard, awakeState.value) { isCommand(it) }
         val text = when (wake) {
             WakeResult.Ignore -> {
@@ -412,14 +421,6 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             is WakeResult.Command -> {
                 if (wake.wake) wakeUp()
                 wake.text
-            }
-        }
-        // The answer to the help offer, though "ok", "go ahead" or "help" are commands too.
-        helpAsked?.let { asked ->
-            if (HelpAnswer.of(text) != null) {
-                dropWords()
-                asked(text)
-                return
             }
         }
         // The time, the date and the weather are answered on every screen (on "Where to?" they were searched
@@ -561,7 +562,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                         val y = ev.rawY.toInt()
                         // A tap on nothing asks first (TapHelpOffer); the voice guide names what is under the finger.
                         val owner = currentScreen()?.takeIf { it.view != null }?.viewLifecycleOwner
-                        val canHear = owner != null && dictation == null && (awakeState.value || !voice.isOn)
+                        val canHear = owner != null && dictation == null
                         when (tapHelp.onTap(guide.isEmptyAt(binding.navHost, x, y), prefs.voiceGuideOn, canHear)) {
                             TapHelpOffer.Tap.ASK -> owner?.let { offerHelp(it) }
                             TapHelpOffer.Tap.DESCRIBE -> guide.describeAt(binding.navHost, x, y, lang)?.let { tts.say(it) }
@@ -576,7 +577,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     /**
      * A tap on nothing (TapHelpOffer): "Do you want instructions for this screen?", and the screen's help on
-     * "yes". Not while asleep (only the wake word is heard then) or while another question waits. An answer that
+     * "yes", asleep or awake (its answer needs no wake word). Not while another question waits. An answer that
      * does not come in [HELP_ANSWER_MS] lets the microphone go, so the next words are not taken for it.
      */
     private fun offerHelp(owner: LifecycleOwner) {
