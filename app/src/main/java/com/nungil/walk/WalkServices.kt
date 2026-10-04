@@ -7,6 +7,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import com.nungil.core.walk.LatLon
 import com.nungil.core.walk.OrsJson
@@ -63,8 +64,14 @@ class LocationTracker(context: Context, private val onFix: (LatLon) -> Unit) : L
     var fixAtMs: Long? = null
         private set
 
+    /** When the location updates were started (elapsed realtime, ms); null while they are stopped. See FixAge.usable. */
+    @Volatile
+    var liveSinceMs: Long? = null
+        private set
+
     @SuppressLint("MissingPermission")
     fun start() {
+        if (liveSinceMs == null) liveSinceMs = SystemClock.elapsedRealtime()
         for (provider in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
             if (!runCatching { manager.isProviderEnabled(provider) }.getOrDefault(false)) continue
             runCatching {
@@ -81,6 +88,7 @@ class LocationTracker(context: Context, private val onFix: (LatLon) -> Unit) : L
     }
 
     fun stop() {
+        liveSinceMs = null
         runCatching { manager.removeUpdates(this) }
     }
 

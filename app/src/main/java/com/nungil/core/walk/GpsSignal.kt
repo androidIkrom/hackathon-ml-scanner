@@ -37,4 +37,13 @@ object FixAge {
     const val FRESH_MS = 10_000L
 
     fun fresh(fixAtMs: Long?, nowMs: Long): Boolean = fixAtMs != null && nowMs - fixAtMs <= FRESH_MS
+
+    /**
+     * Whether the fix tells where the walker is: one measured since the location updates started at
+     * [liveSinceMs] always does, however old, because a new one comes only after 1 m of moving (standing
+     * indoors, "where am I" waited for one that never came, the logs); the last known place from before only
+     * while [fresh].
+     */
+    fun usable(fixAtMs: Long?, liveSinceMs: Long?, nowMs: Long): Boolean =
+        fixAtMs != null && (fresh(fixAtMs, nowMs) || liveSinceMs != null && fixAtMs >= liveSinceMs)
 }

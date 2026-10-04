@@ -20,7 +20,10 @@ enum class GoQuestion {
             ),
             NEXT to setOf("whats next", "what is next", "what next", "next turn", "next instruction", "next step"),
             REPEAT to setOf("repeat", "repeat that", "say again", "say that again", "what did you say", "pardon"),
-            WHICH_WAY to setOf("which way", "which way now", "which direction", "where do i go", "where should i go", "where now", "direction"),
+            WHICH_WAY to setOf(
+                "which way", "which way now", "which way to go", "which direction", "where do i go", "where do i go now",
+                "where should i go", "where should i go now", "where to go", "where now", "direction",
+            ),
             WHERE_AM_I to setOf("where am i", "where are we", "what street is this", "what street am i on", "which street is this", "my location", "current location"),
             QUIET to setOf("quiet updates", "fewer updates", "less updates", "updates off", "stop updates", "no updates", "turn off updates"),
             UPDATES_ON to setOf("updates on", "more updates", "turn on updates", "start updates"),
