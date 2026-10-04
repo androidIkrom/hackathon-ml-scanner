@@ -13,6 +13,9 @@ object VoiceBargeIn {
     const val MIN_ECHO_WORDS = 3
     const val ECHO_SHARE = 0.7
 
+    /** The most words of an answer taken from the end of what was heard ("yes it is"). */
+    const val MAX_ANSWER_WORDS = 3
+
     /** A partial result: any word the app is not saying right now means a person is talking. */
     fun onPartial(heard: String, appSaying: String?): BargeIn {
         val words = words(heard)
@@ -36,6 +39,29 @@ object VoiceBargeIn {
         val said = joined(appSaid)
         return words.count { it in said } >= words.size * ECHO_SHARE
     }
+
+    /**
+     * The answer a screen waits for ("yes", "no"), found in words that are still being said: all of [heard],
+     * or its last words when the app's own question came first in the same breath. Null when there is none,
+     * or when it is only the app's own voice: [heard] is its sentence, or the words are the end of it.
+     * In a room with other sound a phrase ends 6 to 10 s after the word, or with no words at all (the logs).
+     */
+    fun answerIn(heard: String, appSaid: String?, accepts: (String) -> Boolean): String? {
+        val text = heard.trim()
+        if (text.isEmpty()) return null
+        if (accepts(text)) return text.takeUnless { isEcho(it, appSaid) || endsWhatWasSaid(it, appSaid) }
+        // Words before the answer can only be the app's own, so only when it has just spoken.
+        if (appSaid == null) return null
+        val spoken = text.split(' ').filter { it.isNotEmpty() }
+        for (n in minOf(MAX_ANSWER_WORDS, spoken.size - 1) downTo 1) {
+            val tail = spoken.takeLast(n).joinToString(" ")
+            if (accepts(tail) && !endsWhatWasSaid(tail, appSaid)) return tail
+        }
+        return null
+    }
+
+    private fun endsWhatWasSaid(text: String, appSaid: String?): Boolean =
+        appSaid != null && joined(text).isNotEmpty() && joined(appSaid).endsWith(joined(text))
 
     private fun words(text: String): List<String> =
         text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }

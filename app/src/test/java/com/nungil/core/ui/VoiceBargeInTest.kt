@@ -3,6 +3,7 @@ package com.nungil.core.ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class VoiceBargeInTest {
@@ -46,5 +47,30 @@ class VoiceBargeInTest {
     @Test fun echoShareFromMeasurement() {
         assertEquals(3, VoiceBargeIn.MIN_ECHO_WORDS)
         assertEquals(0.7, VoiceBargeIn.ECHO_SHARE, 0.0)
+    }
+
+    @Test fun anAnswerIsTakenFromWordsStillBeingSaid() {
+        val yesNo: (String) -> Boolean = { it.lowercase().trim() in setOf("yes", "no", "yes it is") }
+        assertEquals("Yes", VoiceBargeIn.answerIn("Yes", null, yesNo))
+        assertEquals("yes it is", VoiceBargeIn.answerIn("yes it is", "My green chair. Is that right?", yesNo))
+        assertNull(VoiceBargeIn.answerIn("my green", null, yesNo))
+        assertNull(VoiceBargeIn.answerIn("", null, yesNo))
+    }
+
+    @Test fun anAnswerAfterTheAppsOwnQuestionInTheSameBreath() {
+        // The logs: the microphone heard the question and then the "yes", and gave no words at all 10 s later.
+        val yesNo: (String) -> Boolean = { it.lowercase().trim() in setOf("yes", "no", "yes it is") }
+        val asked = "It is black and oblong, about 80 by 60 centimetres, about 80 centimetres away. Is this it?"
+        assertEquals("yes", VoiceBargeIn.answerIn("it is black and oblong about 80 by 60 cm about 80 cm away is this it yes", asked, yesNo))
+        assertEquals("yes it is", VoiceBargeIn.answerIn("about 80 cm away is this it yes it is", asked, yesNo))
+        assertNull(VoiceBargeIn.answerIn("it is black and oblong about 80 by 60 cm about 80 cm away is this it", asked, yesNo))
+    }
+
+    @Test fun theAppsOwnYesIsNotTheUsers() {
+        val yesNo: (String) -> Boolean = { it.lowercase().trim() in setOf("yes", "no") }
+        assertNull(VoiceBargeIn.answerIn("yes", "Yes", yesNo))
+        // The end of the app's own sentence coming back through the microphone.
+        assertNull(VoiceBargeIn.answerIn("say yes or no", "Is this it? Say yes or no.", yesNo))
+        assertNull(VoiceBargeIn.answerIn("is this it say yes or no", "Is this it? Say yes or no.", yesNo))
     }
 }

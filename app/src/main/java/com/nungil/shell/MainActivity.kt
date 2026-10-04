@@ -116,6 +116,13 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     var dictationAccepts: ((String) -> Boolean)? = null
 
     /**
+     * Set with [dictationAccepts] by a screen whose answer may be taken from words still being said: "yes" to
+     * "Is this it?" came 6 to 16 s late, or not at all, when the phrase had to end first (the logs).
+     * Cleared with the claim.
+     */
+    var dictationEarly = false
+
+    /**
      * A screen no longer waits for the words it asked for (it got its answer another way, or gave up).
      * Without this the next phrase went to the old question and was lost: "Turn on" had to be said twice.
      */
@@ -123,6 +130,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         dictation = null
         dictationOwner = null
         dictationAccepts = null
+        dictationEarly = false
         tts.whenQuiet { }
     }
 
@@ -225,6 +233,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                 tones.resumeAfterUser()
             },
             understood = ::understood,
+            answersNow = { dictationEarly && dictation != null && dictationAccepts?.invoke(it) == true },
             onGuesses = { guesses ->
                 lastGuesses = guesses
                 if (guesses.size > 1) Log.i(TAG, "Guesses: " + guesses.joinToString(" | "))
@@ -425,6 +434,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             dictation = null
             dictationOwner = null
             dictationAccepts = null
+            dictationEarly = false
             claim(command.text)
             return
         }
@@ -642,6 +652,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         dictation = null
         dictationOwner = null
         dictationAccepts = null
+        dictationEarly = false
         silenceAll()
         voice.chimeOff()
     }
