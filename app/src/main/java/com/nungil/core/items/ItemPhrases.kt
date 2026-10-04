@@ -127,6 +127,21 @@ object ItemPhrases {
     /** 100 -> "1", 150 -> "1.5". */
     private fun metres(cm: Int): String = if (cm % 100 == 0) "${cm / 100}" else "${cm / 100}.${cm % 100 / 10}"
 
+    /**
+     * Nothing can be told apart: one thing is the whole view. It is the item from too near, or the table or
+     * wall the camera points at instead of the item, so both ways out are said.
+     */
+    fun wholeView(lang: Lang): String = when (lang) {
+        Lang.EN -> "One thing fills the whole view. Move the phone back, or point it at the thing."
+        Lang.KO -> "한 가지가 화면을 가득 채워요. 휴대폰을 뒤로 빼거나 물건 쪽으로 비춰 주세요."
+    }
+
+    /** The thing is seen but fills the view: its outline is cut by the frame, and it cannot be followed from this near. */
+    fun tooNear(lang: Lang): String = when (lang) {
+        Lang.EN -> "It fills the view. Move the phone back a little."
+        Lang.KO -> "화면에 꽉 차요. 휴대폰을 조금 뒤로 빼 주세요."
+    }
+
     fun noItem(lang: Lang): String = when (lang) {
         Lang.EN -> "I can't see anything there. Point the camera at it from about an arm's length."
         Lang.KO -> "물건이 보이지 않아요. 팔 길이 정도 떨어져서 비춰 주세요."

@@ -31,6 +31,10 @@ class ItemSight(context: Context) : Closeable {
         val colours: String,
     )
 
+    /** The last look found nothing because the thing there fills the view (over ItemMask.MAX_COVER of it). */
+    var filled = false
+        private set
+
     private val segmenter = ItemSegmenter(context)
     private val embedder = ItemEmbedder(context)
 
@@ -39,8 +43,13 @@ class ItemSight(context: Context) : Closeable {
      * view, or a failure). [focusDistanceM] is where the lens is focused, for the size and distance.
      */
     fun see(frame: Bitmap, x: Float, y: Float, hfovDeg: Float, focusDistanceM: Float?): Sighting? {
+        filled = false
         val answer = segmenter.at(frame, x, y) ?: return null
-        val mask = ItemMask.of(answer.values, answer.width, answer.height, x, y) ?: return null
+        val mask = ItemMask.of(answer.values, answer.width, answer.height, x, y)
+        if (mask == null) {
+            filled = ItemMask.coverAt(answer.values, answer.width, answer.height, x, y) > ItemMask.MAX_COVER
+            return null
+        }
         val square = ItemWindows.square(mask.box, frame.width, frame.height)
         val vector = embedder.embed(frame, square) ?: return null
 

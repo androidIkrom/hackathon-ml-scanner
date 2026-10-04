@@ -120,4 +120,13 @@ class ItemMaskTest {
         assertEquals(0.3f, box.top, 1e-6f)
         assertEquals(0.7f, box.bottom, 1e-6f)
     }
+
+    @Test fun howMuchOfTheViewTheThingCovers() {
+        assertEquals(1f, ItemMask.coverAt(FloatArray(400) { 1f }, 20, 20), 1e-6f)
+        // Too much of the view for an item, so of() gives nothing; the cover says why.
+        assertEquals(0.81f, ItemMask.coverAt(square(20, 1, 18), 20, 20), 1e-6f)
+        assertEquals(0.16f, ItemMask.coverAt(square(20, 6, 13), 20, 20), 1e-6f)
+        assertEquals(0.16f, ItemMask.coverAt(square(20, 6, 13, inside = 0f, outside = 1f), 20, 20), 1e-6f)
+        assertEquals(0f, ItemMask.coverAt(FloatArray(399) { 1f }, 20, 20), 1e-6f)
+    }
 }

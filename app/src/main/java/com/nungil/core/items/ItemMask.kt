@@ -153,6 +153,16 @@ class ItemMask private constructor(val width: Int, val height: Int, val inside: 
             return ItemMask(width, height, inside, cover)
         }
 
+        /**
+         * How much of a [width] x [height] answer the thing at ([x], [y]) covers (0..1): why [of] gives nothing
+         * for a thing that fills the view. 0 when [confidence] is not [width] x [height].
+         */
+        fun coverAt(confidence: FloatArray, width: Int, height: Int, x: Float = 0.5f, y: Float = 0.5f): Float {
+            if (width <= 0 || height <= 0 || confidence.size != width * height) return 0f
+            val high = pointIsHigh(confidence, width, height, (x * width).toInt().coerceIn(0, width - 1), (y * height).toInt().coerceIn(0, height - 1))
+            return confidence.count { (it >= INSIDE) == high }.toFloat() / confidence.size
+        }
+
         /** Whether the few pixels around ([px], [py]), which are the item, have the high values. */
         private fun pointIsHigh(confidence: FloatArray, width: Int, height: Int, px: Int, py: Int): Boolean {
             var sum = 0f

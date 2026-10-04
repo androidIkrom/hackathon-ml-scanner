@@ -352,11 +352,18 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
     private fun looking(seen: ItemSight.Sighting?, now: Long) {
         trackX = null
         trackY = null
-        if (seen == null) {
+        // Nothing there, or a thing so near that it fills the view: it is not asked about until it fits.
+        val tooNear = seen != null && ItemEnrollmentGuide.fillsView(seen.mask.cover)
+        if (seen == null || tooNear && !asked) {
             looks.clear()
             if (!asked && now >= waitUntilMs && now - lastHintMs >= NO_ITEM_HINT_MS) {
                 lastHintMs = now
-                services.speaker.say(ItemPhrases.noItem(lang))
+                val hint = when {
+                    tooNear -> ItemPhrases.tooNear(lang)
+                    sight?.filled == true -> ItemPhrases.wholeView(lang)
+                    else -> ItemPhrases.noItem(lang)
+                }
+                services.speaker.say(hint)
             }
             return
         }

@@ -152,4 +152,12 @@ class ItemLooksTest {
         )
         assertNull(ItemPhrases.look(ItemLook(null, null, null, null, null), Lang.KO))
     }
+
+    @Test fun tooNear() {
+        assertEquals("It fills the view. Move the phone back a little.", ItemPhrases.tooNear(Lang.EN))
+        assertEquals("화면에 꽉 차요. 휴대폰을 조금 뒤로 빼 주세요.", ItemPhrases.tooNear(Lang.KO))
+        // The whole view is one thing: the item from too near, or the table it is not on.
+        assertEquals("One thing fills the whole view. Move the phone back, or point it at the thing.", ItemPhrases.wholeView(Lang.EN))
+        assertEquals("한 가지가 화면을 가득 채워요. 휴대폰을 뒤로 빼거나 물건 쪽으로 비춰 주세요.", ItemPhrases.wholeView(Lang.KO))
+    }
 }

@@ -93,6 +93,16 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
         /** How far (fraction of the frame) the thing must have shifted for a LEFT, RIGHT or UP sample. */
         const val MIN_SHIFT = 0.08f
 
+        /**
+         * A thing that covers more of the frame than this is too near to learn: the frame cuts its outline, so
+         * its middle hardly moves when the phone does, and a little nearer it is the whole view and is lost.
+         * A towel at 53 to 93% took 155 s, 98 of them for LEFT; a bottle and a box at 11 to 33% under a minute
+         * (the logs).
+         */
+        const val FILLS_VIEW = 0.45f
+
+        fun fillsView(cover: Float): Boolean = cover > FILLS_VIEW
+
         /** The thing's area, as a part of what it was while held still, that is still the same thing. */
         const val SIZE_MIN = 0.4f
         const val SIZE_MAX = 2.5f

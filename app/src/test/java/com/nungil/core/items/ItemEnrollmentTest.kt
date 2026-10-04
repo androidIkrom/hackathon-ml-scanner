@@ -156,4 +156,11 @@ class ItemEnrollmentTest {
         assertEquals("I lost it. Point the camera at it again.", ItemPhrases.lost(Lang.EN))
         assertEquals("맞는 물건을 향해 비추고 가만히 들어 주세요.", ItemPhrases.notThat(Lang.KO))
     }
+
+    @Test fun aThingThatFillsTheViewIsTooNearToLearn() {
+        // The logs: a towel at 53 to 93% of the frame took 155 s, a bottle and a box at 11 to 33% under a minute.
+        assertFalse(ItemEnrollmentGuide.fillsView(0.33f))
+        assertFalse(ItemEnrollmentGuide.fillsView(0.45f))
+        assertTrue(ItemEnrollmentGuide.fillsView(0.53f))
+    }
 }
