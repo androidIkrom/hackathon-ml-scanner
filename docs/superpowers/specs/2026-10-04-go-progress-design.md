@@ -76,8 +76,9 @@ place waits for "yes" or "next". Each answer is said at once.
 | "quiet updates", "fewer updates", "updates off", "stop updates" / "안내 조용히", "업데이트 꺼" | "Minute updates off. Ask how far any time." |
 | "updates on", "more updates" / "업데이트 켜", "안내 다시 켜" | "Minute updates on." |
 
-- Without a destination, the first four answer "No route is running. Say go to, and a place." "Where am I",
-  "quiet updates" and "updates on" work in walk mode and on "Where to?" too.
+- Without a destination, "how far", "what's next" and "which way" answer "No route is running. Say go to, and
+  a place." "Repeat" then keeps its global meaning. "Where am I", "quiet updates" and "updates on" work in walk
+  mode and on "Where to?" too.
 - Only whole questions count, as in `QuickAsk`: "next time" and "repeat after me" are not questions.
 - "Repeat" anywhere else in the app keeps its global meaning (the last thing said).
 
