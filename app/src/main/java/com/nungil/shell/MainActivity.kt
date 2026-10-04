@@ -46,6 +46,7 @@ import com.nungil.contract.app.Speaker
 import com.nungil.contract.app.VoiceHandler
 import com.nungil.core.ui.AppLanguage
 import com.nungil.core.ui.CommandRouter
+import com.nungil.core.ui.HelpAnswer
 import com.nungil.core.ui.LanguageChoice
 import com.nungil.core.ui.PermissionOutcome
 import com.nungil.core.ui.Phrase
@@ -54,6 +55,8 @@ import com.nungil.core.ui.Route
 import com.nungil.core.ui.ScreenHelp
 import com.nungil.core.ui.VoiceBargeIn
 import com.nungil.core.ui.ShellPhrases
+import com.nungil.core.ui.SpeechStop
+import com.nungil.core.ui.TapHelpOffer
 import com.nungil.core.ui.VoiceChoice
 import com.nungil.core.voice.QuickAsk
 import com.nungil.core.weather.Clock
@@ -153,6 +156,15 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         }).map { it.trim().trimEnd('.', '!', '?') }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
 
     private val guide = VoiceGuide()
+
+    /** A tap on nothing offers the screen's instructions, once a screen visit (TapHelpOffer). */
+    private val tapHelp = TapHelpOffer()
+
+    /** The help offer waiting for its answer, if one is. */
+    private var helpAsked: ((String) -> Unit)? = null
+
+    /** When the user's voice last cut the app's own speech off (SpeechStop). */
+    private var speechCutAt = Long.MIN_VALUE / 2
     private var downX = 0f
     private var downY = 0f
     private var downAt = 0L
@@ -227,6 +239,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             appSaying = { tts.recentSpeech() },
             isAwake = { awakeState.value },
             holdSound = {
+                if (tts.recentSpeech() != null) speechCutAt = SystemClock.elapsedRealtime()
                 tts.holdForUser()
                 tones.holdForUser()
             },
@@ -260,6 +273,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         })
         prefs.takePendingAnnouncement()?.let { tts.say(it) }
         navController.addOnDestinationChangedListener { _, destination, _ ->
+            tapHelp.onScreen(resources.getResourceEntryName(destination.id))
             if (prefs.learnerOn) tts.say(ScreenHelp.forScreen(resources.getResourceEntryName(destination.id), lang))
         }
         if (savedInstanceState == null && !prefs.onboarded) {
@@ -381,6 +395,15 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     }
 
     private fun onHeard(heard: String) {
+        // The answer to the help offer, though "ok", "go ahead" or "help" are commands too, and with no wake
+        // word: the tap that asked was the user's, and the app is mostly asleep on Home (the phone).
+        helpAsked?.let { asked ->
+            if (HelpAnswer.of(heard) != null) {
+                dropWords()
+                asked(heard)
+                return
+            }
+        }
         val wake = WakeWord.decide(heard, awakeState.value) { isCommand(it) }
         val text = when (wake) {
             WakeResult.Ignore -> {
@@ -435,6 +458,14 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         // "Close the phone" and went Back in the middle of learning an item (the logs).
         if (command !is VoiceCommand.Unknown && VoiceBargeIn.mostlyEcho(text, tts.recentSpeech())) {
             Log.i(TAG, "Ignored \"$text\": the app's own words")
+            return
+        }
+        // "Stop" alone while the app talks stops the talking only: Go mode keeps guiding, a scan keeps scanning.
+        // Said while the app is quiet, or with more to it ("stop navigation"), it stops the screen as before.
+        val talking = tts.recentSpeech() != null || SystemClock.elapsedRealtime() - speechCutAt < SPEECH_CUT_MS
+        if (SpeechStop.isBare(text) && talking) {
+            Log.i(TAG, "Stop: the speech only")
+            silenceAll()
             return
         }
         val claim = dictation
@@ -515,7 +546,8 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
      * always passed on, so the tapped control works as usual.
      */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        if (::prefs.isInitialized && prefs.voiceGuideOn && !isTalkBackOn()) {
+        // TalkBack handles touches its own way.
+        if (::prefs.isInitialized && !isTalkBackOn()) {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = ev.rawX
@@ -526,12 +558,44 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                     val slop = ViewConfiguration.get(this).scaledTouchSlop
                     val still = kotlin.math.abs(ev.rawX - downX) < slop && kotlin.math.abs(ev.rawY - downY) < slop
                     if (still && ev.eventTime - downAt < ViewConfiguration.getLongPressTimeout()) {
-                        guide.describeAt(binding.navHost, ev.rawX.toInt(), ev.rawY.toInt(), lang)?.let { tts.say(it) }
+                        val x = ev.rawX.toInt()
+                        val y = ev.rawY.toInt()
+                        // A tap on nothing asks first (TapHelpOffer); the voice guide names what is under the finger.
+                        val owner = currentScreen()?.takeIf { it.view != null }?.viewLifecycleOwner
+                        val canHear = owner != null && dictation == null
+                        when (tapHelp.onTap(guide.isEmptyAt(binding.navHost, x, y), prefs.voiceGuideOn, canHear)) {
+                            TapHelpOffer.Tap.ASK -> owner?.let { offerHelp(it) }
+                            TapHelpOffer.Tap.DESCRIBE -> guide.describeAt(binding.navHost, x, y, lang)?.let { tts.say(it) }
+                            TapHelpOffer.Tap.NOTHING -> Unit
+                        }
                     }
                 }
             }
         }
         return super.dispatchTouchEvent(ev)
+    }
+
+    /**
+     * A tap on nothing (TapHelpOffer): "Do you want instructions for this screen?", and the screen's help on
+     * "yes", asleep or awake (its answer needs no wake word). Not while another question waits. An answer that
+     * does not come in [HELP_ANSWER_MS] lets the microphone go, so the next words are not taken for it.
+     */
+    private fun offerHelp(owner: LifecycleOwner) {
+        Log.i(TAG, "Tap on nothing: the screen's instructions offered")
+        tts.say(TapHelpOffer.question(lang))
+        dictationAccepts = { HelpAnswer.of(it) != null }
+        dictationEarly = true
+        val onAnswer: (String) -> Unit = { answer ->
+            helpAsked = null
+            Log.i(TAG, "Instructions offered, answer \"$answer\"")
+            if (HelpAnswer.of(answer) == true) tts.say(helpText(null))
+        }
+        helpAsked = onAnswer
+        askForWords(owner, onAnswer)
+        binding.root.postDelayed({
+            if (helpAsked === onAnswer) helpAsked = null
+            if (dictation === onAnswer) dropWords()
+        }, HELP_ANSWER_MS)
     }
 
     // ---- App settings -----------------------------------------------------------------------------
@@ -607,7 +671,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     private fun isCommand(text: String): Boolean =
         VoiceCommandParser.parse(text) !is VoiceCommand.Unknown || walkCommand(text) != null || QuickAsk.of(text) != null ||
-            GoQuestion.of(text) != null
+            GoQuestion.of(text) != null || SpeechStop.isBare(text)
 
     private fun answer(ask: QuickAsk) {
         val now = Calendar.getInstance()
@@ -718,5 +782,11 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     private companion object {
         const val TAG = "Nungil"
         const val STATE_AWAKE = "awake"
+
+        /** How long after the user's voice cut the app off a "stop" still means the talking (SpeechStop). */
+        const val SPEECH_CUT_MS = 10_000L
+
+        /** How long the help offer waits for "yes" once it has been asked. */
+        const val HELP_ANSWER_MS = 15_000L
     }
 }

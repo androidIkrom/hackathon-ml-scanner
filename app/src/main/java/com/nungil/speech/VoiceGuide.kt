@@ -34,6 +34,12 @@ class VoiceGuide {
         return ScreenGuide.summary(items, rect.width().toFloat(), rect.height().toFloat(), lang)
     }
 
+    /** Whether ([rawX], [rawY]) is on [root] but on nothing that can be pressed or typed into (TapHelpOffer). */
+    fun isEmptyAt(root: View, rawX: Int, rawY: Int): Boolean {
+        if (!root.getGlobalVisibleRect(rect) || !rect.contains(rawX, rawY)) return false
+        return deepestControlAt(root, rawX, rawY) == null
+    }
+
     private fun isControl(view: View): Boolean =
         view.isShown && (view.isClickable || view is CompoundButton || view is Slider || view is EditText)
 
