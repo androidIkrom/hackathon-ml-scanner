@@ -36,6 +36,20 @@ class GoPaceTest {
         assertEquals(1.0f, p.speedMps, 0.001f)
     }
 
+    @Test fun standingWithinTheGpsAccuracyDoesNotSetTheSpeed() {
+        // Fixes good to 8 m wander up to 14 m apart while the walker stands still.
+        val wander = listOf(0f, 6f, -5f, 7f, -4f, 5f, -6f)
+        val p = GoPace()
+        for (s in 0..119) p.add(s * 1000L, wander[s % wander.size], accuracyM = 8f)
+        assertEquals(1.0f, p.speedMps, 0.001f)
+    }
+
+    @Test fun walkingIsMeasuredWithPoorFixesToo() {
+        val p = GoPace()
+        for (s in 0..60) p.add(s * 1000L, s * 1.4f, accuracyM = 8f)
+        assertEquals(1.4f, p.speedMps, 0.05f)
+    }
+
     @Test fun keptBetweenHalfAndTwoMetresASecond() {
         val slow = GoPace().also { walk(it, 0, 200, 0.35f) }
         assertEquals(0.5f, slow.speedMps, 0.001f)

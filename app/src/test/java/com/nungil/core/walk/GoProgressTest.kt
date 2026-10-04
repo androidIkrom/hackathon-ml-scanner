@@ -34,9 +34,18 @@ class GoProgressTest {
         assertEquals(GoProgress.Verdict.OFF, GoProgress().check(60_000, null, never, false))
         val g = GoProgress(quiet = true).also { it.start(0) }
         assertEquals(GoProgress.Verdict.QUIET, g.check(60_000, null, never, false))
-        g.quiet = false
-        assertEquals(GoProgress.Verdict.SAY, g.check(60_000, null, never, false))
+        g.setQuiet(false, 60_000)
+        assertEquals(GoProgress.Verdict.SAY, g.check(120_000, null, never, false))
         g.stop()
-        assertEquals(GoProgress.Verdict.OFF, g.check(120_000, null, never, false))
+        assertEquals(GoProgress.Verdict.OFF, g.check(180_000, null, never, false))
+    }
+
+    @Test fun updatesOnIsNotCutOffByAnOverdueUpdate() {
+        // Quiet for 3 minutes, then "updates on": "Minute updates on." is heard, the next update a minute later.
+        val g = GoProgress().also { it.start(0) }
+        g.setQuiet(true, 10_000)
+        g.setQuiet(false, 190_000)
+        assertEquals(GoProgress.Verdict.NOT_YET, g.check(190_200, null, never, false))
+        assertEquals(GoProgress.Verdict.SAY, g.check(250_000, null, never, false))
     }
 }

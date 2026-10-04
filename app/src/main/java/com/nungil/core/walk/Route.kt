@@ -150,6 +150,7 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
     /** The farthest along the line the walker has been, and whether "walking away" was said since. */
     private var farthest = -1f
     private var wrongWaySaid = false
+    private var behindFixes = 0
     private val approach = GoApproach().also { it.next(along.last() + endGap) }
 
     var finished = false
@@ -162,7 +163,7 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
     /** Which side of the street the destination is on: against the direction of the route's last segment. */
     val side: Side? = if (route.line.size >= 2) GoMath.side(route.line[route.line.size - 2], route.line.last(), route.destination.point) else null
 
-    fun update(nowMs: Long, at: LatLon): Announcement? {
+    fun update(nowMs: Long, at: LatLon, accuracyM: Float = 0f): Announcement? {
         if (finished) return null
         if (Beacon.distanceMetres(at, route.destination.point) <= ARRIVED_M) {
             finished = true
@@ -180,14 +181,7 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
         }
         farFixes = 0
         progressM = myAlong
-        // Walking back along the route, still on it: said once, and again only after the farthest point is regained.
-        if (myAlong >= farthest) {
-            farthest = myAlong
-            wrongWaySaid = false
-        } else if (!wrongWaySaid && farthest - myAlong >= WRONG_WAY_M) {
-            wrongWaySaid = true
-            return Announcement.WrongWay(RoutePhrases.wrongWay(lang))
-        }
+        wrongWay(myAlong, accuracyM)?.let { return it }
         // Skip turns already behind the walker (a long GPS gap), silently.
         while (current < guided.size && along[guided[current].pointIndex] < myAlong - TURN_M) current++
         turn(nowMs, myAlong)?.let { return it }
@@ -197,6 +191,31 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
             return Announcement.Approach(RoutePhrases.approach(route.destination.name, remaining, side, lang))
         }
         return null
+    }
+
+    /**
+     * Walking back along the route, still on it (spec §4): [WRONG_WAY_FIXES] fixes in a row at least
+     * [WRONG_WAY_M], or twice the fix's [accuracyM], behind the farthest point reached. One fix that far back is
+     * jitter (±8 m swings 16 m); more than [WRONG_WAY_SNAP_M] back is the GPS putting the walker on an earlier
+     * part of a route that comes back along the street, not a walker who turned. Said once, and again only after
+     * the farthest point is regained.
+     */
+    private fun wrongWay(myAlong: Float, accuracyM: Float): Announcement? {
+        if (myAlong >= farthest) {
+            farthest = myAlong
+            wrongWaySaid = false
+            behindFixes = 0
+            return null
+        }
+        val behind = farthest - myAlong
+        if (behind < max(WRONG_WAY_M, 2 * accuracyM) || behind > WRONG_WAY_SNAP_M) {
+            behindFixes = 0
+            return null
+        }
+        behindFixes++
+        if (wrongWaySaid || behindFixes < WRONG_WAY_FIXES) return null
+        wrongWaySaid = true
+        return Announcement.WrongWay(RoutePhrases.wrongWay(lang))
     }
 
     /** The next turn's announcement at [myAlong], if one is due and was not said in the last [REPEAT_MS]. */
@@ -279,6 +298,8 @@ class Navigator(private val route: Route, private val stepLengthM: Float?, priva
 
         /** This far back from the farthest point reached, still on the route, is walking the wrong way (spec §4). */
         const val WRONG_WAY_M = 15f
+        const val WRONG_WAY_FIXES = 3
+        const val WRONG_WAY_SNAP_M = 60f
         private const val METRES_PER_DEG_LAT = 110_540.0
         private const val METRES_PER_DEG_LON = 111_320.0
     }

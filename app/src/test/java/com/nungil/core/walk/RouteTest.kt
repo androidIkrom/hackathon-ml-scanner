@@ -280,15 +280,42 @@ class RouteTest {
         n.update(0, at(60.0, 0.0))
         assertEquals(60f, n.progressM, 1f)
         assertNull(n.update(1_000, at(50.0, 0.0)))
-        assertEquals(Announcement.WrongWay("You are walking away from the route. Turn around."), n.update(2_000, at(44.0, 0.0)))
-        assertNull(n.update(3_000, at(30.0, 0.0))) // once
-        n.update(4_000, at(61.0, 0.0)) // back past the farthest point
-        assertTrue(n.update(5_000, at(45.0, 0.0)) is Announcement.WrongWay)
+        assertNull(n.update(2_000, at(44.0, 0.0)))
+        assertNull(n.update(3_000, at(42.0, 0.0)))
+        assertEquals(Announcement.WrongWay("You are walking away from the route. Turn around."), n.update(4_000, at(40.0, 0.0)))
+        assertNull(n.update(5_000, at(30.0, 0.0))) // once
+        n.update(6_000, at(61.0, 0.0)) // back past the farthest point
+        n.update(7_000, at(45.0, 0.0))
+        n.update(8_000, at(44.0, 0.0))
+        assertTrue(n.update(9_000, at(43.0, 0.0)) is Announcement.WrongWay)
     }
 
     @Test fun jitterIsNotTheWrongWay() {
         val n = Navigator(route(), null, Lang.EN)
         for (i in 0..20) assertFalse(n.update(i * 1_000L, at(if (i % 2 == 0) 40.0 else 32.0, 3.0)) is Announcement.WrongWay)
+    }
+
+    @Test fun aSingleJumpIsNotTheWrongWay() {
+        // ±8 m of jitter swings 16 m: one fix that far back, then on again, is the GPS, not the walker.
+        val n = Navigator(route(), null, Lang.EN)
+        n.update(0, at(48.0, 0.0))
+        for (i in 1..10) assertFalse(n.update(i * 1_000L, at(if (i % 3 == 0) 32.0 else 46.0, 0.0)) is Announcement.WrongWay)
+    }
+
+    @Test fun aPoorFixNeedsTwiceItsAccuracyBack() {
+        val n = Navigator(route(), null, Lang.EN)
+        n.update(0, at(60.0, 0.0), accuracyM = 10f)
+        for (i in 1..5) assertFalse(n.update(i * 1_000L, at(42.0, 0.0), accuracyM = 10f) is Announcement.WrongWay) // 18 m < 20
+        n.update(6_000, at(39.0, 0.0), accuracyM = 10f)
+        n.update(7_000, at(38.0, 0.0), accuracyM = 10f)
+        assertTrue(n.update(8_000, at(37.0, 0.0), accuracyM = 10f) is Announcement.WrongWay) // 23 m, three fixes
+    }
+
+    @Test fun aSnapToAnEarlierPartOfTheRouteIsNotTheWrongWay() {
+        // A route back along the other side of the street: the GPS puts the walker on its earlier part, far behind.
+        val n = Navigator(route(), null, Lang.EN)
+        n.update(0, at(100.0, 90.0))
+        for (i in 1..5) assertFalse(n.update(i * 1_000L, at(70.0, 0.0)) is Announcement.WrongWay)
     }
 
     @Test fun theDestinationOnTheWayInWithItsSide() {

@@ -28,3 +28,13 @@ class GpsSignal {
         const val GOOD_M = 20f
     }
 }
+
+/**
+ * Whether a fix still tells where the walker is. The phone's last known place can be minutes and kilometres
+ * old, and "where am I" named the wrong street from it with confidence (the review).
+ */
+object FixAge {
+    const val FRESH_MS = 10_000L
+
+    fun fresh(fixAtMs: Long?, nowMs: Long): Boolean = fixAtMs != null && nowMs - fixAtMs <= FRESH_MS
+}

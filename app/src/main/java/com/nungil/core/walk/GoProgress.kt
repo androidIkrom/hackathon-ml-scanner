@@ -7,10 +7,22 @@ package com.nungil.core.walk
  * said at the first moment none holds. An answer to "how far" counts as one ([said]). [quiet]: the walker said
  * "quiet updates"; turns and warnings are not this class's and go on.
  */
-class GoProgress(var quiet: Boolean = false) {
+class GoProgress(quiet: Boolean = false) {
     enum class Verdict { OFF, QUIET, NOT_YET, TURN_NEAR, JUST_SPOKE, REROUTING, SAY }
 
     private var dueAt: Long? = null
+
+    var quiet: Boolean = quiet
+        private set
+
+    /**
+     * "Quiet updates" / "updates on". Back on, the next update is a minute away: one overdue from the quiet
+     * minutes cut off "Minute updates on." 200 ms after it began (the review).
+     */
+    fun setQuiet(quiet: Boolean, nowMs: Long) {
+        if (this.quiet && !quiet) said(nowMs)
+        this.quiet = quiet
+    }
 
     /** A destination is set: the first update a minute from now. */
     fun start(nowMs: Long) {

@@ -43,6 +43,7 @@ import com.nungil.core.walk.GoProgress
 import com.nungil.core.walk.GoQuestion
 import com.nungil.core.walk.GoAnswer
 import com.nungil.core.walk.GoState
+import com.nungil.core.walk.FixAge
 import com.nungil.core.walk.GpsSignal
 import com.nungil.core.walk.LatLon
 import com.nungil.core.walk.Navigator
@@ -136,7 +137,7 @@ class WalkFragment : Fragment(), VoiceHandler {
 
     private val alerts = WalkAlerts()
     private val pacing = WalkPacing()
-    private val network: ExecutorService = Executors.newSingleThreadExecutor()
+    private var network: ExecutorService = Executors.newSingleThreadExecutor()
     private val source: RouteSource? = BuildConfig.ORS_API_KEY.takeIf { it.isNotBlank() }?.let { OrsRouteSource(it) }
     private val gate = RerouteGate()
     private var navigator: Navigator? = null
@@ -209,7 +210,10 @@ class WalkFragment : Fragment(), VoiceHandler {
         heading = HeadingProvider(context)
         places = PlaceStore(context)
         goSettings = GoSettings(context)
-        progress = GoProgress(goSettings.quietUpdates)
+        // Back from another screen this is the same fragment: its route, timer and network thread carry on
+        // (onDestroyView shut the thread down, and "where am I" crashed on it, the review).
+        if (!::progress.isInitialized) progress = GoProgress(goSettings.quietUpdates)
+        if (network.isShutdown) network = Executors.newSingleThreadExecutor()
         location = LocationTracker(context) { onFix(it) }
         vision = WalkVision(context, { services.lang }, stepM, { steps.getAndSet(0) }, { heading.headingDeg }) { onReport(it) }
         renderer = WalkRenderer({ binding.walkingGl.display?.rotation ?: Surface.ROTATION_0 }, vision)
@@ -238,6 +242,10 @@ class WalkFragment : Fragment(), VoiceHandler {
         val pending = (activity as? MainActivity)?.takePendingWalkCommand()
         if (pending !is WalkCommand.GoMode && pending !is WalkCommand.GoTo) say(WalkPhrases.started(services.lang))
         pending?.let { onWalkCommand(it) }
+        if (goMode) {
+            main.removeCallbacks(goTicker)
+            main.post(goTicker)
+        }
     }
 
     /**
@@ -742,8 +750,8 @@ class WalkFragment : Fragment(), VoiceHandler {
             beaconFix(p, now)
             return
         }
-        val announcement = nav.update(now, p)
-        pace.add(now, nav.progressM)
+        val announcement = nav.update(now, p, location.accuracyM)
+        pace.add(now, nav.progressM, location.accuracyM)
         if (announcement == null) return
         when (announcement) {
             is Announcement.Arrived -> {
@@ -768,7 +776,7 @@ class WalkFragment : Fragment(), VoiceHandler {
         val place = target ?: return
         val metres = Beacon.distanceMetres(p, place.point).toFloat()
         val start = beaconStartM ?: metres.also { beaconStartM = it }
-        pace.add(now, start - metres)
+        pace.add(now, start - metres, location.accuracyM)
         if (beaconApproach.next(metres) != null) queueNavigation(RoutePhrases.approach(place.name, metres, null, services.lang))
     }
 
@@ -801,14 +809,16 @@ class WalkFragment : Fragment(), VoiceHandler {
         val lang = services.lang
         fun reply(text: String) {
             Log.i(TAG, "Go asked: $question -> \"$text\"")
+            // Asked just now: said at once, and the warnings that may wait (WalkPacing) wait for it.
+            pacing.said(SystemClock.elapsedRealtime(), Alert(AlertKind.INFO, "asked:$question", text))
             services.speaker.sayNow(text)
             _binding?.walkingAnnouncement?.text = text
         }
         when (question) {
-            GoQuestion.WHERE_AM_I -> whereAmI(::reply)
+            GoQuestion.WHERE_AM_I -> whereAmI()
             GoQuestion.QUIET, GoQuestion.UPDATES_ON -> {
                 val quiet = question == GoQuestion.QUIET
-                progress.quiet = quiet
+                progress.setQuiet(quiet, SystemClock.elapsedRealtime())
                 goSettings.quietUpdates = quiet
                 reply(if (quiet) RoutePhrases.updatesOff(lang) else RoutePhrases.updatesOn(lang))
             }
@@ -838,10 +848,11 @@ class WalkFragment : Fragment(), VoiceHandler {
 
     /**
      * "Where am I": the street from openrouteservice, near a saved place or the destination within
-     * [NEAR_PLACE_M] (spec §6). Without it, the destination's distance and direction.
+     * [NEAR_PLACE_M] (spec §6). Without it, the destination's distance and direction. Only from a fix of the
+     * last 10 s (FixAge), and the answer, which comes after the network, waits behind the warnings like a turn.
      */
-    private fun whereAmI(reply: (String) -> Unit) {
-        withLocation { here ->
+    private fun whereAmI() {
+        withFreshLocation { here ->
             val lang = services.lang
             val near = (places.all() + listOfNotNull(target))
                 .map { it to Beacon.distanceMetres(here, it.point) }
@@ -854,12 +865,13 @@ class WalkFragment : Fragment(), VoiceHandler {
                     ?: "${place.name}, ${WalkPhrases.far(metres, lang)}."
                 return RoutePhrases.cannotLookUp(lang) + " " + where
             }
-            // Started for the question only: stopped again when no route needs it.
+            // Started for the question only: stopped again, after the answer, when no route needs it.
             fun done(text: String) {
-                reply(text)
+                Log.i(TAG, "Go asked: ${GoQuestion.WHERE_AM_I} -> \"$text\"")
+                queueNavigation(text)
                 if (!navigating()) location.stop()
             }
-            val src = source ?: return@withLocation done(withoutStreet())
+            val src = source ?: return@withFreshLocation done(withoutStreet())
             network.execute {
                 val street = src.reverse(here)
                 main.post { if (_binding != null) done(street?.let { RoutePhrases.whereAmI(it, near, lang) } ?: withoutStreet()) }
@@ -867,12 +879,27 @@ class WalkFragment : Fragment(), VoiceHandler {
         }
     }
 
-    /** Navigation waits for the next frame so obstacle warnings go first; without frames it speaks at once. */
+    /** [withLocation], but a last known place older than FixAge.FRESH_MS waits for the next fix. */
+    private fun withFreshLocation(block: (LatLon) -> Unit) {
+        withLocation { here ->
+            if (FixAge.fresh(location.fixAtMs, SystemClock.elapsedRealtime())) {
+                block(here)
+            } else {
+                onFirstFix = block
+                say(WalkPhrases.waitingForLocation(services.lang))
+            }
+        }
+    }
+
+    /**
+     * Navigation waits for the next frame so obstacle warnings go first; without frames, or with the warnings
+     * paused (no frame is ever spoken then), it speaks at once.
+     */
     private fun queueNavigation(text: String) {
         lastNav = text
         lastNavAt = SystemClock.elapsedRealtime()
         val alert = Alert(AlertKind.NAVIGATION, "nav:$text", text)
-        if (lastNavAt - lastReportAt > REPORT_STALE_MS) say(text) else pendingNav = alert
+        if (!running || lastNavAt - lastReportAt > REPORT_STALE_MS) say(text) else pendingNav = alert
     }
 
     private fun startNavigation(name: String, here: LatLon, heard: List<String> = listOf(name)) {

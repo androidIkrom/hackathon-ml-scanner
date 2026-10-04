@@ -17,6 +17,12 @@ class GpsSignalTest {
         assertTrue(g.update(33_000, 45f))
     }
 
+    @Test fun onlyAFixOfTheLastTenSecondsTellsWhereTheWalkerIs() {
+        assertTrue(FixAge.fresh(fixAtMs = 50_000, nowMs = 60_000))
+        assertFalse(FixAge.fresh(fixAtMs = 49_999, nowMs = 60_000)) // the phone's last known place, minutes old
+        assertFalse(FixAge.fresh(fixAtMs = null, nowMs = 60_000))
+    }
+
     @Test fun unknownAccuracyIsNotWeak() {
         val g = GpsSignal()
         for (s in 0..30) assertFalse(g.update(s * 1_000L, 0f))

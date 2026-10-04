@@ -5,24 +5,28 @@ package com.nungil.core.walk
  * destination: along the route, or how much the straight-line distance has shrunk.
  *
  * Only the last [WINDOW_MS] count, and of them only the chunks of at least [CHUNK_MS] in which the walker got
- * on by [MOVING_MPS] or more. So standing at a crossing does not make the time grow, walking back does not
- * count, and GPS jitter of ±8 m a second, which is metres a second step by step, is nothing over 10 s: net
- * progress, not the sum of steps. Until there are [MIN_MOVING_MS] and [MIN_MOVING_M] of walking the last speed
+ * on by [MOVING_MPS] or more, and by more than twice the fix's accuracy. So standing at a crossing does not make
+ * the time grow, walking back does not count, and GPS jitter is not walking: net progress over a chunk, not
+ * the sum of steps, and more than the fixes wander. Until there are [MIN_MOVING_MS] and [MIN_MOVING_M] of walking the last speed
  * stands, [DEFAULT_MPS] before any: about what a walker with a cane keeps.
  */
 class GoPace {
     private val times = ArrayDeque<Long>()
     private val progress = ArrayDeque<Float>()
+    private val accuracy = ArrayDeque<Float>()
 
     var speedMps: Float = DEFAULT_MPS
         private set
 
-    fun add(nowMs: Long, progressM: Float) {
+    /** [accuracyM]: how good the fix is (0 unknown); a chunk must get on by twice it to count as walking. */
+    fun add(nowMs: Long, progressM: Float, accuracyM: Float = 0f) {
         times.addLast(nowMs)
         progress.addLast(progressM)
+        accuracy.addLast(accuracyM)
         while (times.isNotEmpty() && nowMs - times.first() > WINDOW_MS) {
             times.removeFirst()
             progress.removeFirst()
+            accuracy.removeFirst()
         }
         measure()
     }
@@ -31,6 +35,7 @@ class GoPace {
     fun restart() {
         times.clear()
         progress.clear()
+        accuracy.clear()
     }
 
     fun secondsFor(metres: Float): Float = metres / speedMps
@@ -43,7 +48,9 @@ class GoPace {
             val dt = times[i] - times[from]
             if (dt < CHUNK_MS) continue
             val dp = progress[i] - progress[from]
-            if (dp / (dt / 1000f) >= MOVING_MPS) {
+            // Fixes good to 8 m wander 14 m apart while the walker stands: that is not walking (the review).
+            val jitter = JITTER_FACTOR * maxOf(accuracy[i], accuracy[from])
+            if (dp >= maxOf(MOVING_MPS * dt / 1000f, jitter)) {
                 movingMs += dt
                 movingM += dp
             }
@@ -57,7 +64,9 @@ class GoPace {
     companion object {
         const val DEFAULT_MPS = 1.0f
         const val WINDOW_MS = 120_000L
-        const val CHUNK_MS = 10_000L
+        /** 20 s, not 10: a walker at 0.5 m/s must get past twice a 5 m fix's accuracy within one chunk. */
+        const val CHUNK_MS = 20_000L
+        const val JITTER_FACTOR = 2f
         const val MOVING_MPS = 0.3f
         const val MIN_MOVING_MS = 20_000L
         const val MIN_MOVING_M = 10f
