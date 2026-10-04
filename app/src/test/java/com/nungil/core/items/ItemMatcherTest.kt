@@ -51,4 +51,13 @@ class ItemMatcherTest {
         assertEquals(ItemMatcher.Seen.BY_SQUARES, ItemMatcher.seen(0.70f, ItemMatcher.FIND_THRESHOLD, alone = null))
         assertEquals(ItemMatcher.Seen.NO, ItemMatcher.seen(0.54f, ItemMatcher.FIND_THRESHOLD, alone = null))
     }
+
+    @Test fun anItemSavedTwiceUnderOneNameIsOneItem() {
+        // The logs: "My new white bottle" was saved twice. The search looked for the first, and every square
+        // that looked more like the second counted for nothing.
+        val names = mapOf(14L to "My new white bottle", 16L to " my new white bottle", 12L to "My white bottle")
+        assertEquals(setOf(14L, 16L), ItemMatcher.sameName(14L, names))
+        assertEquals(setOf(12L), ItemMatcher.sameName(12L, names))
+        assertEquals(setOf(99L), ItemMatcher.sameName(99L, names))
+    }
 }

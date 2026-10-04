@@ -14,8 +14,8 @@ import java.util.Locale
 
 /**
  * Search camera target "a saved item": squares all over the frame (ItemWindows) are compared with the saved
- * samples, and the item is where the squares that look like it are. A square counts only when [itemId] is its
- * best match among all saved items, and the best square gets a closer look (smaller, bigger, a little to each
+ * samples, and the item is where the squares that look like it are. A square counts only when the item (or
+ * another saved under its name) is its best match among all saved items, and the best square gets a closer look (smaller, bigger, a little to each
  * side). The detector is not used: it gave no box for things it does not know.
  *
  * A square holds the item and whatever it stands on, so on another background the squares only half know it:
@@ -27,6 +27,10 @@ import java.util.Locale
 class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatcher {
     private val embedder = ItemEmbedder(context)
     private val recognizer = ItemRecognizer(context).also { it.reload() }
+
+    /** The item looked for, and any other saved under its name: one thing to the search. */
+    private val targets: Set<Long> = recognizer.sameName(itemId)
+
     private val segmenter: ItemSegmenter? = try {
         ItemSegmenter(context)
     } catch (e: Exception) {
@@ -58,10 +62,10 @@ class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatc
         val scored = mutableListOf<String>()
         var verdict: Verdict? = null
 
-        // Seen a moment ago: look only around where it was (ten squares, not forty). The whole frame is
+        // Seen a moment ago: look only where it was and next to it (nine squares, not forty). The whole frame is
         // searched again only when it is not there any more; every frame took a second otherwise (the logs).
         if (kept != null) {
-            val near = ItemWindows.around(kept)
+            val near = ItemWindows.near(kept)
             val nearScores = FloatArray(near.size) { score(bitmap, near[it]) }
             val best = nearScores.indices.maxBy { nearScores[it] }
             looked += near.size
@@ -109,7 +113,8 @@ class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatc
                 else -> "not seen"
             } + if (hit?.outlined == true) ", outlined" else ""
             val limits = String.format(Locale.US, "(needs %.2f), alone %s (needs %.2f)", needs, alone, ItemMatcher.ALONE_MIN)
-            Log.i(TAG, "Item search: $looked squares in ${now - started} ms, ${scored.joinToString(", ")} $limits, $seen")
+            val box = hit?.shown?.let { String.format(Locale.US, ", box %.2f x %.2f at %.2f, %.2f", it.width, it.height, it.centerX, it.centerY) } ?: ""
+            Log.i(TAG, "Item search: $looked squares in ${now - started} ms, ${scored.joinToString(", ")} $limits, $seen$box")
         }
         return hit?.shown
     }
@@ -145,7 +150,7 @@ class ItemTargetMatcher(context: Context, private val itemId: Long) : TargetMatc
     private fun score(bitmap: Bitmap, window: Box): Float = embedder.embed(bitmap, window)?.let { score(it) } ?: 0f
 
     private fun score(vector: FloatArray): Float =
-        recognizer.identify(vector, 0f)?.takeIf { it.id == itemId }?.score ?: 0f
+        recognizer.identify(vector, 0f)?.takeIf { it.id in targets }?.score ?: 0f
 
     override fun close() {
         embedder.close()

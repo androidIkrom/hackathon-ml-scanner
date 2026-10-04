@@ -45,6 +45,16 @@ object ItemMatcher {
         else -> Seen.NO
     }
 
+    /**
+     * The saved items that are [id] under the same name, [id] among them: saved twice, a thing is still one
+     * thing. Each square counts only for the saved item it looks most like, so a search for the first of two
+     * same-named items lost every square that looked more like the second (the logs).
+     */
+    fun sameName(id: Long, names: Map<Long, String>): Set<Long> {
+        val name = names[id]?.trim() ?: return setOf(id)
+        return names.filterValues { it.trim().equals(name, ignoreCase = true) }.keys + id
+    }
+
     data class Match(val id: Long, val score: Float)
 
     /** Best saved item for [vector] by its closest sample, or null below [threshold]. */

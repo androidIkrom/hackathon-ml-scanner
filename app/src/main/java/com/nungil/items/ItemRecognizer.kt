@@ -34,6 +34,9 @@ class ItemRecognizer(context: Context) {
 
     fun nameOf(itemId: Long): String? = names[itemId]
 
+    /** [itemId] and every other saved item of the same name (ItemMatcher.sameName). */
+    fun sameName(itemId: Long): Set<Long> = ItemMatcher.sameName(itemId, names)
+
     companion object {
         /** Blocks on Room; never call on the main thread. */
         fun hasItems(context: Context): Boolean = runBlocking {
