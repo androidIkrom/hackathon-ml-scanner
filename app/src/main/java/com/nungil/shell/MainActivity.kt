@@ -46,6 +46,7 @@ import com.nungil.contract.app.Speaker
 import com.nungil.contract.app.VoiceHandler
 import com.nungil.core.ui.AppLanguage
 import com.nungil.core.ui.CommandRouter
+import com.nungil.core.ui.HelpAnswer
 import com.nungil.core.ui.LanguageChoice
 import com.nungil.core.ui.PermissionOutcome
 import com.nungil.core.ui.Phrase
@@ -64,7 +65,6 @@ import com.nungil.core.voice.VoiceCommandParser
 import com.nungil.core.voice.WakeResult
 import com.nungil.core.voice.WakeWord
 import com.nungil.core.walk.GoQuestion
-import com.nungil.core.walk.RoutePhrases
 import com.nungil.core.walk.WalkCommand
 import com.nungil.core.walk.WalkCommands
 import com.nungil.walk.WalkFragment
@@ -159,6 +159,9 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     /** A tap on nothing offers the screen's instructions, once a screen visit (TapHelpOffer). */
     private val tapHelp = TapHelpOffer()
+
+    /** The help offer waiting for its answer, if one is. */
+    private var helpAsked: ((String) -> Unit)? = null
 
     /** When the user's voice last cut the app's own speech off (SpeechStop). */
     private var speechCutAt = Long.MIN_VALUE / 2
@@ -411,6 +414,14 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                 wake.text
             }
         }
+        // The answer to the help offer, though "ok", "go ahead" or "help" are commands too.
+        helpAsked?.let { asked ->
+            if (HelpAnswer.of(text) != null) {
+                dropWords()
+                asked(text)
+                return
+            }
+        }
         // The time, the date and the weather are answered on every screen (on "Where to?" they were searched
         // as places). Not while a screen waits for a name; a screen that waits for "yes" or "next" keeps waiting.
         if (dictation == null || dictationAccepts != null) QuickAsk.of(text)?.let { ask ->
@@ -451,7 +462,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         // "Stop" alone while the app talks stops the talking only: Go mode keeps guiding, a scan keeps scanning.
         // Said while the app is quiet, or with more to it ("stop navigation"), it stops the screen as before.
         val talking = tts.recentSpeech() != null || SystemClock.elapsedRealtime() - speechCutAt < SPEECH_CUT_MS
-        if (command == VoiceCommand.Stop && SpeechStop.isBare(text) && talking) {
+        if (SpeechStop.isBare(text) && talking) {
             Log.i(TAG, "Stop: the speech only")
             silenceAll()
             return
@@ -571,14 +582,19 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         if (!tapHelp.ask(canHear)) return
         Log.i(TAG, "Tap on nothing: the screen's instructions offered")
         tts.say(TapHelpOffer.question(lang))
-        dictationAccepts = { RoutePhrases.isYes(it) || RoutePhrases.isNo(it) }
+        dictationAccepts = { HelpAnswer.of(it) != null }
         dictationEarly = true
         val onAnswer: (String) -> Unit = { answer ->
+            helpAsked = null
             Log.i(TAG, "Instructions offered, answer \"$answer\"")
-            if (RoutePhrases.isYes(answer)) tts.say(helpText(null))
+            if (HelpAnswer.of(answer) == true) tts.say(helpText(null))
         }
+        helpAsked = onAnswer
         askForWords(owner, onAnswer)
-        binding.root.postDelayed({ if (dictation === onAnswer) dropWords() }, HELP_ANSWER_MS)
+        binding.root.postDelayed({
+            if (helpAsked === onAnswer) helpAsked = null
+            if (dictation === onAnswer) dropWords()
+        }, HELP_ANSWER_MS)
     }
 
     // ---- App settings -----------------------------------------------------------------------------
@@ -654,7 +670,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     private fun isCommand(text: String): Boolean =
         VoiceCommandParser.parse(text) !is VoiceCommand.Unknown || walkCommand(text) != null || QuickAsk.of(text) != null ||
-            GoQuestion.of(text) != null
+            GoQuestion.of(text) != null || SpeechStop.isBare(text)
 
     private fun answer(ask: QuickAsk) {
         val now = Calendar.getInstance()
