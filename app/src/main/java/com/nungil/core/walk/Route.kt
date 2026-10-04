@@ -102,6 +102,12 @@ object OrsJson {
         }
     }.getOrDefault(emptyList())
 
+    /** The street of a reverse-geocode answer (spec §6), else the name of what is there; null when there is none. */
+    fun parseReverse(json: String): String? = runCatching {
+        val props = JSONObject(json).optJSONArray("features")?.optJSONObject(0)?.optJSONObject("properties") ?: return null
+        props.optString("street", "").ifBlank { props.optString("name", "") }.ifBlank { null }
+    }.getOrNull()
+
     /** Place search stays within walking reach of the user. */
     const val NEAR_KM = 20
 
@@ -419,6 +425,26 @@ object RoutePhrases {
 
     fun noRouteRunning(lang: Lang): String =
         if (lang == Lang.KO) "안내 중인 경로가 없어요. 어디로 가자고 말해 주세요." else "No route is running. Say go to, and a place."
+
+    fun gpsWeak(lang: Lang): String =
+        if (lang == Lang.KO) "GPS 신호가 약해서 안내가 정확하지 않을 수 있어요." else "The GPS signal is weak, directions may be off."
+
+    /** "You are on Sejong-daero, near Seoul Station." [near]: a saved place or the destination within 300 m. */
+    fun whereAmI(street: String, near: String?, lang: Lang): String = when {
+        lang == Lang.KO && near != null -> "지금 ${street}에 있어요, $near 근처예요."
+        lang == Lang.KO -> "지금 ${street}에 있어요."
+        near != null -> "You are on $street, near $near."
+        else -> "You are on $street."
+    }
+
+    fun cannotLookUp(lang: Lang): String =
+        if (lang == Lang.KO) "지금은 거리 이름을 찾을 수 없어요." else "I can't look up the street now."
+
+    fun updatesOff(lang: Lang): String =
+        if (lang == Lang.KO) "1분마다 안내를 껐어요. 언제든 얼마나 남았는지 물어보세요." else "Minute updates off. Ask how far any time."
+
+    fun updatesOn(lang: Lang): String =
+        if (lang == Lang.KO) "1분마다 안내를 켰어요." else "Minute updates on."
 
     private fun sideEn(side: Side) = if (side == Side.RIGHT) "right" else "left"
 

@@ -332,6 +332,22 @@ class RouteTest {
         assertEquals("I can't tell the direction yet. Hold the phone up and ask again.", RoutePhrases.noHeading(Lang.EN))
     }
 
+    @Test fun theStreetFromAReverseAnswer() {
+        val json = """{"features":[{"properties":{"name":"12 Sejong-daero","street":"Sejong-daero","label":"12 Sejong-daero, Seoul"}}]}"""
+        assertEquals("Sejong-daero", OrsJson.parseReverse(json))
+        assertEquals("Seoul Station", OrsJson.parseReverse("""{"features":[{"properties":{"name":"Seoul Station"}}]}"""))
+        assertNull(OrsJson.parseReverse("""{"features":[]}"""))
+        assertNull(OrsJson.parseReverse("not json"))
+    }
+
+    @Test fun whereAmISentences() {
+        assertEquals("You are on Sejong-daero, near Seoul Station.", RoutePhrases.whereAmI("Sejong-daero", "Seoul Station", Lang.EN))
+        assertEquals("You are on Sejong-daero.", RoutePhrases.whereAmI("Sejong-daero", null, Lang.EN))
+        assertEquals("지금 세종대로에 있어요, 서울역 근처예요.", RoutePhrases.whereAmI("세종대로", "서울역", Lang.KO))
+        assertEquals("The GPS signal is weak, directions may be off.", RoutePhrases.gpsWeak(Lang.EN))
+        assertEquals("Minute updates off. Ask how far any time.", RoutePhrases.updatesOff(Lang.EN))
+    }
+
     @Test fun numbersFromTheSpec() {
         assertEquals(25f, Navigator.PREPARE_M)
         assertEquals(5f, Navigator.TURN_M)

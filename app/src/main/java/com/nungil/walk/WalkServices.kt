@@ -32,6 +32,19 @@ class PlaceStore(context: Context) {
     }
 }
 
+/** Go-mode settings the walker sets by voice: "quiet updates" stays off until "updates on", walk after walk. */
+class GoSettings(context: Context) {
+    private val prefs = context.applicationContext.getSharedPreferences("walk_go", Context.MODE_PRIVATE)
+
+    var quietUpdates: Boolean
+        get() = prefs.getBoolean(KEY_QUIET, false)
+        set(value) = prefs.edit().putBoolean(KEY_QUIET, value).apply()
+
+    private companion object {
+        const val KEY_QUIET = "quiet_updates"
+    }
+}
+
 /** GPS and network location on the main thread. The caller checks the permission first. */
 class LocationTracker(context: Context, private val onFix: (LatLon) -> Unit) : LocationListener {
     private val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -106,6 +119,9 @@ interface RouteSource {
 
     /** True when the last place search got no answer at all (no network, quota used up). */
     val searchDown: Boolean get() = false
+
+    /** The street at [at] (or the name of what is there), for "where am I"; null on any failure. */
+    fun reverse(at: LatLon): String? = null
 }
 
 /**
@@ -177,6 +193,22 @@ class OrsRouteSource(private val key: String) : RouteSource {
         return OrsJson.parseGeocode(body, near.takeIf { reach }).also { answers[cacheKey] = it }
     }
 
+    /** Pelias reverse on the current host, the old host when that path is gone, as [geocode] does. */
+    override fun reverse(at: LatLon): String? {
+        val params = "?api_key=${enc(key)}&point.lat=${at.lat}&point.lon=${at.lon}&size=1"
+        var answer = if (skipCurrentHost) null else request(REVERSE_URL + params, "GET", null)
+        if (skipCurrentHost || answer?.first == 404) {
+            skipCurrentHost = true
+            answer = request(REVERSE_FALLBACK_URL + params, "GET", null)
+        }
+        val (code, body) = answer ?: return null
+        if (code != 200) {
+            Log.w(TAG, "openrouteservice reverse HTTP $code")
+            return null
+        }
+        return OrsJson.parseReverse(body)
+    }
+
     /**
      * (HTTP code, body), or null on a network failure. One retry after [RETRY_MS]: walking outdoors the
      * phone hops between Wi-Fi networks and a request in the gap fails with UnknownHostException.
@@ -219,6 +251,8 @@ class OrsRouteSource(private val key: String) : RouteSource {
         const val DIRECTIONS_URL = "https://api.heigit.org/openrouteservice/v2/directions/foot-walking/geojson"
         const val GEOCODE_URL = "https://api.heigit.org/pelias/v1/search"
         const val GEOCODE_FALLBACK_URL = "https://api.openrouteservice.org/geocode/search"
+        const val REVERSE_URL = "https://api.heigit.org/pelias/v1/reverse"
+        const val REVERSE_FALLBACK_URL = "https://api.openrouteservice.org/geocode/reverse"
         const val CONNECT_TIMEOUT_MS = 5_000
         const val READ_TIMEOUT_MS = 10_000
     }
