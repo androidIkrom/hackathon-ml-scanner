@@ -98,8 +98,8 @@ Rules per screen:
 | Live / Look around | 10 000 | 6 000 | 12 000 |
 | Find | 2 000 | 2 000 | 12 000 |
 
-`AlertKind` stays Walk's list of priorities (its ordinal is the notice's priority). Walk's `Alert` is replaced by
-`Notice`.
+`AlertKind` stays Walk's list of priorities (its ordinal is the notice's priority). Walk keeps `Alert` as its own
+type and maps it to `Notice` in one place (`Alert.toNotice()`, used by `WalkFragment`).
 
 ## Screens
 
