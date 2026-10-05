@@ -38,6 +38,7 @@ import com.nungil.contract.Buzz
 import com.nungil.contract.Dest
 import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
+import com.nungil.contract.SettingChange
 import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppNavigator
 import com.nungil.contract.app.AppServices
@@ -57,6 +58,7 @@ import com.nungil.core.ui.PermissionOutcome
 import com.nungil.core.ui.Phrase
 import com.nungil.core.ui.RecognizerPolicy
 import com.nungil.core.ui.Route
+import com.nungil.core.ui.SettingPhrases
 import com.nungil.core.ui.ScreenHelp
 import com.nungil.core.ui.VoiceBargeIn
 import com.nungil.core.ui.ShellPhrases
@@ -73,6 +75,7 @@ import com.nungil.core.walk.GoQuestion
 import com.nungil.core.walk.WalkCommand
 import com.nungil.core.walk.WalkCommands
 import com.nungil.walk.WalkFragment
+import com.nungil.data.SettingsStore
 import com.nungil.databinding.ActivityMainBinding
 import com.nungil.design.isTalkBackOn
 import com.nungil.design.openAppSettings
@@ -594,6 +597,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             Route.RepeatLast -> if (!tts.repeatLast()) say(Phrase.NOTHING_TO_REPEAT)
             is Route.SpeakHelp -> tts.sayNow(helpText(route.topic))
             is Route.SetLearner -> setLearner(route.on)
+            is Route.ChangeSetting -> changeSetting(route.change)
             is Route.SetClockDirections -> {
                 prefs.clockDirections = route.on
                 say(if (route.on) Phrase.CLOCK_DIRECTIONS_ON else Phrase.CLOCK_DIRECTIONS_OFF)
@@ -706,6 +710,30 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     }
 
     val highContrast: Boolean get() = prefs.highContrast
+
+    /**
+     * A Settings switch changed by voice, said back. A camera screen that is open takes the model and the processor
+     * at its next scan; an open Settings screen is shown again with the new value.
+     */
+    private fun changeSetting(change: SettingChange) {
+        val store = SettingsStore(this)
+        val s = store.load()
+        when (change) {
+            is SettingChange.Model -> store.save(s.copy(model = change.choice))
+            is SettingChange.Compute -> store.save(s.copy(compute = change.compute))
+            is SettingChange.Speech -> store.save(s.copy(speechOn = change.on))
+            is SettingChange.Colors -> store.save(s.copy(colorsOn = change.on))
+            is SettingChange.VoiceGuide -> prefs.voiceGuideOn = change.on
+            is SettingChange.HighContrast -> Unit
+        }
+        val nextTime = currentScreen() is CameraScreen && (change is SettingChange.Model || change is SettingChange.Compute)
+        tts.say(SettingPhrases.done(change, lang, nextTime))
+        Log.i(TAG, "Setting by voice: $change")
+        when {
+            change is SettingChange.HighContrast -> setHighContrast(change.on)
+            navController.currentDestination?.id == R.id.settings -> go(R.id.settings)
+        }
+    }
 
     fun setHighContrast(on: Boolean) {
         if (prefs.highContrast == on) return

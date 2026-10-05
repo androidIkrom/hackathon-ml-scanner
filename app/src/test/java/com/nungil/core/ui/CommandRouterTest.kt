@@ -3,6 +3,7 @@ package com.nungil.core.ui
 import com.nungil.contract.Dest
 import com.nungil.contract.Lang
 import com.nungil.contract.ScanMode
+import com.nungil.contract.SettingChange
 import com.nungil.contract.VoiceCommand
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -70,5 +71,11 @@ class CommandRouterTest {
     @Test fun clockDirectionsIsGlobal() {
         assertEquals(true, CommandRouter.isGlobal(VoiceCommand.ClockDirections(true)))
         assertEquals(Route.SetClockDirections(false), CommandRouter.route(VoiceCommand.ClockDirections(false)))
+    }
+
+    @Test fun settingsAreGlobal() {
+        val c = VoiceCommand.ChangeSetting(SettingChange.Colors(false))
+        assertEquals(true, CommandRouter.isGlobal(c))
+        assertEquals(Route.ChangeSetting(SettingChange.Colors(false)), CommandRouter.route(c))
     }
 }

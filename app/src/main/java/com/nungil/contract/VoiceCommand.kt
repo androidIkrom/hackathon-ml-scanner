@@ -21,6 +21,8 @@ sealed interface VoiceCommand {
     data class Learner(val on: Boolean) : VoiceCommand
     /** Directions as clock hours (on) or words (off), the Settings switch. */
     data class ClockDirections(val on: Boolean) : VoiceCommand
+    /** A Settings switch: "model accurate", "colours off". */
+    data class ChangeSetting(val change: SettingChange) : VoiceCommand
     data object StopListening : VoiceCommand
     data class SetLanguage(val lang: Lang) : VoiceCommand
     /** Not a command. While a screen waits for words (askForWords), this text is delivered to it. */

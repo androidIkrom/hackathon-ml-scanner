@@ -1,11 +1,14 @@
 package com.nungil.core.voice
 
+import com.nungil.contract.Compute
 import com.nungil.contract.Dest
 import com.nungil.contract.Facing
 import com.nungil.contract.ItemKind
 import com.nungil.contract.Lang
+import com.nungil.contract.ModelChoice
 import com.nungil.contract.SavedTab
 import com.nungil.contract.ScanMode
+import com.nungil.contract.SettingChange
 import com.nungil.contract.VoiceCommand
 import java.util.Locale
 
@@ -34,6 +37,7 @@ object VoiceCommandParser {
             ?: question(s)
             ?: adding(s)
             ?: clockDirections(s)
+            ?: setting(s)
             ?: learner(s)
             ?: language(s)
             ?: action(s)
@@ -266,6 +270,27 @@ object VoiceCommandParser {
     }
 
     // 5 ------------------------------------------------------------------------------------------------
+    /**
+     * Settings by voice: "model accurate / fast / light", "speak results off", "colours on", "high contrast on",
+     * "read what I touch off", "processor CPU". "Model accurate" was not understood, four times (the logs).
+     */
+    private fun setting(s: Said): VoiceCommand? {
+        val off = s.has("off", "disable", "stop", "no") || s.ko("꺼", "끄", "끄기", "중지")
+        val change = when {
+            (s.has("model") || s.ko("모델")) && (s.has("accurate", "precise", "best") || s.ko("정확")) -> SettingChange.Model(ModelChoice.ACCURATE)
+            (s.has("model") || s.ko("모델")) && (s.has("fast", "quick") || s.ko("빠른", "빠르")) -> SettingChange.Model(ModelChoice.FAST)
+            (s.has("model") || s.ko("모델")) && (s.has("light", "small") || s.ko("가벼운", "가볍")) -> SettingChange.Model(ModelChoice.LIGHT)
+            s.has("cpu") -> SettingChange.Compute(Compute.CPU)
+            s.has("gpu") -> SettingChange.Compute(Compute.GPU)
+            s.has("contrast") || s.ko("고대비") -> SettingChange.HighContrast(!off)
+            s.seq("read", "what", "i", "touch") || s.seq("voice", "guide") || s.ko("터치하면읽") -> SettingChange.VoiceGuide(!off)
+            s.has("colours", "colors", "colour", "color") || s.ko("색말하기", "색깔") -> SettingChange.Colors(!off)
+            s.seq("speak", "results") || s.seq("speech", "on") || s.seq("speech", "off") || s.ko("결과말하기") -> SettingChange.Speech(!off)
+            else -> null
+        }
+        return change?.let { VoiceCommand.ChangeSetting(it) }
+    }
+
     /** "Clock directions on / off", "use clock directions", "directions in words"; "시계 방향 켜 / 꺼". */
     private fun clockDirections(s: Said): VoiceCommand? {
         if (s.has("clock") && s.has("direction", "directions", "hours")) {
