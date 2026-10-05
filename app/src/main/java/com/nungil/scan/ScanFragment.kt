@@ -42,6 +42,8 @@ import com.nungil.core.lang.LabelNames
 import com.nungil.core.scan.BoxGeometry
 import com.nungil.core.scan.ColorPolicy
 import com.nungil.core.scan.FoundPlaces
+import com.nungil.core.scan.LaptopCheck
+import com.nungil.core.scan.Relabels
 import com.nungil.core.scan.ScanLogState
 import com.nungil.core.scan.ScanPhrases
 import com.nungil.core.scan.ScanResult
@@ -98,8 +100,13 @@ class ScanFragment : Fragment(), CameraScreen {
     @Volatile private var classifier: SceneClassifier? = null
     private val pendingTags = ConcurrentLinkedQueue<PendingTag>()
 
+    /** Keyboard boxes looked at by the classifier (LaptopCheck), and what they are. */
+    private val pendingChecks = ConcurrentLinkedQueue<Pair<Box, String>>()
+
     // Analysis thread only.
     private val sticky = StickyNames()
+    private val relabels = Relabels()
+    private var checking: Box? = null
     private val places = FoundPlaces()
 
     // Written on the analysis thread, read for "what / who is this" (FrameAnswers) and the empty-scan guess.
@@ -268,7 +275,14 @@ class ScanFragment : Fragment(), CameraScreen {
             val tag = pendingTags.poll() ?: break
             if (tag.byLook) places.found(tag.box, tag.name, frame.timestampMs) else sticky.recognized(tag.box, tag.name, tag.isPerson)
         }
-        val usable = frame.detections.filterNot { BoxGeometry.touchesOneSideEdge(it.box) }
+        while (true) {
+            val (box, label) = pendingChecks.poll() ?: break
+            relabels.checked(box, label)
+            if (box == checking) checking = null
+        }
+        // The detector calls an open laptop a keyboard: one keyboard box at a time gets a closer look (LaptopCheck).
+        val usable = relabels.apply(frame.detections).filterNot { BoxGeometry.touchesOneSideEdge(it.box) }
+        val check = if (checking == null) usable.firstOrNull { relabels.needsCheck(it) }?.box else null
         val names = sticky.apply(usable.map { it.box })
         // Saved items found by their look, not already the name of one of this frame's boxes.
         val found = places.current(frame.timestampMs).filter { p -> names.none { it?.name == p.name } }
@@ -294,7 +308,7 @@ class ScanFragment : Fragment(), CameraScreen {
         val marks = usable.mapIndexed { i, d -> OverlayView.Mark(d.box, names[i]?.name ?: LabelNames.name(d.label, lang)) } +
             found.map { OverlayView.Mark(it.box, it.name) }
         main.post { render(frame, marks, step) }
-        runTaggers(frame)
+        runTaggers(frame, check)
     }
 
     /** Main thread. */
@@ -330,14 +344,27 @@ class ScanFragment : Fragment(), CameraScreen {
         Log.i(TAG, "Live sees: " + seen.joinToString(", ").ifEmpty { "nothing" } + if (cut > 0) " ($cut at the edge)" else "")
     }
 
-    /** Analysis thread: hand the frame to the name taggers when the extras thread is free. */
-    private fun runTaggers(frame: VisionFrame) {
+    /** Analysis thread: hand the frame to the name taggers, and [check] to the classifier, when the extras thread is free. */
+    private fun runTaggers(frame: VisionFrame, check: Box?) {
         val ex = extras ?: return
-        if (frame.bitmap == null || taggers.isEmpty()) return
+        val bitmap = frame.bitmap ?: return
+        if (taggers.isEmpty() && check == null) return
         if (!extrasBusy.compareAndSet(false, true)) return
+        if (check != null) checking = check
+        val app = requireContext().applicationContext
         try {
             ex.execute {
                 try {
+                    if (check != null) {
+                        val label = try {
+                            val guesses = (classifier ?: SceneClassifier(app).also { classifier = it }).guesses(bitmap, check)
+                            LaptopCheck.label(guesses).also { Log.i(TAG, "Keyboard check: $guesses -> $it") }
+                        } catch (t: Throwable) {
+                            Log.i(TAG, "Keyboard check failed: ${t.message}")
+                            LaptopCheck.KEYBOARD
+                        }
+                        pendingChecks.add(check to label)
+                    }
                     for (tagger in taggers) {
                         for (tag in tagger.tag(frame)) {
                             val place = tag.box
