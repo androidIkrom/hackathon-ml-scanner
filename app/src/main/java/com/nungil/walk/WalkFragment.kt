@@ -56,8 +56,8 @@ import com.nungil.core.walk.RerouteGate
 import com.nungil.core.walk.RoutePhrases
 import com.nungil.core.walk.StepLength
 import com.nungil.core.walk.TrackingRestart
-import com.nungil.core.walk.WalkAlerts
-import com.nungil.core.walk.WalkPacing
+import com.nungil.core.ui.Announcer
+import com.nungil.core.walk.toNotice
 import com.nungil.core.walk.WalkBeep
 import com.nungil.core.walk.WalkCommand
 import com.nungil.core.walk.WalkPhrases
@@ -139,8 +139,7 @@ class WalkFragment : Fragment(), VoiceHandler, CameraScreen {
         }
     }
 
-    private val alerts = WalkAlerts()
-    private val pacing = WalkPacing()
+    private val announcer = Announcer(Announcer.WALK)
     private var network: ExecutorService = Executors.newSingleThreadExecutor()
     private val source: RouteSource? = BuildConfig.ORS_API_KEY.takeIf { it.isNotBlank() }?.let { OrsRouteSource(it) }
     private val gate = RerouteGate()
@@ -380,11 +379,11 @@ class WalkFragment : Fragment(), VoiceHandler, CameraScreen {
         }
         beaconArrival()
         val candidates = report.alerts + listOfNotNull(pendingNav)
-        alerts.choose(now, candidates) { pacing.allows(now, it) }?.let { chosen ->
-            android.util.Log.i("Nungil", "Walk said [${chosen.kind} ${chosen.key}] ${chosen.text}")
-            if (chosen === pendingNav) pendingNav = null
-            // Never queued (see WalkPacing): the newest sentence replaces the one being said.
-            pacing.said(now, chosen)
+        announcer.choose(now, candidates.map { it.toNotice() })?.let { chosen ->
+            val kind = candidates.firstOrNull { it.key == chosen.key }?.kind
+            android.util.Log.i("Nungil", "Walk said [$kind ${chosen.key}] ${chosen.text}")
+            if (chosen.key == pendingNav?.key) pendingNav = null
+            // Never queued (see Announcer): the newest sentence replaces the one being said.
             services.speaker.sayNow(chosen.text)
             _binding?.walkingAnnouncement?.text = chosen.text
         }
@@ -436,7 +435,7 @@ class WalkFragment : Fragment(), VoiceHandler, CameraScreen {
         if (_binding == null) return
         binding.walkingMain.setText(if (on) R.string.walking_stop else R.string.walking_start)
         if (on) {
-            alerts.reset()
+            announcer.reset()
             say(WalkPhrases.started(services.lang))
             status(getString(R.string.walking_subtitle))
         } else {
@@ -706,7 +705,7 @@ class WalkFragment : Fragment(), VoiceHandler, CameraScreen {
     private fun showGoRoute(place: Place) {
         if (_binding == null) return
         goBack.isEnabled = true
-        alerts.reset()
+        announcer.reset()
         running = true
         (activity as? MainActivity)?.setScreenTitle(getString(R.string.walking_go_to, place.name))
         binding.walkingTitle.text = getString(R.string.walking_go_to, place.name)
@@ -843,8 +842,8 @@ class WalkFragment : Fragment(), VoiceHandler, CameraScreen {
         val lang = services.lang
         fun reply(text: String) {
             Log.i(TAG, "Go asked: $question -> \"$text\"")
-            // Asked just now: said at once, and the warnings that may wait (WalkPacing) wait for it.
-            pacing.said(SystemClock.elapsedRealtime(), Alert(AlertKind.INFO, "asked:$question", text))
+            // Asked just now: said at once, and the warnings that may wait (Announcer) wait for it.
+            announcer.said(SystemClock.elapsedRealtime(), text)
             direction.said(SystemClock.elapsedRealtime())
             services.speaker.sayNow(text)
             _binding?.walkingAnnouncement?.text = text
