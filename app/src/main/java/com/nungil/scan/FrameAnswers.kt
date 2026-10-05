@@ -35,7 +35,7 @@ class FrameAnswers(
     /** The detection nearest the middle, else the classifier's name for the middle of the picture. */
     fun what(frame: VisionFrame?, lang: Lang) {
         if (frame == null) return answer(ScanPhrases.nothingYet(lang))
-        SceneRules.centerDetection(frame.detections)?.let {
+        SceneRules.centerThing(frame.detections)?.let {
             return answer(ScanPhrases.looksLike(LabelNames.name(it.label, lang), lang))
         }
         val bitmap = frame.bitmap ?: return answer(ScanPhrases.unknownThing(lang))

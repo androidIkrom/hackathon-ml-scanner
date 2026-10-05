@@ -523,7 +523,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         if (!CommandRouter.isGlobal(command)) {
             // Camera commands are taken the same way on every camera screen, before the screen's own handler.
             (currentScreen() as? CameraScreen)?.let { cam ->
-                val action = CameraCommandPolicy.decide(command, cam.switchable != null, cam.isWorking)
+                val action = CameraCommandPolicy.decide(command, cam.backCameraOnly, cam.switchable != null, cam.isWorking)
                 if (action != null) {
                     Log.i(TAG, "Camera command $command -> $action")
                     onCameraCommand(cam, action)
@@ -543,6 +543,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                 tts.sayNow(ScanPhrases.cameraSwitched(it.facing, lang))
             }
             CameraAction.BackCameraOnly -> tts.sayNow(ScanPhrases.backCameraOnly(lang))
+            CameraAction.NotReady -> Unit
             CameraAction.DescribeCentre -> frameAnswers(screen)?.what(screen.lastFrame(), lang)
             CameraAction.NameFace -> frameAnswers(screen)?.who(screen.lastFrame(), lang)
             CameraAction.Pause -> screen.pause()

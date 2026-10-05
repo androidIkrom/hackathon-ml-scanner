@@ -453,6 +453,8 @@ class WalkFragment : Fragment(), VoiceHandler, CameraScreen {
     /** ARCore owns the camera here: the back camera only. */
     override val switchable: SwitchableCamera? get() = null
 
+    override val backCameraOnly: Boolean get() = true
+
     override val isWorking: Boolean get() = navigator != null || target != null || offer != null || running
 
     override fun pause() {

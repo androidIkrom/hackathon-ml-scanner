@@ -24,6 +24,13 @@ object SceneRules {
             .filter { it.box.left <= 0.5f && it.box.right >= 0.5f && it.box.top <= 0.5f && it.box.bottom >= 0.5f }
             .maxByOrNull { it.score }
 
+    /**
+     * What is in the middle, for "what is this": [centerDetection] of the boxes not cut by one side of the frame,
+     * as the scan counts them (BoxGeometry.touchesOneSideEdge); a table half out of view is not the thing asked about.
+     */
+    fun centerThing(detections: List<Detection>): Detection? =
+        centerDetection(detections.filterNot { BoxGeometry.touchesOneSideEdge(it.box) })
+
     /** Of the given indices into [detections], the one whose box centre is closest to the middle; null if empty. */
     fun nearestToCenter(detections: List<Detection>, indices: List<Int>): Int? =
         indices.minByOrNull { abs(detections[it].box.centerX - 0.5f) }

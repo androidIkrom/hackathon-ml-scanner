@@ -11,6 +11,9 @@ sealed interface CameraAction {
     /** The screen has the back camera only (Walk: ARCore owns it). */
     data object BackCameraOnly : CameraAction
 
+    /** The camera is not open (permission panel, screen closing): nothing to switch and nothing to say about it. */
+    data object NotReady : CameraAction
+
     /** Name the thing in the middle of the last frame. */
     data object DescribeCentre : CameraAction
 
@@ -34,9 +37,16 @@ sealed interface CameraAction {
  * that silenced the app's speech never gets here (SpeechStop); a later stop pauses the work, and one more leaves.
  */
 object CameraCommandPolicy {
-    /** What a camera screen does with [command]; null when it is not a camera command and the screen decides. */
-    fun decide(command: VoiceCommand, canSwitch: Boolean, working: Boolean): CameraAction? = when (command) {
-        is VoiceCommand.SwitchCamera -> if (canSwitch) CameraAction.Switch(command.to) else CameraAction.BackCameraOnly
+    /**
+     * What a camera screen does with [command]; null when it is not a camera command and the screen decides.
+     * [backCameraOnly] is the screen's (Walk, item learning); [cameraReady] is whether its camera is open now.
+     */
+    fun decide(command: VoiceCommand, backCameraOnly: Boolean, cameraReady: Boolean, working: Boolean): CameraAction? = when (command) {
+        is VoiceCommand.SwitchCamera -> when {
+            backCameraOnly -> CameraAction.BackCameraOnly
+            !cameraReady -> CameraAction.NotReady
+            else -> CameraAction.Switch(command.to)
+        }
         VoiceCommand.WhatIsThis -> CameraAction.DescribeCentre
         VoiceCommand.WhoIsThis -> CameraAction.NameFace
         VoiceCommand.Stop -> if (working) CameraAction.Pause else CameraAction.Leave

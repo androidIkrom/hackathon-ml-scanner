@@ -8,8 +8,8 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class CameraCommandPolicyTest {
-    private fun decide(c: VoiceCommand, canSwitch: Boolean = true, working: Boolean = true) =
-        CameraCommandPolicy.decide(c, canSwitch, working)
+    private fun decide(c: VoiceCommand, canSwitch: Boolean = true, working: Boolean = true, cameraReady: Boolean = true) =
+        CameraCommandPolicy.decide(c, backCameraOnly = !canSwitch, cameraReady = cameraReady, working = working)
 
     @Test fun switchCameraSwitchesWhenItCan() {
         assertEquals(CameraAction.Switch(Facing.FRONT), decide(VoiceCommand.SwitchCamera(Facing.FRONT)))
@@ -39,5 +39,11 @@ class CameraCommandPolicyTest {
         for (c in listOf(VoiceCommand.Back, VoiceCommand.Delete, VoiceCommand.ReadText, VoiceCommand.Unknown("x"), VoiceCommand.Go(Dest.Home))) {
             assertNull(c.toString(), decide(c))
         }
+    }
+
+    @Test fun aCameraNotOpenYetIsNotCalledBackCameraOnly() {
+        // The permission panel was up, or the screen was closing: "Only the back camera works here." was false (review).
+        assertEquals(CameraAction.NotReady, decide(VoiceCommand.SwitchCamera(Facing.FRONT), cameraReady = false))
+        assertEquals(CameraAction.BackCameraOnly, decide(VoiceCommand.SwitchCamera(Facing.FRONT), canSwitch = false, cameraReady = false))
     }
 }

@@ -209,6 +209,8 @@ class ItemEnrollFragment : Fragment(), VoiceHandler, CameraScreen {
     /** Items are learned with the back camera only. */
     override val switchable: SwitchableCamera? get() = null
 
+    override val backCameraOnly: Boolean get() = true
+
     /** Learning is going on; while it still looks for the item, a stop leaves (nothing was learned to pause). */
     override val isWorking: Boolean get() = phase == Phase.LEARNING && running
 

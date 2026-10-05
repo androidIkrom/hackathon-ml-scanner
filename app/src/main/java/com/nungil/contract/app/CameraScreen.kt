@@ -10,8 +10,11 @@ interface CameraScreen {
     /** The last analysed frame, for "what is this" / "who is this"; null before the first. Any thread. */
     fun lastFrame(): VisionFrame?
 
-    /** The camera to switch, or null when this screen has the back camera only. */
+    /** The camera to switch; null when it is not open (yet), or on a screen that has the back camera only. */
     val switchable: SwitchableCamera?
+
+    /** The screen uses the back camera only (Walk: ARCore owns it; items are learned with it). */
+    val backCameraOnly: Boolean get() = false
 
     /** Scanning, searching, reading, walking or learning is going on (or about to start on its own). */
     val isWorking: Boolean
