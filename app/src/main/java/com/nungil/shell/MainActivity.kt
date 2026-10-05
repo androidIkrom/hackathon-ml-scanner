@@ -480,7 +480,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         // "Stop" alone while the app talks stops the talking only: Go mode keeps guiding, a scan keeps scanning.
         // Said while the app is quiet, or with more to it ("stop navigation"), it stops the screen as before.
         val talking = tts.recentSpeech() != null || SystemClock.elapsedRealtime() - speechCutAt < SPEECH_CUT_MS
-        if (SpeechStop.isBare(text) && talking) {
+        if (SpeechStop.isBare(text) && talking && !SpeechStop.insistent(text)) {
             val now = SystemClock.elapsedRealtime()
             if (SpeechStop.talkingOnly(now - talkStopAt)) {
                 talkStopAt = now
