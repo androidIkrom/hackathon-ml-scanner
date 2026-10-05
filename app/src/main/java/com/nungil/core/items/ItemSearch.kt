@@ -72,6 +72,8 @@ class ItemSearch(
         match: (Box) -> ItemMatcher.Match?,
         cut: (Box) -> CutThing?,
     ): Result {
+        // Walk's worker thread also gives the hazard alerts: no segmenter there, the squares decide alone (review).
+        val thingIn: (Box) -> CutThing? = if (reach == Reach.WHOLE_FRAME) cut else { _ -> null }
         val targets = (if (only != null) listOf(only) else names.keys).map { ItemMatcher.sameName(it, names) }.distinct()
         val byKey = targets.associateBy { it.min() }
         val keyOf = HashMap<Long, Long>()
@@ -110,7 +112,7 @@ class ItemSearch(
             looked += near.size
             trace.scored += fmt("near %.2f", scores[best])
             if (scores[best] >= ItemMatcher.LOOK_CLOSER) {
-                trace.verdict = judge(near[best], scores[best], ItemMatcher.KEEP_THRESHOLD, target, cut).also { record(key, it) }
+                trace.verdict = judge(near[best], scores[best], ItemMatcher.KEEP_THRESHOLD, target, thingIn).also { record(key, it) }
             }
         }
 
@@ -130,7 +132,7 @@ class ItemSearch(
             }
             val needs = if (key in last) ItemMatcher.KEEP_THRESHOLD else ItemMatcher.FIND_THRESHOLD
             val trace = traces.getOrPut(key) { Trace(needs) }
-            val wide = wholeFrame(windows, scores, needs, open.getValue(key), match, cut)
+            val wide = wholeFrame(windows, scores, needs, open.getValue(key), match, thingIn)
             looked += wide.looked
             trace.scored += wide.log
             wide.verdict?.let {

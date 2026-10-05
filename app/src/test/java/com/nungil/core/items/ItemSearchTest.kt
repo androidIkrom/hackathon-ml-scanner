@@ -192,6 +192,54 @@ class ItemSearchTest {
         assertTrue(search(finder(all), scene, only = null, detections = listOf(person)).hits.isEmpty())
     }
 
+    // ---- Walk: boxes and near only -----------------------------------------------------------------------------
+
+    private val leftSquare = ItemWindows.square(left, W, H)
+    private fun nearLeft(box: Box) = centreIn(box, leftSquare)
+
+    @Test fun boxesAndNearKeepsABoxedItemNearItsSquare() {
+        val s = finder(all, Reach.BOXES_AND_NEAR)
+        val first = Scene { if (it == leftSquare) ItemMatcher.Match(bottle, 0.6f) else ItemMatcher.Match(other, 0.2f) }
+        assertEquals(1, search(s, first, only = null, detections = listOf(Detection("bottle", 0.8f, left))).hits.size)
+        // The detector lost the box: the bottle is kept near its square at 0.45, without the whole frame.
+        val next = Scene { if (nearLeft(it)) ItemMatcher.Match(bottle, 0.47f) else ItemMatcher.Match(other, 0.2f) }
+        assertEquals(listOf(bottle), search(s, next, only = null).hits.map { it.id })
+        assertTrue("near squares only: ${next.calls}", next.calls <= 9)
+    }
+
+    @Test fun boxesAndNearNeverCutsAThing() {
+        // Walk's worker thread also gives the hazard alerts: no segmenter there.
+        val s = finder(all, Reach.BOXES_AND_NEAR)
+        val first = Scene { if (it == leftSquare) ItemMatcher.Match(bottle, 0.6f) else ItemMatcher.Match(other, 0.2f) }
+        search(s, first, only = null, detections = listOf(Detection("bottle", 0.8f, left)))
+        var cuts = 0
+        val thing = CutThing(left, leftSquare, ItemMatcher.Match(bottle, 0.9f))
+        val next = Scene { if (nearLeft(it)) ItemMatcher.Match(bottle, 0.4f) else ItemMatcher.Match(other, 0.2f) }
+        val hits = search(s, next, only = null, cut = { cuts++; thing }).hits
+        assertTrue(hits.isEmpty())
+        assertEquals(0, cuts)
+    }
+
+    @Test fun twoRememberedItemsAreBothLookedForNearby() {
+        val s = finder(all)
+        val both = Scene {
+            when {
+                centreIn(it, left) -> ItemMatcher.Match(bottle, 0.6f)
+                centreIn(it, right) -> ItemMatcher.Match(towel, 0.6f)
+                else -> ItemMatcher.Match(other, 0.2f)
+            }
+        }
+        assertEquals(2, search(s, both, only = null, detections = listOf(Detection("bottle", 0.8f, left))).hits.size)
+        val kept = Scene {
+            when {
+                centreIn(it, left) -> ItemMatcher.Match(bottle, 0.5f)
+                centreIn(it, right) -> ItemMatcher.Match(towel, 0.5f)
+                else -> ItemMatcher.Match(other, 0.2f)
+            }
+        }
+        assertEquals(setOf(bottle, towel), search(s, kept, only = null).hits.map { it.id }.toSet())
+    }
+
     private companion object {
         const val W = 640
         const val H = 480
