@@ -149,7 +149,7 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
         if (camera != null || _binding == null) return
         val options = CameraSession.Options(
             facing = Facing.BACK,
-            // A saved item is looked for in the picture itself (ItemTargetMatcher); the detector would only slow it.
+            // A saved item is looked for in the picture itself (ItemFinder); the detector would only slow it.
             detect = type != TargetType.ITEM,
             keepBitmap = type != TargetType.LABEL,
             minScore = SEARCH_MIN_SCORE,

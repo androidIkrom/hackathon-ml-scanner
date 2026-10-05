@@ -1,6 +1,7 @@
 package com.nungil.items
 
 import android.content.Context
+import com.nungil.core.items.ItemEnrollmentGuide
 import com.nungil.core.items.ItemMatcher
 import com.nungil.core.people.VectorBytes
 import com.nungil.data.AppDatabase
@@ -33,6 +34,12 @@ class ItemRecognizer(context: Context) {
         ItemMatcher.bestMatch(vector, known, threshold)
 
     fun nameOf(itemId: Long): String? = names[itemId]
+
+    /** Every saved item's name, by id. */
+    val allNames: Map<Long, String> get() = names
+
+    /** The saved items that have samples of themselves alone (ItemEnrollmentGuide.learnedAlone). */
+    fun learnedAlone(): Set<Long> = known.filterValues { ItemEnrollmentGuide.learnedAlone(it.size) }.keys
 
     /** How many samples are saved for [itemId]. */
     fun samples(itemId: Long): Int = known[itemId]?.size ?: 0
