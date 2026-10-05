@@ -37,13 +37,19 @@ class ScanSession(
         val wasPerson: Boolean = false,
     )
 
-    /** [phrases] are notices to say in turn; [news] names the things confirmed in this frame (Speaker.sayLive). */
+    /** A confirmed thing in view: [key] stays the same for the thing; [bearing] is from where the user faces. */
+    data class LiveObject(val key: Int, val text: String, val bearing: Float)
+
+    /**
+     * [phrases] are notices to say in turn. [inView]: the confirmed things in view in a live scan, every frame; the
+     * screen's Announcer chooses which to say and when.
+     */
     class Step(
         val phrases: List<String>,
         val coveragePercent: Int,
         val bins: BooleanArray,
         val done: Boolean,
-        val news: List<String> = emptyList(),
+        val inView: List<LiveObject> = emptyList(),
     )
 
     private val clusterer = ObjectClusterer()
@@ -78,17 +84,15 @@ class ScanSession(
         val detections = seen.map {
             FrameDetection(it.label, BoxGeometry.objectAngle(rel, it.centerX, hfovDeg, facing), it.color, it.isName, it.wasPerson)
         }
-        val confirmedNow = clusterer.addFrame(detections)
-        val news = mutableListOf<String>()
-        if (announcesLive) {
-            for (o in confirmedNow) {
-                news += SummaryBuilder.livePhrase(o.copy(angle = AngleMath.diff(o.angle, rel)), lang, style(), colorsOn)
-            }
+        clusterer.addFrame(detections)
+        val inView = if (!announcesLive) emptyList() else clusterer.inView().map { (key, o) ->
+            val bearing = AngleMath.diff(o.angle, rel)
+            LiveObject(key, SummaryBuilder.livePhrase(o.copy(angle = bearing), lang, style(), colorsOn), bearing)
         }
         if (!done && mode == ScanMode.FULL && !noCompass && startHeading != null) {
             done = coverage.isComplete() || nowMs - startedAtMs >= timeoutMs
         }
-        return Step(phrases, coverage.percent(), coverage.bins(), done, news)
+        return Step(phrases, coverage.percent(), coverage.bins(), done, inView)
     }
 
     /** The summary and objects, turned so that "in front" is where the user faces now. */

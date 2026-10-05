@@ -13,7 +13,7 @@ import kotlin.math.max
  */
 class ObjectClusterer(val mergeDeg: Float = MERGE_DEG, val confirmFrames: Int = CONFIRM_FRAMES) {
 
-    private class Cluster(val label: String, var angle: Float, val isName: Boolean, var wasPerson: Boolean) {
+    private class Cluster(val id: Int, val label: String, var angle: Float, val isName: Boolean, var wasPerson: Boolean) {
         var samples = 0
         var framesSeen = 0
         var count = 0
@@ -32,6 +32,10 @@ class ObjectClusterer(val mergeDeg: Float = MERGE_DEG, val confirmFrames: Int = 
     }
 
     private val clusters = mutableListOf<Cluster>()
+    private var nextId = 0
+
+    /** The clusters the last frame had detections in. */
+    private var lastFrame: Set<Cluster> = emptySet()
 
     /** Adds one frame; returns the clusters that became confirmed with this frame (for live announcements). */
     fun addFrame(detections: List<FrameDetection>): List<ObjectSummary> {
@@ -40,13 +44,14 @@ class ObjectClusterer(val mergeDeg: Float = MERGE_DEG, val confirmFrames: Int = 
             val cluster = clusters
                 .filter { it.label == d.label && abs(AngleMath.diff(it.angle, d.angle)) <= mergeDeg }
                 .minByOrNull { abs(AngleMath.diff(it.angle, d.angle)) }
-                ?: Cluster(d.label, d.angle, d.isName, d.wasPerson).also { clusters += it }
+                ?: Cluster(nextId++, d.label, d.angle, d.isName, d.wasPerson).also { clusters += it }
             cluster.angle = AngleMath.weightedMean(cluster.angle, cluster.samples, d.angle)
             cluster.samples++
             cluster.wasPerson = cluster.wasPerson || d.wasPerson
             d.color?.let { cluster.colorVotes[it] = (cluster.colorVotes[it] ?: 0) + 1 }
             inThisFrame[cluster] = (inThisFrame[cluster] ?: 0) + 1
         }
+        lastFrame = inThisFrame.keys.toSet()
         val newlyConfirmed = mutableListOf<ObjectSummary>()
         for ((cluster, n) in inThisFrame) {
             cluster.framesSeen++
@@ -55,6 +60,10 @@ class ObjectClusterer(val mergeDeg: Float = MERGE_DEG, val confirmFrames: Int = 
         }
         return newlyConfirmed
     }
+
+    /** The confirmed clusters seen in the last frame, by a key that stays the same for the thing (the announcer's). */
+    fun inView(): List<Pair<Int, ObjectSummary>> =
+        lastFrame.filter { it.framesSeen >= confirmFrames }.map { it.id to it.summary() }
 
     /** Every cluster seen in at least [confirmFrames] frames. Unconfirmed clusters are never spoken. */
     fun confirmed(): List<ObjectSummary> = clusters.filter { it.framesSeen >= confirmFrames }.map { it.summary() }

@@ -13,9 +13,6 @@ interface Speaker {
     /** Queue [text]. Keeps a 1.5 s gap; drops the oldest pending items when more than 3 wait. */
     fun say(text: String)
 
-    /** Queue news of the moment: joined with news still waiting, and said after a short gap. */
-    fun sayLive(text: String) = say(text)
-
     /** Drop everything queued and speak [text] immediately. */
     fun sayNow(text: String)
 

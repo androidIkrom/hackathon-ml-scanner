@@ -157,4 +157,14 @@ class AnnouncerTest {
         assertEquals(wall3, a.choose(100, listOf(wall3)))
         assertEquals(right, a.choose(after(wall3, 100), listOf(right)))
     }
+
+    @Test fun wordsChangingDoNotMakeANewNotice() {
+        // A thing on the edge of "ahead" flickers between words; the key is the thing, so it is said once.
+        val a = Announcer(Announcer.LIVE)
+        val said = (0L until 8_000L step 250L).mapNotNull { t ->
+            val text = if ((t / 250) % 2 == 0L) "a chair ahead" else "a chair slightly left"
+            a.choose(t, listOf(Notice("obj:7", text, 0)))
+        }
+        assertEquals(1, said.size)
+    }
 }

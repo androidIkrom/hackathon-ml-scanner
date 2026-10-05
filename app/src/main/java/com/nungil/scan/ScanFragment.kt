@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
@@ -45,6 +46,9 @@ import com.nungil.core.scan.ScanPhrases
 import com.nungil.core.scan.ScanResult
 import com.nungil.core.scan.ScanSession
 import com.nungil.core.scan.StickyNames
+import com.nungil.core.ui.Announcer
+import com.nungil.core.ui.Bearings
+import com.nungil.core.ui.Notice
 import com.nungil.data.AppDatabase
 import com.nungil.data.SettingsStore
 import com.nungil.databinding.ScanFragmentBinding
@@ -57,6 +61,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.abs
 
 /**
  * Full and live scan. Nav argument `mode: ScanMode`.
@@ -81,6 +86,9 @@ class ScanFragment : Fragment(), CameraScreen {
     private var autoStart: Runnable? = null
     private var cameraErrorSpoken = false
     private val log = ScanLogState()
+
+    /** What a live scan says, and when (Announcer.LIVE: a thing again only after 10 s out of view). Main thread. */
+    private val announcer = Announcer(Announcer.LIVE)
 
     @Volatile private var lang = Lang.EN
     @Volatile private var extras: ExecutorService? = null
@@ -226,6 +234,7 @@ class ScanFragment : Fragment(), CameraScreen {
             val app = services()
             session = ScanSession(args.mode, System.currentTimeMillis(), lang, { app.directionStyle }, settings.colorsOn)
         }
+        announcer.reset()
         showState(State.SCANNING)
     }
 
@@ -296,7 +305,7 @@ class ScanFragment : Fragment(), CameraScreen {
         if (step == null || state != State.SCANNING) return
         if (args.mode == ScanMode.FULL) b.scanRing.setCoverage(step.coveragePercent, step.bins)
         step.phrases.forEach { speak(it) }
-        step.news.forEach { speakLive(it) }
+        announceInView(step.inView)
         if (step.done) stopScan()
     }
 
@@ -411,11 +420,17 @@ class ScanFragment : Fragment(), CameraScreen {
         if (settings.speechOn) services().speaker.say(text)
     }
 
-    /** A thing just confirmed: said soon, together with the others still waiting (Speaker.sayLive). */
-    private fun speakLive(text: String) {
-        log.add(text)
-        Log.i(TAG, "Live: \"$text\"")
-        if (settings.speechOn) services().speaker.sayLive(text)
+    /**
+     * Main thread. The things in view go to the announcer every frame; it says at most one, at once when it is
+     * straight ahead, else when the last sentence has had time to end. A thing not said yet is still in view next
+     * frame. Queued, findings were said seconds after they were true (the logs).
+     */
+    private fun announceInView(inView: List<ScanSession.LiveObject>) {
+        val notices = inView.map { Notice("obj:${it.key}", it.text, 0, ahead = abs(it.bearing) <= Bearings.AHEAD_DEG) }
+        val chosen = announcer.choose(SystemClock.elapsedRealtime(), notices) ?: return
+        log.add(chosen.text)
+        Log.i(TAG, "Live: \"${chosen.text}\"")
+        if (settings.speechOn) services().speaker.sayNow(chosen.text)
     }
 
     private fun speakNow(text: String) {

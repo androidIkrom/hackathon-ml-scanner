@@ -62,27 +62,26 @@ class ScanSessionTest {
         assertTrue(s.frame(1_400L, null, chair).phrases.isEmpty())
         val step = s.frame(1_500L, null, chair)
         assertEquals(listOf("Compass not available. Switching to live scan."), step.phrases)
-        assertEquals(listOf("a chair ahead"), step.news)
+        assertEquals(listOf("a chair ahead"), step.inView.map { it.text })
         assertTrue(s.announcesLive)
         val later = s.frame(90_000L, null, chair)
-        assertTrue(later.phrases.isEmpty() && later.news.isEmpty())
+        assertTrue(later.phrases.isEmpty())
         assertFalse(later.done)
         assertEquals(100, s.finish().coveragePercent)
     }
 
     @Test fun liveScanAnnouncesEachObjectOnce() {
         val s = ScanSession(ScanMode.LIVE, 0L, Lang.EN)
-        assertTrue(s.frame(0L, 0f, chair).news.isEmpty())
-        assertTrue(s.frame(200L, 0f, chair).news.isEmpty())
-        assertEquals(listOf("a chair ahead"), s.frame(400L, 0f, chair).news)
-        assertTrue(s.frame(600L, 0f, chair).news.isEmpty())
+        assertTrue(s.frame(0L, 0f, chair).inView.isEmpty())
+        assertTrue(s.frame(200L, 0f, chair).inView.isEmpty())
+        assertEquals(listOf("a chair ahead"), s.frame(400L, 0f, chair).inView.map { it.text })
     }
 
     @Test fun fullScanDoesNotAnnounceLive() {
         val s = ScanSession(ScanMode.FULL, 0L, Lang.EN)
         repeat(4) {
             val step = s.frame(it * 200L, 0f, chair)
-            assertTrue(step.phrases.isEmpty() && step.news.isEmpty())
+            assertTrue(step.phrases.isEmpty() && step.inView.isEmpty())
         }
     }
 
@@ -134,5 +133,20 @@ class ScanSessionTest {
         assertEquals(200, log.lines().size)
         assertEquals("line 5", log.lines().first())
         assertTrue(log.text().endsWith("line 204"))
+    }
+
+    @Test fun confirmedObjectsInViewAreReportedEveryFrame() {
+        // The announcer decides what is said; the scan reports what is in view, every frame, with a stable key.
+        val s = ScanSession(ScanMode.LIVE, 0L, Lang.EN)
+        repeat(3) { s.frame(it * 200L, 0f, chair) }
+        val ahead = s.frame(600L, 0f, chair).inView.single()
+        assertEquals("a chair ahead", ahead.text)
+        assertEquals(0f, ahead.bearing, 1f)
+        // Turned 30° to the right: the same chair, now on the left.
+        val turned = s.frame(800L, 30f, ScanSession.Seen("chair", 0.0f, null)).inView.single()
+        assertEquals(ahead.key, turned.key)
+        assertEquals(-30f, turned.bearing, 3f)
+        assertEquals("a chair on your left", turned.text)
+        assertTrue(s.frame(1_000L, 30f).inView.isEmpty())
     }
 }

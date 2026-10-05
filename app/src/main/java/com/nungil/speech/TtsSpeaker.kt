@@ -150,11 +150,6 @@ class TtsSpeaker(
         pump()
     }
 
-    override fun sayLive(text: String) = onMain {
-        queue.addLive(text)
-        pump()
-    }
-
     /**
      * [text] is good news ("I see it!", "All done!"): the next time it is said, it is said in a brighter voice.
      * The engine has no feelings to pick from; a pitch a little above the user's own setting is the nearest
