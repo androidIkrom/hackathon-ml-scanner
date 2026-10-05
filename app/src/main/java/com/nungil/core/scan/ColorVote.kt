@@ -75,5 +75,8 @@ object ColorVote {
 
 /** Which labels may carry a colour. People never get one. */
 object ColorPolicy {
-    fun hasColor(label: String): Boolean = label != "person"
+    /** Things whose colour the camera cannot tell: a lit screen paints them. A black laptop was "a blue laptop" (the logs). */
+    private val SCREENS = setOf("laptop", "tv", "cell phone")
+
+    fun hasColor(label: String): Boolean = label != "person" && label !in SCREENS
 }

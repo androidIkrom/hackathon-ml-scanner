@@ -115,7 +115,7 @@ class ScanSessionTest {
             }
         }
         s.frame(36 * 200L, 0f)
-        assertEquals("앞에 파란 의자 세 개, 오른쪽에 검은 노트북 한 대가 있어요.", s.finish().summary)
+        assertEquals("앞에 파란 의자 세 개, 오른쪽에 노트북 한 대가 있어요.", s.finish().summary)
     }
 
     @Test fun aRecognisedPersonHidesThePlainPersonBesideIt() {
