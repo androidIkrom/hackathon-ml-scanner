@@ -54,6 +54,9 @@ class ItemSearch(
     /** Calls made for all saved items; the whole frame is searched on every other one. */
     private var allCalls = 0
 
+    /** Whole-frame searches for all saved items, for taking the square sizes in turn. */
+    private var gridTurn = 0
+
     /** What decided about one target in this call, for the log. */
     private class Trace(val needs: Float) {
         val scored = mutableListOf<String>()
@@ -77,7 +80,16 @@ class ItemSearch(
     ): Result {
         // The thing alone is cut out for Find only. Walk's worker thread also gives the hazard alerts (review), and
         // a live scan looks for every saved item: a search there took up to 4.2 s (the logs).
-        val thingIn: (Box) -> CutThing? = if (reach == Reach.WHOLE_FRAME && only != null) cut else { _ -> null }
+        // In a live scan only one borderline place per call is cut out ([ItemMatcher.KEEP_THRESHOLD] up to what finds
+        // it): thin things (glasses, a spoon) stopped at 0.50 to 0.53 by squares alone (the logs).
+        var cutsLeft = 1
+        val thingIn: (Box, Float, Float) -> CutThing? = when {
+            reach != Reach.WHOLE_FRAME -> { _, _, _ -> null }
+            only != null -> { square, _, _ -> cut(square) }
+            else -> { square, score, needs ->
+                if (score >= ItemMatcher.KEEP_THRESHOLD && score < needs && cutsLeft-- > 0) cut(square) else null
+            }
+        }
         // All saved items: the whole frame on every other call, the boxes and the near squares on each.
         val wholeFrameNow = only != null || allCalls++ % 2 == 0
         val targets = (if (only != null) listOf(only) else names.keys).map { ItemMatcher.sameName(it, names) }.distinct()
@@ -126,7 +138,9 @@ class ItemSearch(
 
         val open = byKey.filterKeys { it !in hits }
         if (reach == Reach.WHOLE_FRAME && wholeFrameNow && open.isNotEmpty()) {
-            val windows = ItemWindows.grid(width, height)
+            // All saved items: one square size per search, in turn, half the squares (the logs: 0.9 s a search).
+            val sides = if (only != null) ItemWindows.FIND_SIDES else listOf(ItemWindows.FIND_SIDES[gridTurn++ % ItemWindows.FIND_SIDES.size])
+            val windows = ItemWindows.grid(width, height, sides)
             val matches = windows.map(match)
             looked += windows.size
             var key = -1L
@@ -176,7 +190,7 @@ class ItemSearch(
         needs: Float,
         target: Set<Long>,
         match: (Box) -> ItemMatcher.Match?,
-        cut: (Box) -> CutThing?,
+        cut: (Box, Float, Float) -> CutThing?,
     ): Wide {
         val best = scores.indices.maxBy { scores[it] }
         var looked = 0
@@ -206,8 +220,8 @@ class ItemSearch(
      * the thing in its middle is the item by itself, that thing's outline is shown and its own square is followed.
      * Else the squares decide as they did, and the outline is shown only when it is the item's (ItemMatcher.outlined).
      */
-    private fun judge(square: Box, squareScore: Float, needs: Float, target: Set<Long>, cut: (Box) -> CutThing?): Verdict {
-        val thing = cut(square)
+    private fun judge(square: Box, squareScore: Float, needs: Float, target: Set<Long>, cut: (Box, Float, Float) -> CutThing?): Verdict {
+        val thing = cut(square, squareScore, needs)
         val alone = thing?.let { score(it.match, target) }
         val seen = ItemMatcher.seen(squareScore, needs, alone)
         if (thing == null || alone == null) return Verdict(seen, square, square, false, null, squareScore)

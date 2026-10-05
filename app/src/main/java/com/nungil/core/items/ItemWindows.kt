@@ -41,7 +41,7 @@ object ItemWindows {
     }
 
     /** Squares of each of [FIND_SIDES], at most half a square apart, covering the image from edge to edge. */
-    fun grid(width: Int, height: Int): List<Box> = FIND_SIDES.flatMap { part ->
+    fun grid(width: Int, height: Int, sides: List<Float> = FIND_SIDES): List<Box> = sides.flatMap { part ->
         val side = (part * minOf(width, height)).roundToInt()
         starts(height, side).flatMap { y -> starts(width, side).map { x -> box(x, y, side, width, height) } }
     }

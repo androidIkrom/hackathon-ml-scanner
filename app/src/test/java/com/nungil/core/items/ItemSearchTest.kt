@@ -7,6 +7,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 class ItemSearchTest {
     private val cup = 1L
@@ -272,6 +273,31 @@ class ItemSearchTest {
         val thing = CutThing(place, place, ItemMatcher.Match(cup, 0.9f))
         val hits = search(finder(), cupAt(0.4f), only = null, cut = { cuts++; thing }).hits
         assertTrue(hits.isEmpty())
+        assertEquals(0, cuts)
+    }
+
+    @Test fun liveAlternatesTheSquareSizes() {
+        val s = finder(all)
+        val sizes = mutableListOf<Set<Int>>()
+        repeat(4) {
+            val widths = mutableSetOf<Int>()
+            search(s, Scene { widths += (it.width * W).roundToInt(); ItemMatcher.Match(other, 0.2f) }, only = null)
+            sizes += widths
+        }
+        // Calls 1 and 3 search the frame (every other call), one square size each, a different one each time.
+        assertEquals(1, sizes[0].size)
+        assertEquals(1, sizes[2].size)
+        assertTrue(sizes[0] != sizes[2])
+    }
+
+    @Test fun liveCutsOnlyABorderlineItem() {
+        val thing = CutThing(Box(0.45f, 0.4f, 0.55f, 0.6f), place, ItemMatcher.Match(cup, 0.9f))
+        var cuts = 0
+        val borderline = search(finder(), cupAt(0.5f), only = null, cut = { cuts++; thing }).hits
+        assertEquals(ItemMatcher.Seen.BY_ITEM_ALONE, borderline.single().seen)
+        assertEquals(1, cuts)
+        cuts = 0
+        assertEquals(ItemMatcher.Seen.BY_SQUARES, search(finder(), cupAt(0.6f), only = null, cut = { cuts++; thing }).hits.single().seen)
         assertEquals(0, cuts)
     }
 
