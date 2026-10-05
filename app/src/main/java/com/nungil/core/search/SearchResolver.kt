@@ -47,9 +47,11 @@ object SearchResolver {
     fun resolve(text: String, saved: List<SavedName>, lang: Lang): SearchTarget? {
         val cleaned = QueryCleaner.clean(text)
         if (cleaned.raw.isEmpty()) return null
-        matchSaved(cleaned, saved)?.let { return SearchTarget(it.type, it.id, it.label, it.name) }
-        val label = matchLabel(cleaned) ?: return null
-        return SearchTarget(TargetType.LABEL, -1L, label, LabelNames.name(label, lang))
+        matchSaved(cleaned, saved, fillerNames = false)?.let { return SearchTarget(it.type, it.id, it.label, it.name) }
+        matchLabel(cleaned)?.let { return SearchTarget(TargetType.LABEL, -1L, it, LabelNames.name(it, lang)) }
+        // A name of filler words ("My", "Me") is in nearly every query: it is the target only when nothing else
+        // is. "Find my charger" looked for the person "My" instead of the item "My charger test one" (the logs).
+        return matchSaved(cleaned, saved, fillerNames = true)?.let { SearchTarget(it.type, it.id, it.label, it.name) }
     }
 
     /**
@@ -81,18 +83,26 @@ object SearchResolver {
         return null
     }
 
-    private fun matchSaved(cleaned: QueryCleaner.Cleaned, saved: List<SavedName>): SavedName? {
+    /**
+     * [fillerNames]: only names made of filler words ("My", "Me"); else only the other names. Where several names
+     * match in one step, the one with the most words wins, then the longer one: "my black box" is "My black box",
+     * not "Black box".
+     */
+    private fun matchSaved(cleaned: QueryCleaner.Cleaned, saved: List<SavedName>, fillerNames: Boolean): SavedName? {
         if (saved.isEmpty()) return null
         val wordLists = listOf(cleaned.words, cleaned.raw).filter { it.isNotEmpty() }
-        val names = saved.map { it to QueryCleaner.normalize(it.name) }.filter { it.second.isNotEmpty() }
+        val names = saved.map { it to QueryCleaner.normalize(it.name) }
+            .filter { (_, name) -> name.isNotEmpty() && name.split(' ').all(QueryCleaner::isFiller) == fillerNames }
+        fun best(matching: List<Pair<SavedName, String>>): SavedName? =
+            matching.maxWithOrNull(compareBy({ it.second.split(' ').size }, { it.second.length }))?.first
 
         // 1. Exact: the cleaned phrase (or the raw phrase) is the name, allowing particles on the last word.
-        names.firstOrNull { (_, name) -> wordLists.any { sameAsName(it, name) } }?.let { return it.first }
+        best(names.filter { (_, name) -> wordLists.any { sameAsName(it, name) } })?.let { return it }
 
         // 2. Containment: the name's words appear in a row inside the query, or the phrase is part of the name.
-        names.firstOrNull { (_, name) -> wordLists.any { containsName(it, name) } }?.let { return it.first }
+        best(names.filter { (_, name) -> wordLists.any { containsName(it, name) } })?.let { return it }
         val phrase = cleaned.phrase
-        if (phrase.isNotEmpty()) names.firstOrNull { (_, name) -> nameContains(name, phrase) }?.let { return it.first }
+        if (phrase.isNotEmpty()) best(names.filter { (_, name) -> nameContains(name, phrase) })?.let { return it }
         // 2b. A word slipped in: "my new black box" for "My black box" (the logs). Two-word names and longer only.
         names.firstOrNull { (_, name) -> wordLists.any { containsNameWords(it, name) } }?.let { return it.first }
 

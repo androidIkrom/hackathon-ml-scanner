@@ -24,6 +24,9 @@ object QueryCleaner {
         "찾아줘", "찾아주세요", "찾아", "찾기", "어디야", "어디", "있어", "나", "내", "나의", "제", "좀", "줘",
     )
 
+    /** Whether [word] (normalized) is a filler the cleaner drops: a saved name made only of these is "My", "Me". */
+    fun isFiller(word: String): Boolean = word in FILLER_WORDS
+
     /** Korean particles that may trail a noun: 을/를 (object), 이/가 (subject), 은/는 (topic), 도 (also). */
     val PARTICLES: Set<Char> = setOf('을', '를', '이', '가', '은', '는', '도')
 

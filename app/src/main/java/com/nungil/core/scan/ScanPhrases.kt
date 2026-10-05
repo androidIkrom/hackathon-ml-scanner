@@ -41,4 +41,13 @@ object ScanPhrases {
     fun unknownPerson(lang: Lang) = pick(lang, "I don't know this person.", "누군지 모르겠어요.")
 
     fun nobody(lang: Lang) = pick(lang, "I don't see anyone.", "사람이 보이지 않아요.")
+
+    /** "What / who is this" before the camera has given a frame. */
+    fun nothingYet(lang: Lang) = pick(lang, "I can't see anything yet.", "아직 아무것도 안 보여요.")
+
+    /** "Front camera" on a screen with the back camera only (Walk: ARCore owns it). */
+    fun backCameraOnly(lang: Lang) = pick(lang, "Only the back camera works here.", "여기서는 뒤 카메라만 쓸 수 있어요.")
+
+    /** A camera screen's work paused by "stop"; one more "stop" leaves the screen. */
+    fun paused(lang: Lang) = pick(lang, "Paused.", "잠시 멈췄어요.")
 }

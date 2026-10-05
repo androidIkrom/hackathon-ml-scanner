@@ -203,6 +203,21 @@ class WalkVision(
         }
     }
 
+    // The last analysed picture and its detections, for "what / who is this" (CameraScreen.lastFrame).
+    @Volatile private var lastBitmap: Bitmap? = null
+    @Volatile private var lastDetections: List<Detection> = emptyList()
+    @Volatile private var lastAt = 0L
+
+    /**
+     * The last analysed frame. The picture is copied: the worker reuses its bitmap for the next frame, and the
+     * answer is worked out on another thread. Null before the first frame.
+     */
+    fun lastFrame(): VisionFrame? {
+        val bitmap = lastBitmap ?: return null
+        val copy = runCatching { bitmap.copy(Bitmap.Config.ARGB_8888, false) }.getOrNull() ?: return null
+        return VisionFrame(lastDetections, copy, copy.width, copy.height, Facing.BACK, null, HFOV_DEG, lastAt, 0)
+    }
+
     private fun deliver(report: WalkReport) {
         if (!closed) main.post { if (!closed) onReport(report) }
     }
@@ -225,6 +240,9 @@ class WalkVision(
         here: Standpoint? = null,
         featureless: Boolean = false,
     ): WalkReport {
+        lastBitmap = bitmap
+        lastDetections = detections
+        lastAt = now
         val l = lang()
         val alerts = ArrayList<Alert>()
         var beep: Float? = null

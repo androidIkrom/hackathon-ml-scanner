@@ -16,12 +16,13 @@ import com.nungil.contract.Box
 import com.nungil.contract.Buzz
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
-import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppServices
 import com.nungil.contract.app.VisionFrame
-import com.nungil.contract.app.VoiceHandler
+import com.nungil.contract.app.CameraScreen
+import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.services
 import com.nungil.core.search.SearchGuide
+import com.nungil.core.scan.ScanPhrases
 import com.nungil.core.search.SearchPhrases
 import com.nungil.core.search.SearchTracker
 import com.nungil.core.search.TargetType
@@ -39,7 +40,7 @@ import kotlin.math.abs
  * Hunts one target: beeps faster as it nears the centre, vibrates when it enters the centre, names the zone
  * at most every 2 s, and says "Lost it" after 3 s without it.
  */
-class SearchCameraFragment : Fragment(), VoiceHandler {
+class SearchCameraFragment : Fragment(), CameraScreen {
     private var _binding: SearchCameraFragmentBinding? = null
     private val binding get() = _binding!!
     private val args by navArgs<SearchCameraFragmentArgs>()
@@ -63,6 +64,13 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
     @Volatile
     private var leaving = false
 
+    /** "Stop" paused the search: frames are not matched and the beeps are off; one more "stop" leaves. */
+    @Volatile
+    private var paused = false
+
+    @Volatile
+    private var last: VisionFrame? = null
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = SearchCameraFragmentBinding.inflate(inflater, container, false)
         return binding.root
@@ -70,6 +78,7 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         leaving = false
+        paused = false
         services = services()
         lang = services.lang
         spokenName = args.spokenName
@@ -133,16 +142,25 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
         _binding = null
     }
 
-    override fun onVoiceCommand(command: VoiceCommand): Boolean = when (command) {
-        VoiceCommand.Stop -> {
-            services.navigator.back()
-            true
-        }
-        is VoiceCommand.SwitchCamera -> {
-            camera?.useCamera(command.to)
-            true
-        }
-        else -> false
+    override fun lastFrame(): VisionFrame? = last
+
+    override val switchable: SwitchableCamera? get() = camera
+
+    override val isWorking: Boolean get() = !paused
+
+    /** "Stop" used to leave Find at once; now it pauses, as on the other camera screens, and a second one leaves. */
+    override fun pause() {
+        if (_binding == null || paused) return
+        paused = true
+        services.beeper.stop()
+        lastPulseMs = -1L
+        services.speaker.sayNow(ScanPhrases.paused(lang))
+    }
+
+    override fun resume() {
+        if (_binding == null || !paused) return
+        paused = false
+        services.speaker.sayNow(SearchPhrases.looking(spokenName, lang))
     }
 
     private fun startCamera() {
@@ -151,7 +169,8 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
             facing = Facing.BACK,
             // A saved item is looked for in the picture itself (ItemFinder); the detector would only slow it.
             detect = type != TargetType.ITEM,
-            keepBitmap = type != TargetType.LABEL,
+            // Every target keeps the picture: "who is this" and "what is this" answer from it.
+            keepBitmap = true,
             minScore = SEARCH_MIN_SCORE,
         )
         camera = CameraSession(this, binding.searchCameraPreview, options, ::onFrame, ::onCameraError).also { it.start() }
@@ -159,6 +178,8 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
 
     /** Analysis thread. Fast matchers run here; slow ones go to the extras thread, dropping frames while busy. */
     private fun onFrame(frame: VisionFrame) {
+        last = frame
+        if (paused) return
         val m = matcher.get() ?: return
         if (!m.slow) {
             handle(frame, m.locate(frame))
@@ -188,8 +209,8 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
 
     /** Worker thread: speech, beeps and vibration are thread-safe; the overlay is updated on the main thread. */
     private fun handle(frame: VisionFrame, target: Box?) {
-        // A frame still in flight after the screen was left must not restart the beeps or speak.
-        if (leaving) return
+        // A frame still in flight after the screen was left or paused must not restart the beeps or speak.
+        if (leaving || paused) return
         val x = target?.let { SearchGuide.userX(it.centerX, frame.facing) }
         val zone = x?.let { SearchGuide.zone(it) }
         val update = synchronized(tracker) { tracker.update(SystemClock.elapsedRealtime(), zone) }

@@ -35,4 +35,12 @@ class SceneRulesTest {
         assertEquals(1, SceneRules.nearestToCenter(list, listOf(0, 1)))
         assertNull(SceneRules.nearestToCenter(list, emptyList()))
     }
+
+    @Test fun aThingHalfOutOfTheFrameIsNotWhatIsInTheMiddle() {
+        // Scan's "what is this" left out boxes cut by one side of the frame; FrameAnswers must too (review).
+        val halfSeen = Detection("dining table", 0.9f, Box(0f, 0.2f, 0.6f, 0.9f))
+        val cup = Detection("cup", 0.6f, Box(0.4f, 0.4f, 0.6f, 0.6f))
+        assertEquals(cup, SceneRules.centerThing(listOf(halfSeen, cup)))
+        assertEquals(null, SceneRules.centerThing(listOf(halfSeen)))
+    }
 }

@@ -41,10 +41,14 @@ import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppNavigator
 import com.nungil.contract.app.AppServices
 import com.nungil.contract.app.Beeper
+import com.nungil.contract.app.CameraScreen
 import com.nungil.contract.app.Haptics
 import com.nungil.contract.app.Speaker
 import com.nungil.contract.app.VoiceHandler
+import com.nungil.core.scan.ScanPhrases
 import com.nungil.core.ui.AppLanguage
+import com.nungil.core.ui.CameraAction
+import com.nungil.core.ui.CameraCommandPolicy
 import com.nungil.core.ui.CommandRouter
 import com.nungil.core.ui.HelpAnswer
 import com.nungil.core.ui.LanguageChoice
@@ -74,6 +78,7 @@ import com.nungil.design.openAppSettings
 import com.nungil.items.AddItemFragmentArgs
 import com.nungil.people.AddPersonFragmentArgs
 import com.nungil.saved.SavedFragmentArgs
+import com.nungil.scan.FrameAnswers
 import com.nungil.scan.ScanFragmentArgs
 import com.nungil.search.SearchFragmentArgs
 import com.nungil.speech.ToneBeeper
@@ -516,10 +521,61 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     /** Runs one parsed command: global ones here, the rest on the current screen first. Main thread. */
     fun handleCommand(command: VoiceCommand) {
         if (!CommandRouter.isGlobal(command)) {
+            // Camera commands are taken the same way on every camera screen, before the screen's own handler.
+            (currentScreen() as? CameraScreen)?.let { cam ->
+                val action = CameraCommandPolicy.decide(command, cam.backCameraOnly, cam.switchable != null, cam.isWorking)
+                if (action != null) {
+                    Log.i(TAG, "Camera command $command -> $action")
+                    onCameraCommand(cam, action)
+                    return
+                }
+            }
             val screen = currentScreen() as? VoiceHandler
             if (screen?.onVoiceCommand(command) == true) return
         }
         perform(CommandRouter.route(command))
+    }
+
+    private fun onCameraCommand(screen: CameraScreen, action: CameraAction) {
+        when (action) {
+            is CameraAction.Switch -> screen.switchable?.let {
+                it.useCamera(action.to)
+                tts.sayNow(ScanPhrases.cameraSwitched(it.facing, lang))
+            }
+            CameraAction.BackCameraOnly -> tts.sayNow(ScanPhrases.backCameraOnly(lang))
+            CameraAction.NotReady -> Unit
+            CameraAction.DescribeCentre -> frameAnswers(screen)?.what(screen.lastFrame(), lang)
+            CameraAction.NameFace -> frameAnswers(screen)?.who(screen.lastFrame(), lang)
+            CameraAction.Pause -> screen.pause()
+            CameraAction.Leave -> {
+                silenceAll()
+                back()
+            }
+            CameraAction.Resume -> screen.resume()
+        }
+    }
+
+    /** What / who is this for the camera screen on top; one at a time, closed with that screen's view. */
+    private var answers: FrameAnswers? = null
+    private var answersOwner: LifecycleOwner? = null
+
+    private fun frameAnswers(screen: CameraScreen): FrameAnswers? {
+        val owner = (screen as? Fragment)?.takeIf { it.view != null }?.viewLifecycleOwner ?: return null
+        if (answersOwner !== owner) {
+            answers?.close()
+            answers = FrameAnswers(this, owner) { tts.sayNow(it) }
+            answersOwner = owner
+            owner.lifecycle.addObserver(object : DefaultLifecycleObserver {
+                override fun onDestroy(owner: LifecycleOwner) {
+                    if (answersOwner === owner) {
+                        answers?.close()
+                        answers = null
+                        answersOwner = null
+                    }
+                }
+            })
+        }
+        return answers
     }
 
     private fun perform(route: Route) {

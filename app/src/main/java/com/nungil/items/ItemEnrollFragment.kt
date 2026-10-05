@@ -25,6 +25,8 @@ import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppScope
 import com.nungil.contract.app.AppServices
 import com.nungil.contract.app.VisionFrame
+import com.nungil.contract.app.CameraScreen
+import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.VoiceHandler
 import com.nungil.contract.app.services
 import com.nungil.core.items.ItemCrop
@@ -74,7 +76,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Size and distance come from where the lens is focused, so they are rough. One worker thread does the
  * segmenting and embedding (about half a second a frame); frames that arrive while it is busy are dropped.
  */
-class ItemEnrollFragment : Fragment(), VoiceHandler {
+class ItemEnrollFragment : Fragment(), VoiceHandler, CameraScreen {
     private var _binding: ItemEnrollFragmentBinding? = null
     private val binding get() = _binding!!
     private val args by navArgs<ItemEnrollFragmentArgs>()
@@ -152,8 +154,8 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         binding.itemEnrollButton.setOnClickListener {
             when {
                 phase == Phase.LOOKING -> confirm()
-                running -> pause()
-                else -> resume()
+                running -> pauseLearning()
+                else -> resumeLearning()
             }
         }
         gate.attach(binding.itemEnrollPermission)
@@ -200,15 +202,28 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         _binding = null
     }
 
+    @Volatile private var last: VisionFrame? = null
+
+    override fun lastFrame(): VisionFrame? = last
+
+    /** Items are learned with the back camera only. */
+    override val switchable: SwitchableCamera? get() = null
+
+    override val backCameraOnly: Boolean get() = true
+
+    /** Learning is going on; while it still looks for the item, a stop leaves (nothing was learned to pause). */
+    override val isWorking: Boolean get() = phase == Phase.LEARNING && running
+
+    override fun pause() {
+        if (_binding != null) pauseLearning()
+    }
+
+    override fun resume() {
+        if (_binding == null) return
+        if (phase == Phase.LOOKING) confirm() else resumeLearning()
+    }
+
     override fun onVoiceCommand(command: VoiceCommand): Boolean = when (command) {
-        VoiceCommand.Start -> {
-            if (phase == Phase.LOOKING) confirm() else resume()
-            true
-        }
-        VoiceCommand.Stop -> {
-            pause()
-            true
-        }
         // "Yes" and "no" are not commands: they come here as plain words while the question is open.
         is VoiceCommand.Unknown -> phase == Phase.LOOKING && asked && answer(command.text)
         else -> false
@@ -274,14 +289,14 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
         services.speaker.sayNow(ItemPhrases.notThat(lang))
     }
 
-    private fun pause() {
+    private fun pauseLearning() {
         if (phase != Phase.LEARNING || !running) return
         running = false
         binding.itemEnrollButton.setText(R.string.item_enroll_resume)
         services.speaker.say(EnrollPhrases.paused(lang))
     }
 
-    private fun resume() {
+    private fun resumeLearning() {
         if (phase != Phase.LEARNING || running) return
         running = true
         // A pause is not time spent on the step.
@@ -306,6 +321,7 @@ class ItemEnrollFragment : Fragment(), VoiceHandler {
 
     /** Analysis thread: hand the frame to the worker unless it is still busy with an earlier one. */
     private fun onFrame(frame: VisionFrame) {
+        last = frame
         if (phase == Phase.FINISHED) return
         val bitmap = frame.bitmap ?: return
         val executor = worker ?: return

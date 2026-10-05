@@ -43,4 +43,13 @@ class ScanPhrasesTest {
         assertEquals("Front camera.", ScanPhrases.cameraSwitched(Facing.FRONT, Lang.EN))
         assertEquals("후면 카메라예요.", ScanPhrases.cameraSwitched(Facing.BACK, Lang.KO))
     }
+
+    @Test fun newCameraSentences() {
+        assertEquals("I can't see anything yet.", ScanPhrases.nothingYet(Lang.EN))
+        assertEquals("아직 아무것도 안 보여요.", ScanPhrases.nothingYet(Lang.KO))
+        assertEquals("Only the back camera works here.", ScanPhrases.backCameraOnly(Lang.EN))
+        assertEquals("여기서는 뒤 카메라만 쓸 수 있어요.", ScanPhrases.backCameraOnly(Lang.KO))
+        assertEquals("Paused.", ScanPhrases.paused(Lang.EN))
+        assertEquals("잠시 멈췄어요.", ScanPhrases.paused(Lang.KO))
+    }
 }

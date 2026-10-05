@@ -19,17 +19,16 @@ import com.nungil.contract.Buzz
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
 import com.nungil.contract.SavedTab
-import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppScope
 import com.nungil.contract.app.AppServices
 import com.nungil.contract.app.VisionFrame
-import com.nungil.contract.app.VoiceHandler
+import com.nungil.contract.app.CameraScreen
+import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.services
 import com.nungil.core.people.EnrollPhrases
 import com.nungil.core.people.EnrollmentGuide
 import com.nungil.core.people.Pose
 import com.nungil.core.people.VectorBytes
-import com.nungil.core.scan.ScanPhrases
 import com.nungil.data.AppDatabase
 import com.nungil.data.FaceEmbeddingEntity
 import com.nungil.data.PersonEntity
@@ -53,7 +52,7 @@ import kotlin.math.min
  * sample buzzes, and a hint is spoken only after 4 s without one. Nothing is saved until the last sample; leaving
  * halfway saves nothing.
  */
-class EnrollFragment : Fragment(), VoiceHandler {
+class EnrollFragment : Fragment(), CameraScreen {
     private var _binding: EnrollFragmentBinding? = null
     private val binding get() = _binding!!
     private val args by navArgs<EnrollFragmentArgs>()
@@ -145,23 +144,20 @@ class EnrollFragment : Fragment(), VoiceHandler {
         _binding = null
     }
 
-    override fun onVoiceCommand(command: VoiceCommand): Boolean = when (command) {
-        VoiceCommand.Start -> {
-            start()
-            true
-        }
-        VoiceCommand.Stop -> {
-            pause()
-            true
-        }
-        is VoiceCommand.SwitchCamera -> {
-            camera?.let {
-                it.useCamera(command.to)
-                services.speaker.sayNow(ScanPhrases.cameraSwitched(it.facing, lang))
-            }
-            true
-        }
-        else -> false
+    @Volatile private var last: VisionFrame? = null
+
+    override fun lastFrame(): VisionFrame? = last
+
+    override val switchable: SwitchableCamera? get() = camera
+
+    override val isWorking: Boolean get() = running
+
+    override fun pause() {
+        if (_binding != null) stopLearning()
+    }
+
+    override fun resume() {
+        if (_binding != null) start()
     }
 
     private fun startCamera() {
@@ -183,7 +179,7 @@ class EnrollFragment : Fragment(), VoiceHandler {
         services.speaker.say(if (guide.taken == 0) EnrollPhrases.sweep(lang) else EnrollPhrases.prompt(next, lang))
     }
 
-    private fun pause() {
+    private fun stopLearning() {
         if (!running) return
         running = false
         binding.enrollButton.setText(R.string.enroll_resume)
@@ -202,6 +198,7 @@ class EnrollFragment : Fragment(), VoiceHandler {
 
     /** Analysis thread: hand the frame to the extras thread unless it is still busy. */
     private fun onFrame(frame: VisionFrame) {
+        last = frame
         if (!running || finished) return
         val bitmap = frame.bitmap ?: return
         val executor = extras ?: return
