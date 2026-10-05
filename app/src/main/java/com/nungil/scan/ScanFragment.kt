@@ -24,17 +24,16 @@ import com.google.android.material.color.MaterialColors
 import com.nungil.R
 import com.nungil.contract.Box
 import com.nungil.contract.Buzz
-import com.nungil.contract.Detection
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
 import com.nungil.contract.ScanMode
 import com.nungil.contract.ScanSettings
-import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppScope
 import com.nungil.contract.app.NameTagger
 import com.nungil.contract.app.TagKind
 import com.nungil.contract.app.VisionFrame
-import com.nungil.contract.app.VoiceHandler
+import com.nungil.contract.app.CameraScreen
+import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.services
 import com.nungil.core.items.Reach
 import com.nungil.core.lang.LabelNames
@@ -45,7 +44,6 @@ import com.nungil.core.scan.ScanLogState
 import com.nungil.core.scan.ScanPhrases
 import com.nungil.core.scan.ScanResult
 import com.nungil.core.scan.ScanSession
-import com.nungil.core.scan.SceneRules
 import com.nungil.core.scan.StickyNames
 import com.nungil.data.AppDatabase
 import com.nungil.data.SettingsStore
@@ -65,7 +63,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Threads: camera frames arrive on CameraSession's analysis thread; faces, items and the scene classifier
  * run on [extras] (one at a time, busy flag); everything touching views or speech runs on the main thread.
  */
-class ScanFragment : Fragment(), VoiceHandler {
+class ScanFragment : Fragment(), CameraScreen {
 
     private enum class State { NO_PERMISSION, IDLE, SCANNING }
 
@@ -95,10 +93,8 @@ class ScanFragment : Fragment(), VoiceHandler {
     private val sticky = StickyNames()
     private val places = FoundPlaces()
 
-    // Written on the analysis thread, read on the main thread for "what / who is this".
+    // Written on the analysis thread, read for "what / who is this" (FrameAnswers) and the empty-scan guess.
     @Volatile private var lastFrame: VisionFrame? = null
-    @Volatile private var lastUsable: List<Detection> = emptyList()
-    @Volatile private var lastNames: List<StickyNames.Sticky?> = emptyList()
 
     private val sessionLock = Any()
     private var session: ScanSession? = null
@@ -162,35 +158,27 @@ class ScanFragment : Fragment(), VoiceHandler {
         super.onDestroyView()
     }
 
-    override fun onVoiceCommand(command: VoiceCommand): Boolean = when (command) {
-        VoiceCommand.Start -> {
-            if (state == State.NO_PERMISSION) speakNow(ScanPhrases.cameraNeeded(lang)) else if (state == State.IDLE) startScan()
-            true
+    override fun lastFrame(): VisionFrame? = lastFrame
+
+    override val switchable: SwitchableCamera? get() = camera
+
+    /** Scanning, or the scan about to start on its own: "stop" right after opening must cancel that start. */
+    override val isWorking: Boolean get() = state == State.SCANNING || autoStart != null
+
+    override fun pause() {
+        if (_binding == null) return
+        if (state == State.SCANNING) {
+            stopScan()
+        } else if (state == State.IDLE && autoStart != null) {
+            autoStart?.let(main::removeCallbacks)
+            autoStart = null
+            speakNow(ScanPhrases.stopped(lang))
         }
-        VoiceCommand.Stop -> {
-            if (state == State.SCANNING) {
-                stopScan()
-            } else if (state == State.IDLE) {
-                // "Stop" right after opening must also cancel the automatic start.
-                autoStart?.let(main::removeCallbacks)
-                autoStart = null
-                speakNow(ScanPhrases.stopped(lang))
-            }
-            true
-        }
-        is VoiceCommand.SwitchCamera -> {
-            switchCamera(command.to)
-            true
-        }
-        VoiceCommand.WhatIsThis -> {
-            whatIsThis()
-            true
-        }
-        VoiceCommand.WhoIsThis -> {
-            whoIsThis()
-            true
-        }
-        else -> false
+    }
+
+    override fun resume() {
+        if (_binding == null) return
+        if (state == State.NO_PERMISSION) speakNow(ScanPhrases.cameraNeeded(lang)) else if (state == State.IDLE) startScan()
     }
 
     private fun hasCameraPermission() =
@@ -217,7 +205,10 @@ class ScanFragment : Fragment(), VoiceHandler {
         ).also { it.start() }
         showState(State.IDLE)
         speak(ScanPhrases.intro(args.mode, lang))
-        autoStart = Runnable { if (_binding != null && state == State.IDLE) startScan() }
+        autoStart = Runnable {
+            autoStart = null
+            if (_binding != null && state == State.IDLE) startScan()
+        }
             .also { main.postDelayed(it, AUTO_START_MS) }
     }
 
@@ -229,6 +220,7 @@ class ScanFragment : Fragment(), VoiceHandler {
 
     private fun startScan() {
         autoStart?.let(main::removeCallbacks)
+        autoStart = null
         if (camera == null) return
         synchronized(sessionLock) {
             session = ScanSession(args.mode, System.currentTimeMillis(), lang, settings.colorsOn)
@@ -272,8 +264,6 @@ class ScanFragment : Fragment(), VoiceHandler {
         val names = sticky.apply(usable.map { it.box })
         // Saved items found by their look, not already the name of one of this frame's boxes.
         val found = places.current(frame.timestampMs).filter { p -> names.none { it?.name == p.name } }
-        lastUsable = usable
-        lastNames = names
         val scanning = synchronized(sessionLock) { session != null }
         var step: ScanSession.Step? = null
         if (scanning) {
@@ -337,30 +327,6 @@ class ScanFragment : Fragment(), VoiceHandler {
         } catch (e: RejectedExecutionException) {
             extrasBusy.set(false)
         }
-    }
-
-    private fun whatIsThis() {
-        val centre = SceneRules.centerDetection(lastUsable)
-        if (centre != null) {
-            speakNow(ScanPhrases.looksLike(LabelNames.name(centre.label, lang), lang))
-            return
-        }
-        classifyCenter { guess -> speakNow(if (guess != null) ScanPhrases.looksLike(guess, lang) else ScanPhrases.unknownThing(lang)) }
-    }
-
-    private fun whoIsThis() {
-        val usable = lastUsable
-        val names = lastNames
-        val people = usable.indices.filter { usable[it].label == "person" }
-        val nearest = SceneRules.nearestToCenter(usable, people)
-        val name = nearest?.let { names.getOrNull(it) }?.takeIf { it.isPerson }?.name
-        speakNow(
-            when {
-                name != null -> ScanPhrases.thisIs(name, lang)
-                nearest != null -> ScanPhrases.unknownPerson(lang)
-                else -> ScanPhrases.nobody(lang)
-            },
-        )
     }
 
     /** When a full scan finds nothing, the 1000-class classifier names the middle of the frame. */
