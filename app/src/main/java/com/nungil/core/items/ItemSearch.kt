@@ -48,8 +48,11 @@ class ItemSearch(
         val score: Float,
     )
 
-    /** The square each target was found in by the last call, by the target's smallest id. */
-    private val last = HashMap<Long, Box>()
+    /** The square each target was found in by the last call, and its score, by the target's smallest id. */
+    private val last = HashMap<Long, Pair<Box, Float>>()
+
+    /** Calls made for all saved items; the whole frame is searched on every other one. */
+    private var allCalls = 0
 
     /** What decided about one target in this call, for the log. */
     private class Trace(val needs: Float) {
@@ -72,21 +75,24 @@ class ItemSearch(
         match: (Box) -> ItemMatcher.Match?,
         cut: (Box) -> CutThing?,
     ): Result {
-        // Walk's worker thread also gives the hazard alerts: no segmenter there, the squares decide alone (review).
-        val thingIn: (Box) -> CutThing? = if (reach == Reach.WHOLE_FRAME) cut else { _ -> null }
+        // The thing alone is cut out for Find only. Walk's worker thread also gives the hazard alerts (review), and
+        // a live scan looks for every saved item: a search there took up to 4.2 s (the logs).
+        val thingIn: (Box) -> CutThing? = if (reach == Reach.WHOLE_FRAME && only != null) cut else { _ -> null }
+        // All saved items: the whole frame on every other call, the boxes and the near squares on each.
+        val wholeFrameNow = only != null || allCalls++ % 2 == 0
         val targets = (if (only != null) listOf(only) else names.keys).map { ItemMatcher.sameName(it, names) }.distinct()
         val byKey = targets.associateBy { it.min() }
         val keyOf = HashMap<Long, Long>()
         for ((key, target) in byKey) for (id in target) keyOf[id] = key
         val hits = LinkedHashMap<Long, Hit>()
-        val found = HashMap<Long, Box>()
+        val found = HashMap<Long, Pair<Box, Float>>()
         val traces = LinkedHashMap<Long, Trace>()
         var looked = 0
 
         fun record(key: Long, v: Verdict) {
             if (v.seen == ItemMatcher.Seen.NO) return
             hits[key] = Hit(key, v.shown, boxIn(v.square, detections), v.score, v.seen)
-            found[key] = v.square
+            found[key] = v.square to v.score
         }
 
         for (index in ItemCrop.candidates(detections, width, height)) {
@@ -97,12 +103,14 @@ class ItemSearch(
             traces.getOrPut(key) { Trace(ItemMatcher.FIND_THRESHOLD) }.scored += fmt("box %.2f", m.score)
             if (m.score < ItemMatcher.FIND_THRESHOLD || (hits[key]?.score ?: -1f) >= m.score) continue
             hits[key] = Hit(key, detections[index].box, index, m.score, ItemMatcher.Seen.BY_SQUARES)
-            found[key] = square
+            found[key] = square to m.score
         }
 
         // Seen a moment ago: look only where it was and next to it (nine squares, not forty). The whole frame is
         // searched again only when it is not there any more; every frame took a second otherwise (the logs).
-        for ((key, kept) in last) {
+        // Only the [MAX_NEAR] best of them: each is nine more squares, and a live scan kept six, false finds among
+        // them, and searched for up to 4.2 s (the logs).
+        for ((key, kept) in last.entries.sortedByDescending { it.value.second }.take(MAX_NEAR).map { it.key to it.value.first }) {
             val target = byKey[key] ?: continue
             if (key in hits) continue
             val trace = traces.getOrPut(key) { Trace(ItemMatcher.KEEP_THRESHOLD) }
@@ -117,7 +125,7 @@ class ItemSearch(
         }
 
         val open = byKey.filterKeys { it !in hits }
-        if (reach == Reach.WHOLE_FRAME && open.isNotEmpty()) {
+        if (reach == Reach.WHOLE_FRAME && wholeFrameNow && open.isNotEmpty()) {
             val windows = ItemWindows.grid(width, height)
             val matches = windows.map(match)
             looked += windows.size
@@ -228,6 +236,9 @@ class ItemSearch(
 
     private companion object {
         const val PERSON = "person"
+
+        /** How many items found by the last call are looked for near where they were. */
+        const val MAX_NEAR = 2
 
         /** A detector box up to this many times the found place's area may be the thing's own box. */
         const val MAX_BOX_SHARE = 1.5f

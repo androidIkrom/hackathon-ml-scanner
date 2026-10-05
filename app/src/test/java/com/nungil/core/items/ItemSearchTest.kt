@@ -240,6 +240,41 @@ class ItemSearchTest {
         assertEquals(setOf(bottle, towel), search(s, kept, only = null).hits.map { it.id }.toSet())
     }
 
+    // ---- Speed (device 2026-10-05: a live search took up to 4.2 s) -------------------------------------------
+
+    @Test fun nearIsLimitedToTheBestTwoRememberedItems() {
+        val s = finder(all + mapOf(7L to "My cup"), Reach.BOXES_AND_NEAR)
+        val boxes = listOf(Box(0.05f, 0.1f, 0.25f, 0.4f), Box(0.4f, 0.1f, 0.6f, 0.4f), Box(0.75f, 0.1f, 0.95f, 0.4f))
+        val squares = boxes.map { ItemWindows.square(it, W, H) }
+        val ids = listOf(bottle, towel, glass)
+        val scores = listOf(0.6f, 0.7f, 0.8f)
+        val first = Scene { sq -> squares.indexOf(sq).takeIf { it >= 0 }?.let { ItemMatcher.Match(ids[it], scores[it]) } ?: ItemMatcher.Match(other, 0.2f) }
+        assertEquals(3, search(s, first, only = null, detections = boxes.map { Detection("cup", 0.7f, it) }).hits.size)
+        val next = Scene { ItemMatcher.Match(other, 0.2f) }
+        search(s, next, only = null)
+        assertTrue("near squares of two items at most: ${next.calls}", next.calls <= 2 * 9)
+    }
+
+    @Test fun allItemsSearchTheWholeFrameEveryOtherCall() {
+        val s = finder(all)
+        val calls = (1..4).map { val scene = Scene { ItemMatcher.Match(other, 0.2f) }; search(s, scene, only = null); scene.calls }
+        assertTrue("$calls", calls[0] > 0 && calls[1] == 0 && calls[2] > 0 && calls[3] == 0)
+    }
+
+    @Test fun findSearchesTheWholeFrameEveryCall() {
+        val s = finder()
+        val calls = (1..3).map { val scene = Scene { ItemMatcher.Match(other, 0.2f) }; search(s, scene); scene.calls }
+        assertTrue("$calls", calls.all { it > 0 })
+    }
+
+    @Test fun allItemsNeverCutThings() {
+        var cuts = 0
+        val thing = CutThing(place, place, ItemMatcher.Match(cup, 0.9f))
+        val hits = search(finder(), cupAt(0.4f), only = null, cut = { cuts++; thing }).hits
+        assertTrue(hits.isEmpty())
+        assertEquals(0, cuts)
+    }
+
     private companion object {
         const val W = 640
         const val H = 480

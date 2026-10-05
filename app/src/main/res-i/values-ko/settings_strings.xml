@@ -24,6 +24,7 @@
     <string name="settings_language_korean">한국어</string>
     <string name="settings_high_contrast">고대비 화면</string>
     <string name="settings_voice_guide">터치하면 읽어주기</string>
+    <string name="settings_clock_directions">시계 방향으로 말하기</string>
     <string name="settings_learner">학습 모드</string>
 
     <string name="history_headline">기록</string>

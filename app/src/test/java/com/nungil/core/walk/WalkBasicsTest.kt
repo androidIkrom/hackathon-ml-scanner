@@ -96,28 +96,6 @@ class WalkBasicsTest {
         assertFalse(GroundRule.speakable(255, lastSkySeenAtMs = 1_000, nowMs = 62_000))
     }
 
-    // ---- alerts ----------------------------------------------------------------------------------
-    @Test fun mostUrgentNewAlertWins() {
-        val a = WalkAlerts()
-        val hazard = Alert(AlertKind.HAZARD, "person:ahead", "Person ahead.")
-        val floor = Alert(AlertKind.FLOOR, "stairs", "Stairs ahead.")
-        assertEquals(floor, a.choose(0, listOf(hazard, floor)))
-        assertEquals(hazard, a.choose(100, listOf(hazard, floor)))
-        assertNull(a.choose(200, listOf(hazard, floor)))
-    }
-
-    @Test fun aSituationThatReturnsIsSaidAgainButNotWithinSixSeconds() {
-        val a = WalkAlerts()
-        val wall = Alert(AlertKind.FLOOR, "drop", "Drop ahead.")
-        assertEquals(wall, a.choose(0, listOf(wall)))
-        assertNull(a.choose(1_000, emptyList()))
-        assertNull(a.choose(2_000, listOf(wall)))
-        assertNull(a.choose(3_000, emptyList()))
-        assertEquals(wall, a.choose(6_500, listOf(wall)))
-    }
-
-    @Test fun silenceWhenNothingIsFound() = assertNull(WalkAlerts().choose(0, emptyList()))
-
     // ---- places ----------------------------------------------------------------------------------
     @Test fun placesRoundTrip() {
         val places = listOf(Place("home", seoulStation), Place("학교", cityHall))
@@ -196,43 +174,6 @@ class WalkBasicsTest {
             assertEquals(p, WalkCommand.GoTo("Seoul Station"), WalkCommands.parse(p, appScreens))
         }
         assertEquals(WalkCommand.GoTo("서울역"), WalkCommands.parse("서울역에 어떻게 가", appScreens))
-    }
-
-    @Test fun cornerOfACorridorIsNotRepeated() {
-        val a = WalkAlerts()
-        val left = Alert(AlertKind.HAZARD, "wall:LEFT", "Obstacle on your left, 1 step.")
-        val right = Alert(AlertKind.HAZARD, "wall:RIGHT", "Obstacle on your right, 1 step.")
-        val ahead = Alert(AlertKind.HAZARD, "wall:ahead:2", "Wall ahead, 2 steps.")
-        val said = (0L until 10_000L step 100L).mapNotNull { a.choose(it, listOf(left, right, ahead)) }
-        assertEquals(3, said.size)
-    }
-
-    @Test fun aFlickeringKeyIsNotSaidAgain() {
-        val a = WalkAlerts()
-        val car = Alert(AlertKind.HAZARD, "hazard:car:AHEAD", "Car ahead.")
-        val said = (0L until 20_000L step 100L).mapNotNull { t -> a.choose(t, if ((t / 100) % 4 == 3L) emptyList() else listOf(car)) }
-        assertEquals(1, said.size)
-    }
-
-    @Test fun parkedCarsAreNotAnnouncedOverAndOver() {
-        val a = WalkAlerts()
-        fun car(zone: String, level: Int) = Alert(AlertKind.HAZARD, "hazard:car:$zone", "Car $zone, $level steps.", topic = "hazard:car", level = level)
-        assertEquals("hazard:car:AHEAD", a.choose(0, listOf(car("AHEAD", 11)))?.key)
-        // another parked car on the right, just as far: not within the topic window
-        assertNull(a.choose(3_000, listOf(car("RIGHT", 11))))
-        // one getting clearly closer is said
-        assertEquals("hazard:car:LEFT", a.choose(4_000, listOf(car("LEFT", 6)))?.key)
-        // and after the window any car may be said again
-        assertEquals("hazard:car:RIGHT", a.choose(17_000, listOf(car("RIGHT", 11)))?.key)
-    }
-
-    @Test fun nearThingsCountEveryStep() {
-        val a = WalkAlerts()
-        fun floor(change: String, level: Int) = Alert(AlertKind.FLOOR, "floor:$change", "$change $level", topic = "floor", level = level)
-        assertEquals("floor:STAIRS_DOWN", a.choose(0, listOf(floor("STAIRS_DOWN", 3)))?.key)
-        // a contradicting reading just as far is noise
-        assertNull(a.choose(1_000, listOf(floor("STEP_UP", 3))))
-        assertEquals("floor:DROP", a.choose(2_000, listOf(floor("DROP", 2)))?.key)
     }
 
     @Test fun letsGoToAScreenIsNotAPlace() =

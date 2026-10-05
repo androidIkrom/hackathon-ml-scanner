@@ -1,5 +1,6 @@
 package com.nungil.core.search
 
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -15,18 +16,25 @@ class SearchPhrasesTest {
     @Test fun particlesFollowTheName() {
         assertEquals("의자를 찾고 있어요.", SearchPhrases.looking("의자", Lang.KO))
         assertEquals("Ali를 찾고 있어요.", SearchPhrases.looking("Ali", Lang.KO))
-        assertEquals("민준이 정면에 있어요.", SearchPhrases.where("민준", Zone.AHEAD, Lang.KO))
-        assertEquals("의자가 왼쪽 끝에 있어요.", SearchPhrases.where("의자", Zone.FAR_LEFT, Lang.KO))
+        assertEquals("민준이 앞에 있어요.", SearchPhrases.where("민준", Zone.AHEAD, DirectionStyle.WORDS, Lang.KO))
+        assertEquals("의자가 왼쪽에 있어요.", SearchPhrases.where("의자", Zone.FAR_LEFT, DirectionStyle.WORDS, Lang.KO))
     }
 
     @Test fun englishZones() {
-        assertEquals("backpack ahead.", SearchPhrases.where("backpack", Zone.AHEAD, Lang.EN))
-        assertEquals("Ali on your left.", SearchPhrases.where("Ali", Zone.LEFT, Lang.EN))
-        assertEquals("cup far right.", SearchPhrases.where("cup", Zone.FAR_RIGHT, Lang.EN))
+        assertEquals("backpack ahead.", SearchPhrases.where("backpack", Zone.AHEAD, DirectionStyle.WORDS, Lang.EN))
+        assertEquals("Ali slightly left.", SearchPhrases.where("Ali", Zone.LEFT, DirectionStyle.WORDS, Lang.EN))
+        assertEquals("cup on your right.", SearchPhrases.where("cup", Zone.FAR_RIGHT, DirectionStyle.WORDS, Lang.EN))
     }
 
     @Test fun unknown() {
         assertEquals("I don't know that. Say it another way.", SearchPhrases.unknown(Lang.EN))
         assertEquals("잘 모르겠어요. 다르게 말해 주세요.", SearchPhrases.unknown(Lang.KO))
+    }
+
+    @Test fun findDirectionsInWordsAndHours() {
+        assertEquals("Cup slightly left.", SearchPhrases.where("Cup", Zone.LEFT, DirectionStyle.WORDS, Lang.EN))
+        assertEquals("Cup on your left.", SearchPhrases.where("Cup", Zone.FAR_LEFT, DirectionStyle.WORDS, Lang.EN))
+        assertEquals("Cup at 1 o'clock.", SearchPhrases.where("Cup", Zone.FAR_RIGHT, DirectionStyle.CLOCK, Lang.EN))
+        assertEquals("컵이 조금 왼쪽에 있어요.", SearchPhrases.where("컵", Zone.LEFT, DirectionStyle.WORDS, Lang.KO))
     }
 }

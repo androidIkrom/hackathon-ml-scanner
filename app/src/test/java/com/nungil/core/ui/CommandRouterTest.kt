@@ -66,4 +66,9 @@ class CommandRouterTest {
         assertEquals(LanguageChoice.ENGLISH, AppLanguage.choiceOf("en"))
         assertEquals(LanguageChoice.KOREAN, AppLanguage.forLang(Lang.KO))
     }
+
+    @Test fun clockDirectionsIsGlobal() {
+        assertEquals(true, CommandRouter.isGlobal(VoiceCommand.ClockDirections(true)))
+        assertEquals(Route.SetClockDirections(false), CommandRouter.route(VoiceCommand.ClockDirections(false)))
+    }
 }

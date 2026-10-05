@@ -21,11 +21,14 @@ import com.nungil.contract.app.VisionFrame
 import com.nungil.contract.app.CameraScreen
 import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.services
-import com.nungil.core.search.SearchGuide
 import com.nungil.core.scan.ScanPhrases
+import com.nungil.core.search.FindVoice
+import com.nungil.core.search.SearchGuide
 import com.nungil.core.search.SearchPhrases
 import com.nungil.core.search.SearchTracker
 import com.nungil.core.search.TargetType
+import com.nungil.core.search.Zone
+import com.nungil.core.ui.Notice
 import com.nungil.databinding.SearchCameraFragmentBinding
 import com.nungil.scan.CameraSession
 import com.nungil.scan.OverlayView
@@ -57,6 +60,9 @@ class SearchCameraFragment : Fragment(), CameraScreen {
     private val busy = AtomicBoolean(false)
     private val matcher = AtomicReference<TargetMatcher?>(null)
     private val tracker = SearchTracker()
+
+    // Guarded by tracker: frames are handled on the analysis or the extras thread.
+    private val voice = FindVoice()
 
     @Volatile
     private var lastPulseMs = -1L
@@ -108,7 +114,7 @@ class SearchCameraFragment : Fragment(), CameraScreen {
             }
             matcher.set(created)
         }
-        services.speaker.sayNow(SearchPhrases.looking(spokenName, lang))
+        sayOwn(SearchPhrases.looking(spokenName, lang))
     }
 
     override fun onResume() {
@@ -154,13 +160,19 @@ class SearchCameraFragment : Fragment(), CameraScreen {
         paused = true
         services.beeper.stop()
         lastPulseMs = -1L
-        services.speaker.sayNow(ScanPhrases.paused(lang))
+        sayOwn(ScanPhrases.paused(lang))
     }
 
     override fun resume() {
         if (_binding == null || !paused) return
         paused = false
-        services.speaker.sayNow(SearchPhrases.looking(spokenName, lang))
+        sayOwn(SearchPhrases.looking(spokenName, lang))
+    }
+
+    /** A sentence of the screen's own: said at once, and a place held back for later is dropped, not said over it. */
+    private fun sayOwn(text: String) {
+        synchronized(tracker) { voice.said(SystemClock.elapsedRealtime(), text) }
+        services.speaker.sayNow(text)
     }
 
     private fun startCamera() {
@@ -221,11 +233,26 @@ class SearchCameraFragment : Fragment(), CameraScreen {
             services.beeper.pulse(pulse)
         }
         if (update.enteredCenter) services.haptics.buzz(Buzz.CENTERED)
-        when (val say = update.say) {
-            is SearchTracker.Say.Where -> services.speaker.say(SearchPhrases.where(spokenName, say.zone, lang))
-            SearchTracker.Say.Lost -> services.speaker.say(SearchPhrases.lost(lang))
-            null -> Unit
+        // The tracker says when the target's place is worth saying; FindVoice, when it is said (no queue, no
+        // talking over).
+        val now = SystemClock.elapsedRealtime()
+        val chosen = synchronized(tracker) {
+            when (val say = update.say) {
+                is SearchTracker.Say.Where -> voice.heard(
+                    Notice(
+                        "find:${say.zone}",
+                        SearchPhrases.where(spokenName, say.zone, services.directionStyle, lang),
+                        0,
+                        ahead = say.zone == Zone.AHEAD,
+                    ),
+                    now,
+                )
+                SearchTracker.Say.Lost -> voice.heard(Notice("find:lost", SearchPhrases.lost(lang), 0), now)
+                null -> Unit
+            }
+            voice.next(now)
         }
+        chosen?.let { services.speaker.sayNow(it.text) }
 
         val marks = frame.detections.filter { it.box != target }.map { OverlayView.Mark(it.box, null, OverlayView.Style.DIM) } +
             listOfNotNull(target?.let { OverlayView.Mark(it, spokenName, OverlayView.Style.TARGET) })

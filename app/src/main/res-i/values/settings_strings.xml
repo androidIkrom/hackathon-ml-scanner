@@ -24,6 +24,7 @@
     <string name="settings_language_korean">한국어</string>
     <string name="settings_high_contrast">High contrast</string>
     <string name="settings_voice_guide">Read what I touch</string>
+    <string name="settings_clock_directions">Clock directions</string>
     <string name="settings_learner">Learner mode</string>
 
     <string name="history_headline">History</string>

@@ -12,6 +12,7 @@ sealed interface Route {
     data object RepeatLast : Route
     data class SpeakHelp(val topic: String?) : Route
     data class SetLearner(val on: Boolean) : Route
+    data class SetClockDirections(val on: Boolean) : Route
     data object StopListening : Route
     data class SwitchLanguage(val lang: Lang) : Route
     data class OpenAndSay(val dest: Dest, val phrase: Phrase) : Route
@@ -28,7 +29,8 @@ object CommandRouter {
         command == VoiceCommand.Repeat ||
             command == VoiceCommand.StopListening ||
             command is VoiceCommand.SetLanguage ||
-            command is VoiceCommand.Learner
+            command is VoiceCommand.Learner ||
+            command is VoiceCommand.ClockDirections
 
     fun route(command: VoiceCommand): Route = when (command) {
         is VoiceCommand.Go -> Route.Open(command.dest)
@@ -36,6 +38,7 @@ object CommandRouter {
         VoiceCommand.Repeat -> Route.RepeatLast
         is VoiceCommand.Help -> Route.SpeakHelp(command.topic)
         is VoiceCommand.Learner -> Route.SetLearner(command.on)
+        is VoiceCommand.ClockDirections -> Route.SetClockDirections(command.on)
         VoiceCommand.StopListening -> Route.StopListening
         is VoiceCommand.SetLanguage -> Route.SwitchLanguage(command.lang)
         VoiceCommand.ReadText -> Route.Open(Dest.Reader)

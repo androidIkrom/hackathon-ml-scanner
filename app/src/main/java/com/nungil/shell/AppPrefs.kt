@@ -25,6 +25,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_VOICE_GUIDE_ON, true)
         set(value) = prefs.edit().putBoolean(KEY_VOICE_GUIDE_ON, value).apply()
 
+    /** Directions as clock hours ("at 10 o'clock") instead of words, on every screen. */
+    var clockDirections: Boolean
+        get() = prefs.getBoolean(KEY_CLOCK_DIRECTIONS, false)
+        set(value) = prefs.edit().putBoolean(KEY_CLOCK_DIRECTIONS, value).apply()
+
     var onboarded: Boolean
         get() = prefs.getBoolean(KEY_ONBOARDED, false)
         set(value) = prefs.edit().putBoolean(KEY_ONBOARDED, value).apply()
@@ -44,6 +49,7 @@ class AppPrefs(context: Context) {
         const val KEY_LEARNER_ON = "learner_on"
         const val KEY_VOICE_GUIDE_ON = "voice_guide_on"
         const val KEY_ONBOARDED = "onboarded"
+        const val KEY_CLOCK_DIRECTIONS = "clock_directions"
         const val KEY_PENDING = "pending_announcement"
     }
 }

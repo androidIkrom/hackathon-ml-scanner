@@ -4,6 +4,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.LifecycleOwner
 import com.nungil.contract.Buzz
 import com.nungil.contract.Dest
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
 import com.nungil.contract.VoiceCommand
 
@@ -11,9 +12,6 @@ import com.nungil.contract.VoiceCommand
 interface Speaker {
     /** Queue [text]. Keeps a 1.5 s gap; drops the oldest pending items when more than 3 wait. */
     fun say(text: String)
-
-    /** Queue news of the moment: joined with news still waiting, and said after a short gap. */
-    fun sayLive(text: String) = say(text)
 
     /** Drop everything queued and speak [text] immediately. */
     fun sayNow(text: String)
@@ -62,6 +60,9 @@ interface AppServices {
     val haptics: Haptics
     val beeper: Beeper
     val navigator: AppNavigator
+
+    /** How directions are said (Settings: clock directions). Read it for each sentence: it can change any time. */
+    val directionStyle: DirectionStyle
 
     /**
      * The next words the user says (text that does not parse as a command) go to [onText], once, on the
