@@ -138,8 +138,8 @@ class SearchCameraFragment : Fragment(), VoiceHandler {
             services.navigator.back()
             true
         }
-        VoiceCommand.SwitchCamera -> {
-            camera?.switchCamera()
+        is VoiceCommand.SwitchCamera -> {
+            camera?.useCamera(command.to)
             true
         }
         else -> false

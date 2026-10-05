@@ -14,6 +14,12 @@ object ItemMatcher {
     const val FIND_THRESHOLD = 0.55f
 
     /**
+     * A scan names a saved item from the same score that finds it: at [THRESHOLD] a live scan named none, though
+     * a bottle and a remote that were saved stood in view (the logs). Other things scored 0.29 at most (measured).
+     */
+    const val TAG_THRESHOLD = FIND_THRESHOLD
+
+    /**
      * Once the item is found it is kept at a lower score, so it is not lost and found again with every frame:
      * a remote on a table scored 0.47 to 0.61 while the phone pointed at it, and at most 0.32 when it did not
      * (the logs).

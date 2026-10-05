@@ -37,7 +37,7 @@ class CommandRouterTest {
     }
 
     @Test fun unhandledScreenActionsSayNotHere() {
-        for (c in listOf(VoiceCommand.Start, VoiceCommand.SwitchCamera, VoiceCommand.Delete)) {
+        for (c in listOf(VoiceCommand.Start, VoiceCommand.SwitchCamera(), VoiceCommand.Delete)) {
             assertEquals(Route.Say(Phrase.NOT_HERE), CommandRouter.route(c))
         }
     }

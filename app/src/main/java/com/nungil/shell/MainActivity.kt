@@ -165,6 +165,9 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     /** When the user's voice last cut the app's own speech off (SpeechStop). */
     private var speechCutAt = Long.MIN_VALUE / 2
+
+    /** When a bare "stop" last silenced the talking only (SpeechStop.talkingOnly). */
+    private var talkStopAt = Long.MIN_VALUE / 2
     private var downX = 0f
     private var downY = 0f
     private var downAt = 0L
@@ -208,6 +211,12 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         super.onCreate(savedInstanceState)
         // Changing the language recreates the activity: stay awake through it.
         if (savedInstanceState?.getBoolean(STATE_AWAKE) == true) awakeState.value = true
+        // The wake word is the way in, so every opening of the app listens for it: the microphone turned off
+        // stayed off, and "Eye start" went unheard with nothing to say why (the logs). Off lasts this visit only.
+        if (savedInstanceState == null && !prefs.voiceOn) {
+            Log.i(TAG, "Microphone on again: the app was opened")
+            prefs.voiceOn = true
+        }
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         // targetSdk 35 draws edge-to-edge on Android 15: keep content out from under the system bars.
@@ -464,9 +473,16 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         // Said while the app is quiet, or with more to it ("stop navigation"), it stops the screen as before.
         val talking = tts.recentSpeech() != null || SystemClock.elapsedRealtime() - speechCutAt < SPEECH_CUT_MS
         if (SpeechStop.isBare(text) && talking) {
-            Log.i(TAG, "Stop: the speech only")
-            silenceAll()
-            return
+            val now = SystemClock.elapsedRealtime()
+            if (SpeechStop.talkingOnly(now - talkStopAt)) {
+                talkStopAt = now
+                Log.i(TAG, "Stop: the speech only")
+                silenceAll()
+                return
+            }
+            // Said again: the screen stops too.
+            talkStopAt = Long.MIN_VALUE / 2
+            Log.i(TAG, "Stop again: the screen too")
         }
         val claim = dictation
         if (claim != null && command is VoiceCommand.Unknown) {
@@ -490,6 +506,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     private fun onVoiceProblem(phrase: Phrase) {
         if (phrase == Phrase.MIC_NEEDED || phrase == Phrase.VOICE_UNAVAILABLE) {
+            Log.i(TAG, "Microphone off: $phrase")
             prefs.voiceOn = false
             voiceOnState.value = false
         }
@@ -588,7 +605,11 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         val onAnswer: (String) -> Unit = { answer ->
             helpAsked = null
             Log.i(TAG, "Instructions offered, answer \"$answer\"")
-            if (HelpAnswer.of(answer) == true) tts.say(helpText(null))
+            when (HelpAnswer.of(answer)) {
+                true -> tts.say(helpText(null))
+                false -> tts.say(TapHelpOffer.declined(lang))
+                null -> Unit
+            }
         }
         helpAsked = onAnswer
         askForWords(owner, onAnswer)
@@ -645,6 +666,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             talkNow()
             return
         }
+        Log.i(TAG, "Microphone off by the user")
         silenceAll()
         awakeState.value = false
         prefs.voiceOn = false

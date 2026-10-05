@@ -54,4 +54,9 @@ class TapHelpOfferTest {
         assertEquals("Do you want instructions for this screen?", TapHelpOffer.question(Lang.EN))
         assertEquals("이 화면 사용법을 알려 드릴까요?", TapHelpOffer.question(Lang.KO))
     }
+
+    @Test fun aNoIsAnswered() {
+        assertEquals("OK.", TapHelpOffer.declined(Lang.EN))
+        assertEquals("알겠어요.", TapHelpOffer.declined(Lang.KO))
+    }
 }

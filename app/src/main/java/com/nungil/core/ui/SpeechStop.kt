@@ -25,4 +25,13 @@ object SpeechStop {
         val words = said.filterIndexed { i, w -> i == 0 || w != said[i - 1] }
         return words.isNotEmpty() && (words.joinToString(" ") in EN || words.joinToString("") in KO)
     }
+
+    /** A bare stop within this long of the last one that silenced the talking stops the screen as well. */
+    const val AGAIN_MS = 8_000L
+
+    /**
+     * Whether a bare stop said while the app talks stops the talking only. Said again soon after, it means the
+     * screen: a live scan kept scanning through three "stop"s 2 and 3 s apart, each taken as "be quiet" (the logs).
+     */
+    fun talkingOnly(msSinceLastTalkStop: Long): Boolean = msSinceLastTalkStop >= AGAIN_MS
 }

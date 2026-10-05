@@ -34,7 +34,14 @@ class ScanSession(
         val wasPerson: Boolean = false,
     )
 
-    class Step(val phrases: List<String>, val coveragePercent: Int, val bins: BooleanArray, val done: Boolean)
+    /** [phrases] are notices to say in turn; [news] names the things confirmed in this frame (Speaker.sayLive). */
+    class Step(
+        val phrases: List<String>,
+        val coveragePercent: Int,
+        val bins: BooleanArray,
+        val done: Boolean,
+        val news: List<String> = emptyList(),
+    )
 
     private val clusterer = ObjectClusterer()
     private val coverage = CoverageTracker()
@@ -69,15 +76,16 @@ class ScanSession(
             FrameDetection(it.label, BoxGeometry.objectAngle(rel, it.centerX, hfovDeg, facing), it.color, it.isName, it.wasPerson)
         }
         val confirmedNow = clusterer.addFrame(detections)
+        val news = mutableListOf<String>()
         if (announcesLive) {
             for (o in confirmedNow) {
-                phrases += SummaryBuilder.livePhrase(o.copy(angle = AngleMath.diff(o.angle, rel)), lang, colorsOn)
+                news += SummaryBuilder.livePhrase(o.copy(angle = AngleMath.diff(o.angle, rel)), lang, colorsOn)
             }
         }
         if (!done && mode == ScanMode.FULL && !noCompass && startHeading != null) {
             done = coverage.isComplete() || nowMs - startedAtMs >= timeoutMs
         }
-        return Step(phrases, coverage.percent(), coverage.bins(), done)
+        return Step(phrases, coverage.percent(), coverage.bins(), done, news)
     }
 
     /** The summary and objects, turned so that "in front" is where the user faces now. */
