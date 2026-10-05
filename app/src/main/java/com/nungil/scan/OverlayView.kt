@@ -22,11 +22,7 @@ class OverlayView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
 ) : View(context, attrs) {
 
-    /**
-     * [LABEL]: the name only, at the middle of [Mark.box]. For a saved item found by its look the box is the square
-     * searched, not the thing: drawn as a box it sat beside the thing or around much more (2026-10-05).
-     */
-    enum class Style { NORMAL, TARGET, DIM, LABEL }
+    enum class Style { NORMAL, TARGET, DIM }
 
     /** [text] null draws the box without a label. */
     data class Mark(val box: Box, val text: String?, val style: Style = Style.NORMAL)
@@ -78,15 +74,9 @@ class OverlayView @JvmOverloads constructor(
             val r = OverlayMath.toView(mark.box, imageWidth, imageHeight, width, height, mirrored)
             rect.set(r.left, r.top, r.right, r.bottom)
             val color = when (mark.style) {
-                Style.NORMAL, Style.LABEL -> primary
+                Style.NORMAL -> primary
                 Style.TARGET -> focus
                 Style.DIM -> line
-            }
-            if (mark.style == Style.LABEL) {
-                val text = mark.text ?: continue
-                val width = textPaint.measureText(text) + pillPadding() * 2
-                drawPill(canvas, text, rect.centerX() - width / 2f, rect.centerY() - pillHeight() / 2f, color, onPrimary)
-                continue
             }
             if (mark.style == Style.TARGET) {
                 fillPaint.color = Color.argb(TARGET_FILL_ALPHA, Color.red(focus), Color.green(focus), Color.blue(focus))
@@ -96,24 +86,16 @@ class OverlayView @JvmOverloads constructor(
             strokePaint.strokeWidth = (if (mark.style == Style.TARGET) 6f else 3f) * density
             canvas.drawRoundRect(rect, corner, corner, strokePaint)
             val text = mark.text ?: continue
-            val top = (rect.top - pillHeight()).coerceAtLeast(0f)
-            drawPill(canvas, text, rect.left, top, color, if (mark.style == Style.DIM) primary else onPrimary)
+            val padding = 8f * density
+            val textWidth = textPaint.measureText(text)
+            val pillHeight = textPaint.textSize + padding * 2
+            val top = (rect.top - pillHeight).coerceAtLeast(0f)
+            pill.set(rect.left, top, rect.left + textWidth + padding * 2, top + pillHeight)
+            pillPaint.color = color
+            canvas.drawRoundRect(pill, pillHeight / 2, pillHeight / 2, pillPaint)
+            textPaint.color = if (mark.style == Style.DIM) primary else onPrimary
+            canvas.drawText(text, pill.left + padding, pill.bottom - padding - textPaint.descent() / 2, textPaint)
         }
-    }
-
-    private fun pillPadding() = 8f * density
-
-    private fun pillHeight() = textPaint.textSize + pillPadding() * 2
-
-    /** A label in a rounded pill whose top left corner is at ([left], [top]). */
-    private fun drawPill(canvas: Canvas, text: String, left: Float, top: Float, color: Int, textColor: Int) {
-        val padding = pillPadding()
-        val height = pillHeight()
-        pill.set(left, top, left + textPaint.measureText(text) + padding * 2, top + height)
-        pillPaint.color = color
-        canvas.drawRoundRect(pill, height / 2, height / 2, pillPaint)
-        textPaint.color = textColor
-        canvas.drawText(text, pill.left + padding, pill.bottom - padding - textPaint.descent() / 2, textPaint)
     }
 
     private companion object {
