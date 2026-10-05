@@ -90,6 +90,9 @@ class ItemSearch(
                 if (score >= ItemMatcher.KEEP_THRESHOLD && score < needs && cutsLeft-- > 0) cut(square) else null
             }
         }
+        // Find keeps its one item at the lower score once found; a live scan names any item by its look only from
+        // LIVE_FIND_THRESHOLD, every time (a false find kept at 0.45 stayed 20 s, the logs).
+        val keepNeeds = if (only == null) LIVE_FIND_THRESHOLD else ItemMatcher.KEEP_THRESHOLD
         // All saved items: the whole frame on every other call, the boxes and the near squares on each.
         val wholeFrameNow = only != null || allCalls++ % 2 == 0
         val targets = (if (only != null) listOf(only) else names.keys).map { ItemMatcher.sameName(it, names) }.distinct()
@@ -125,14 +128,14 @@ class ItemSearch(
         for ((key, kept) in last.entries.sortedByDescending { it.value.second }.take(MAX_NEAR).map { it.key to it.value.first }) {
             val target = byKey[key] ?: continue
             if (key in hits) continue
-            val trace = traces.getOrPut(key) { Trace(ItemMatcher.KEEP_THRESHOLD) }
+            val trace = traces.getOrPut(key) { Trace(keepNeeds) }
             val near = ItemWindows.near(kept)
             val scores = FloatArray(near.size) { score(match(near[it]), target) }
             val best = scores.indices.maxBy { scores[it] }
             looked += near.size
             trace.scored += fmt("near %.2f", scores[best])
             if (scores[best] >= ItemMatcher.LOOK_CLOSER) {
-                trace.verdict = judge(near[best], scores[best], ItemMatcher.KEEP_THRESHOLD, target, thingIn).also { record(key, it) }
+                trace.verdict = judge(near[best], scores[best], keepNeeds, target, thingIn).also { record(key, it) }
             }
         }
 
@@ -152,7 +155,7 @@ class ItemSearch(
                     scores = s
                 }
             }
-            val needs = if (key in last) ItemMatcher.KEEP_THRESHOLD else ItemMatcher.FIND_THRESHOLD
+            val needs = if (only == null) LIVE_FIND_THRESHOLD else if (key in last) ItemMatcher.KEEP_THRESHOLD else ItemMatcher.FIND_THRESHOLD
             val trace = traces.getOrPut(key) { Trace(needs) }
             val wide = wholeFrame(windows, scores, needs, open.getValue(key), match, thingIn)
             looked += wide.looked
@@ -248,13 +251,20 @@ class ItemSearch(
 
     private fun fmt(pattern: String, vararg args: Any): String = String.format(Locale.US, pattern, *args)
 
-    private companion object {
-        const val PERSON = "person"
+    companion object {
+        private const val PERSON = "person"
+
+        /**
+         * A live scan looks for every saved item at once, so a square has many chances to look like one of them: a
+         * cable was "My glass" at 0.53 to 0.56 and kept for 20 s (the logs). Things there name an item by its look
+         * from this score, every time; the items it named rightly scored 0.57 to 0.64 (the logs).
+         */
+        const val LIVE_FIND_THRESHOLD = 0.58f
 
         /** How many items found by the last call are looked for near where they were. */
-        const val MAX_NEAR = 2
+        private const val MAX_NEAR = 2
 
         /** A detector box up to this many times the found place's area may be the thing's own box. */
-        const val MAX_BOX_SHARE = 1.5f
+        private const val MAX_BOX_SHARE = 1.5f
     }
 }

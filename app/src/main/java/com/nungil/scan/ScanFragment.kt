@@ -306,7 +306,7 @@ class ScanFragment : Fragment(), CameraScreen {
         }
         logSeen(frame, usable, names, found)
         val marks = usable.mapIndexed { i, d -> OverlayView.Mark(d.box, names[i]?.name ?: LabelNames.name(d.label, lang)) } +
-            found.map { OverlayView.Mark(it.box, it.name) }
+            found.map { OverlayView.Mark(it.box, it.name, OverlayView.Style.LABEL) }
         main.post { render(frame, marks, step) }
         runTaggers(frame, check)
     }

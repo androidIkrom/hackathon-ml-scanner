@@ -202,8 +202,9 @@ class ItemSearchTest {
         val s = finder(all, Reach.BOXES_AND_NEAR)
         val first = Scene { if (it == leftSquare) ItemMatcher.Match(bottle, 0.6f) else ItemMatcher.Match(other, 0.2f) }
         assertEquals(1, search(s, first, only = null, detections = listOf(Detection("bottle", 0.8f, left))).hits.size)
-        // The detector lost the box: the bottle is kept near its square at 0.45, without the whole frame.
-        val next = Scene { if (nearLeft(it)) ItemMatcher.Match(bottle, 0.47f) else ItemMatcher.Match(other, 0.2f) }
+        // The detector lost the box: the bottle is found again near its square, without the whole frame (a live
+        // scan and Walk need LIVE_FIND_THRESHOLD there; only Find keeps its item at 0.45).
+        val next = Scene { if (nearLeft(it)) ItemMatcher.Match(bottle, 0.6f) else ItemMatcher.Match(other, 0.2f) }
         assertEquals(listOf(bottle), search(s, next, only = null).hits.map { it.id })
         assertTrue("near squares only: ${next.calls}", next.calls <= 9)
     }
@@ -233,8 +234,8 @@ class ItemSearchTest {
         assertEquals(2, search(s, both, only = null, detections = listOf(Detection("bottle", 0.8f, left))).hits.size)
         val kept = Scene {
             when {
-                centreIn(it, left) -> ItemMatcher.Match(bottle, 0.5f)
-                centreIn(it, right) -> ItemMatcher.Match(towel, 0.5f)
+                centreIn(it, left) -> ItemMatcher.Match(bottle, 0.6f)
+                centreIn(it, right) -> ItemMatcher.Match(towel, 0.6f)
                 else -> ItemMatcher.Match(other, 0.2f)
             }
         }
@@ -299,6 +300,22 @@ class ItemSearchTest {
         cuts = 0
         assertEquals(ItemMatcher.Seen.BY_SQUARES, search(finder(), cupAt(0.6f), only = null, cut = { cuts++; thing }).hits.single().seen)
         assertEquals(0, cuts)
+    }
+
+    // ---- Live is stricter than Find (device 2026-10-05 22:08: a cable was "My glass" for 20 s) ----------------
+
+    @Test fun liveNeedsMoreThanFindToNameAThingByItsLook() {
+        assertTrue(search(finder(), cupAt(0.56f), only = null).hits.isEmpty())
+        assertEquals(1, search(finder(), cupAt(0.56f)).hits.size)
+        assertEquals(1, search(finder(), cupAt(ItemSearch.LIVE_FIND_THRESHOLD + 0.01f), only = null).hits.size)
+    }
+
+    @Test fun liveKeepsNothingBelowItsThreshold() {
+        // Find keeps the one item asked for at 0.45 once found; a live scan does not: a false find stayed 20 s.
+        val s = finder(reach = Reach.BOXES_AND_NEAR)
+        val first = Scene { if (it == ItemWindows.square(place, W, H)) ItemMatcher.Match(cup, 0.7f) else ItemMatcher.Match(other, 0.2f) }
+        assertEquals(1, search(s, first, only = null, detections = listOf(Detection("cup", 0.7f, place))).hits.size)
+        assertTrue(search(s, cupAt(0.5f), only = null).hits.isEmpty())
     }
 
     private companion object {
