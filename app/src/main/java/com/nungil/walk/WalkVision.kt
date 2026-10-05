@@ -422,7 +422,7 @@ class WalkVision(
         if (taggers.isEmpty()) return emptyList()
         val frame = VisionFrame(detections, bitmap, bitmap.width, bitmap.height, Facing.BACK, null, HFOV_DEG, SystemClock.elapsedRealtime(), 0)
         return taggers.flatMap { t -> runCatching { t.tag(frame) }.getOrDefault(emptyList()) }
-            .mapNotNull { tag -> detections.getOrNull(tag.detectionIndex)?.let { tag.name to DepthGrid.zoneOf(it.box.centerX) } }
+            .mapNotNull { tag -> (tag.box ?: detections.getOrNull(tag.detectionIndex)?.box)?.let { tag.name to DepthGrid.zoneOf(it.centerX) } }
     }
 
     private fun readSign(bitmap: Bitmap): String? = runCatching {

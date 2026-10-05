@@ -36,6 +36,7 @@ import com.nungil.contract.app.TagKind
 import com.nungil.contract.app.VisionFrame
 import com.nungil.contract.app.VoiceHandler
 import com.nungil.contract.app.services
+import com.nungil.core.items.Reach
 import com.nungil.core.lang.LabelNames
 import com.nungil.core.scan.BoxGeometry
 import com.nungil.core.scan.ColorPolicy
@@ -201,7 +202,7 @@ class ScanFragment : Fragment(), VoiceHandler {
         val app = requireContext().applicationContext
         extras?.execute {
             taggers = try {
-                createNameTaggers(app, itemsByLook = true)
+                createNameTaggers(app, Reach.WHOLE_FRAME)
             } catch (t: Throwable) {
                 Log.i(TAG, "Name taggers unavailable: ${t.message}")
                 emptyList()
