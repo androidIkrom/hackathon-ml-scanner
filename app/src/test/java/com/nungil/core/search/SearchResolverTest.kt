@@ -125,4 +125,28 @@ class SearchResolverTest {
         assertEquals(2, SearchResolver.distance("alisha", "alisher"))
         assertEquals(3, SearchResolver.distance("", "abc"))
     }
+
+    // ---- A name of filler words ("My", "Me") -------------------------------------------------------------------
+
+    private val my = SavedName(20, "My", TargetType.PERSON, "person")
+    private val charger = SavedName(21, "My charger test one", TargetType.ITEM, "object")
+
+    @Test fun theLongerNameBeatsAFillerName() {
+        // "Find my charger" looked for the person "My" (the logs).
+        assertEquals(charger.id, SearchResolver.resolve("my charger", listOf(my, charger), Lang.EN)?.id)
+    }
+
+    @Test fun aFillerNameAloneIsStillFound() {
+        assertEquals(my.id, SearchResolver.resolve("my", listOf(my, charger), Lang.EN)?.id)
+        assertEquals(me.id, SearchResolver.resolve("find me", saved, Lang.EN)?.id)
+    }
+
+    @Test fun aLabelBeatsAFillerName() =
+        assertEquals("backpack", SearchResolver.resolve("my bag", listOf(my), Lang.EN)?.label)
+
+    @Test fun mostWordsWin() {
+        val blackBox = SavedName(22, "Black box", TargetType.ITEM, "object")
+        val myBlackBox = SavedName(23, "My black box", TargetType.ITEM, "object")
+        assertEquals(myBlackBox.id, SearchResolver.resolve("my black box", listOf(blackBox, myBlackBox), Lang.EN)?.id)
+    }
 }
