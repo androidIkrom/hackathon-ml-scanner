@@ -30,6 +30,9 @@ import com.nungil.contract.Buzz
 import com.nungil.contract.Facing
 import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppServices
+import com.nungil.contract.app.CameraScreen
+import com.nungil.contract.app.SwitchableCamera
+import com.nungil.contract.app.VisionFrame
 import com.nungil.contract.app.VoiceHandler
 import com.nungil.contract.app.services
 import com.nungil.core.walk.Alert
@@ -73,7 +76,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * Without ARCore it falls back to CameraX detections only. Speech priority: floor change, hazard,
  * ground, traffic light, saved thing, sign, code, navigation, beacon. It never says "safe".
  */
-class WalkFragment : Fragment(), VoiceHandler {
+class WalkFragment : Fragment(), VoiceHandler, CameraScreen {
 
     private var _binding: WalkingFragmentBinding? = null
     private val binding get() = _binding!!
@@ -445,24 +448,33 @@ class WalkFragment : Fragment(), VoiceHandler {
 
     // ---- voice ------------------------------------------------------------------------------------
 
+    override fun lastFrame(): VisionFrame? = if (::vision.isInitialized) vision.lastFrame() else null
+
+    /** ARCore owns the camera here: the back camera only. */
+    override val switchable: SwitchableCamera? get() = null
+
+    override val isWorking: Boolean get() = navigator != null || target != null || offer != null || running
+
+    override fun pause() {
+        if (_binding == null) return
+        if (navigator != null || target != null || offer != null) stopNavigation() else if (running) setRunning(false)
+    }
+
+    override fun resume() {
+        if (_binding == null) return
+        val asked = offer
+        if (asked != null) {
+            // "go" and "start" are commands, so they never reach the answer: here they mean yes.
+            onGoAnswer(asked, GoAnswer.Yes)
+        } else if (onGoSearch()) {
+            val q = goPanel.query()
+            if (q.isEmpty()) say(RoutePhrases.whereTo(services.lang)) else searchPlaces(q)
+        } else if (!running) {
+            setRunning(true)
+        }
+    }
+
     override fun onVoiceCommand(command: VoiceCommand): Boolean = when (command) {
-        VoiceCommand.Stop -> {
-            if (navigator != null || target != null || offer != null) stopNavigation() else if (running) setRunning(false)
-            true
-        }
-        VoiceCommand.Start -> {
-            val asked = offer
-            if (asked != null) {
-                // "go" and "start" are commands, so they never reach the answer: here they mean yes.
-                onGoAnswer(asked, GoAnswer.Yes)
-            } else if (onGoSearch()) {
-                val q = goPanel.query()
-                if (q.isEmpty()) say(RoutePhrases.whereTo(services.lang)) else searchPlaces(q)
-            } else if (!running) {
-                setRunning(true)
-            }
-            true
-        }
         // On the Go search step anything that is not a command is the place: "Seoul Station".
         is VoiceCommand.Unknown -> {
             val q = command.text.trim().trimEnd('.', '!', '?')

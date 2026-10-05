@@ -19,10 +19,11 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.nungil.R
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
-import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppServices
 import com.nungil.contract.app.VisionFrame
-import com.nungil.contract.app.VoiceHandler
+import com.nungil.core.scan.ScanPhrases
+import com.nungil.contract.app.CameraScreen
+import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.services
 import com.nungil.databinding.ReaderFragmentBinding
 import com.nungil.scan.CameraSession
@@ -37,7 +38,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Reads QR codes, barcodes and printed text aloud, every 1.5 s, never the same text twice within 10 s.
  * Version 1 reads Latin text only (Korean OCR needs an extra ML Kit model; see the Hand-offs).
  */
-class ReaderFragment : Fragment(), VoiceHandler {
+class ReaderFragment : Fragment(), CameraScreen {
     private var _binding: ReaderFragmentBinding? = null
     private val binding get() = _binding!!
     private val gate = CameraGate(this) { startCamera() }
@@ -73,7 +74,7 @@ class ReaderFragment : Fragment(), VoiceHandler {
         services = services()
         lang = services.lang
         ViewCompat.setAccessibilityHeading(binding.readerTitle, true)
-        binding.readerButton.setOnClickListener { if (running) pause() else resume() }
+        binding.readerButton.setOnClickListener { if (running) stopReading() else startReading() }
         gate.attach(binding.readerPermission)
         extras = Executors.newSingleThreadExecutor()
     }
@@ -105,16 +106,23 @@ class ReaderFragment : Fragment(), VoiceHandler {
         recognizer.close()
     }
 
-    override fun onVoiceCommand(command: VoiceCommand): Boolean = when (command) {
-        VoiceCommand.ReadText, VoiceCommand.Start -> {
-            resume()
-            true
-        }
-        VoiceCommand.Stop -> {
-            pause()
-            true
-        }
-        else -> false
+    @Volatile private var last: VisionFrame? = null
+
+    override fun lastFrame(): VisionFrame? = last
+
+    override val switchable: SwitchableCamera? get() = camera
+
+    override val isWorking: Boolean get() = running
+
+    override fun pause() {
+        if (_binding == null || !running) return
+        stopReading()
+        services.speaker.sayNow(ScanPhrases.paused(lang))
+    }
+
+    override fun resume() {
+        if (_binding == null) return
+        startReading()
     }
 
     private fun startCamera() {
@@ -123,12 +131,12 @@ class ReaderFragment : Fragment(), VoiceHandler {
         camera = CameraSession(this, binding.readerPreview, options, ::onFrame, ::onCameraError).also { it.start() }
     }
 
-    private fun pause() {
+    private fun stopReading() {
         running = false
         binding.readerButton.setText(R.string.reader_resume)
     }
 
-    private fun resume() {
+    private fun startReading() {
         running = true
         lastRunMs = 0L
         binding.readerButton.setText(R.string.reader_pause)
@@ -136,6 +144,7 @@ class ReaderFragment : Fragment(), VoiceHandler {
 
     /** Analysis thread. */
     private fun onFrame(frame: VisionFrame) {
+        last = frame
         if (!running) return
         val bitmap = frame.bitmap ?: return
         val now = SystemClock.elapsedRealtime()
