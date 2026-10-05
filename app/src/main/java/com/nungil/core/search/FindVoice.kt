@@ -12,14 +12,19 @@ import com.nungil.core.ui.Notice
 class FindVoice(rules: Announcer.Rules = Announcer.FIND) {
     private val announcer = Announcer(rules)
     private var pending: Notice? = null
+    private var heardAt = 0L
 
     /** The tracker's latest sentence, held until said. */
-    fun heard(notice: Notice) {
+    fun heard(notice: Notice, nowMs: Long) {
         pending = notice
+        heardAt = nowMs
     }
 
-    /** The sentence to say now, or null. */
-    fun next(nowMs: Long): Notice? = announcer.choose(nowMs, listOfNotNull(pending))?.also { pending = null }
+    /** The sentence to say now, or null. One held longer than [STALE_MS] is dropped: the target has moved on. */
+    fun next(nowMs: Long): Notice? {
+        if (pending != null && nowMs - heardAt > STALE_MS) pending = null
+        return announcer.choose(nowMs, listOfNotNull(pending))?.also { pending = null }
+    }
 
     fun pause() {
         pending = null
@@ -29,5 +34,10 @@ class FindVoice(rules: Announcer.Rules = Announcer.FIND) {
     fun said(nowMs: Long, text: String) {
         pending = null
         announcer.said(nowMs, text)
+    }
+
+    companion object {
+        /** A place held back this long is old news: held while the user talked, one was said 5 s late (the logs). */
+        const val STALE_MS = 3_000L
     }
 }

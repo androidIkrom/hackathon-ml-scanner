@@ -17,7 +17,7 @@ import java.util.Locale
  * 2. search with a payload ("find my bag", "가방 찾아줘");
  * 3. questions (who / what is this, help, "what is <topic>");
  * 4. adding a person, car or object, with the words that are not command words as the name;
- * 5. learner mode, then language;
+ * 5. clock directions, learner mode, then language;
  * 6. actions: stop, switch camera, read text, delete, back (verbs beat destinations: "stop full scan" stops);
  * 7. destinations, including known mishearings ("safe", "working mode", "fool scan", "light skin", bare "person");
  * 8. start and repeat;
@@ -33,6 +33,7 @@ object VoiceCommandParser {
             ?: search(s)
             ?: question(s)
             ?: adding(s)
+            ?: clockDirections(s)
             ?: learner(s)
             ?: language(s)
             ?: action(s)
@@ -265,6 +266,16 @@ object VoiceCommandParser {
     }
 
     // 5 ------------------------------------------------------------------------------------------------
+    /** "Clock directions on / off", "use clock directions", "directions in words"; "시계 방향 켜 / 꺼". */
+    private fun clockDirections(s: Said): VoiceCommand? {
+        if (s.has("clock") && s.has("direction", "directions", "hours")) {
+            return VoiceCommand.ClockDirections(on = !s.has("off", "disable", "stop", "no"))
+        }
+        if (s.has("direction", "directions") && s.has("words")) return VoiceCommand.ClockDirections(on = false)
+        if (s.ko("시계방향")) return VoiceCommand.ClockDirections(on = !s.ko("꺼", "끄", "중지", "그만"))
+        return null
+    }
+
     private fun learner(s: Said): VoiceCommand? {
         if (s.has("learner", "learning") || s.seq("tutorial", "mode") || s.seq("practice", "mode") || s.seq("training", "mode")) {
             return VoiceCommand.Learner(on = !s.has("off", "disable", "stop", "end"))

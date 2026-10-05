@@ -594,6 +594,10 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             Route.RepeatLast -> if (!tts.repeatLast()) say(Phrase.NOTHING_TO_REPEAT)
             is Route.SpeakHelp -> tts.sayNow(helpText(route.topic))
             is Route.SetLearner -> setLearner(route.on)
+            is Route.SetClockDirections -> {
+                prefs.clockDirections = route.on
+                say(if (route.on) Phrase.CLOCK_DIRECTIONS_ON else Phrase.CLOCK_DIRECTIONS_OFF)
+            }
             Route.StopListening -> setVoiceOn(false)
             is Route.SwitchLanguage -> setLanguage(AppLanguage.forLang(route.lang))
             is Route.OpenAndSay -> {

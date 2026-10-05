@@ -235,6 +235,7 @@ class SearchCameraFragment : Fragment(), CameraScreen {
         if (update.enteredCenter) services.haptics.buzz(Buzz.CENTERED)
         // The tracker says when the target's place is worth saying; FindVoice, when it is said (no queue, no
         // talking over).
+        val now = SystemClock.elapsedRealtime()
         val chosen = synchronized(tracker) {
             when (val say = update.say) {
                 is SearchTracker.Say.Where -> voice.heard(
@@ -244,11 +245,12 @@ class SearchCameraFragment : Fragment(), CameraScreen {
                         0,
                         ahead = say.zone == Zone.AHEAD,
                     ),
+                    now,
                 )
-                SearchTracker.Say.Lost -> voice.heard(Notice("find:lost", SearchPhrases.lost(lang), 0))
+                SearchTracker.Say.Lost -> voice.heard(Notice("find:lost", SearchPhrases.lost(lang), 0), now)
                 null -> Unit
             }
-            voice.next(SystemClock.elapsedRealtime())
+            voice.next(now)
         }
         chosen?.let { services.speaker.sayNow(it.text) }
 

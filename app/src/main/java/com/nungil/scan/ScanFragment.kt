@@ -25,6 +25,7 @@ import com.google.android.material.color.MaterialColors
 import com.nungil.R
 import com.nungil.contract.Box
 import com.nungil.contract.Buzz
+import com.nungil.contract.Detection
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
 import com.nungil.contract.ScanMode
@@ -55,11 +56,11 @@ import com.nungil.databinding.ScanFragmentBinding
 import com.nungil.databinding.ScanLogSheetBinding
 import com.nungil.people.createNameTaggers
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
 
@@ -152,12 +153,9 @@ class ScanFragment : Fragment(), CameraScreen {
                 toClose.forEach { runCatching { it.close() } }
                 runCatching { cls?.close() }
             }
+            // No waiting here: a saved-item search on the extras thread takes up to seconds, and waiting for it froze
+            // the screen for 1.5 s on the way out (the logs). The close task still runs last on that thread.
             ex.shutdown()
-            try {
-                if (!ex.awaitTermination(2, TimeUnit.SECONDS)) ex.shutdownNow()
-            } catch (e: InterruptedException) {
-                ex.shutdownNow()
-            }
         }
         taggers = emptyList()
         classifier = null
@@ -292,6 +290,7 @@ class ScanFragment : Fragment(), CameraScreen {
                 session?.onFrame(frame.timestampMs, frame.headingDeg, frame.hfovDeg, frame.facing, seen)
             }
         }
+        logSeen(frame, usable, names, found)
         val marks = usable.mapIndexed { i, d -> OverlayView.Mark(d.box, names[i]?.name ?: LabelNames.name(d.label, lang)) } +
             found.map { OverlayView.Mark(it.box, it.name) }
         main.post { render(frame, marks, step) }
@@ -312,6 +311,23 @@ class ScanFragment : Fragment(), CameraScreen {
         }
         announceInView(step.inView)
         if (step.done) stopScan()
+    }
+
+    // Analysis thread only.
+    private var lastSeenLogMs = 0L
+
+    /**
+     * Once a second, what the detector sees and which saved names stick: a laptop in view was never said, and the log
+     * could not tell whether it was not detected or renamed (2026-10-05).
+     */
+    private fun logSeen(frame: VisionFrame, usable: List<Detection>, names: List<StickyNames.Sticky?>, found: List<FoundPlaces.Place>) {
+        if (frame.timestampMs - lastSeenLogMs < SEEN_LOG_MS) return
+        lastSeenLogMs = frame.timestampMs
+        val seen = usable.mapIndexed { i, d ->
+            String.format(Locale.US, "%s %.2f", d.label, d.score) + (names[i]?.let { " [${it.name}]" } ?: "")
+        } + found.map { "[${it.name}] by look" }
+        val cut = frame.detections.size - usable.size
+        Log.i(TAG, "Live sees: " + seen.joinToString(", ").ifEmpty { "nothing" } + if (cut > 0) " ($cut at the edge)" else "")
     }
 
     /** Analysis thread: hand the frame to the name taggers when the extras thread is free. */
@@ -445,6 +461,8 @@ class ScanFragment : Fragment(), CameraScreen {
 
     private companion object {
         const val TAG = "Nungil"
+
+        const val SEEN_LOG_MS = 1_000L
 
         /** Let the spoken introduction start before the scan begins. */
         const val AUTO_START_MS = 1_500L

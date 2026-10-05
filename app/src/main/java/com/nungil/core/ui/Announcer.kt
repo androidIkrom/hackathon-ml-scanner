@@ -94,8 +94,11 @@ class Announcer(private val rules: Rules) {
         /** A thing in view is said once; out of view for 10 s and back, it is said again (the user's choice). */
         val LIVE = Rules(goneMs = 10_000L, repeatMs = 6_000L, topicRepeatMs = 12_000L)
 
-        /** Find's tracker already spaces its sentences (SearchTracker); this keeps them from talking over each other. */
-        val FIND = Rules(goneMs = 2_000L, repeatMs = 2_000L, topicRepeatMs = 12_000L)
+        /**
+         * Find's tracker already spaces its sentences (SearchTracker); this keeps them from talking over each other,
+         * and one sentence from coming twice within 6 s: in clock hours three zones are all "12 o'clock" (the logs).
+         */
+        val FIND = Rules(goneMs = 2_000L, repeatMs = 6_000L, topicRepeatMs = 12_000L)
 
         /** Within this many steps any step closer is worth saying. */
         const val NEAR_LEVEL = 3

@@ -199,4 +199,13 @@ class VoiceCommandParserTest {
     @Test fun koNameIsUnknown() = assertEquals(VoiceCommand.Unknown("민준"), p("민준"))
     @Test fun emptyIsUnknown() = assertEquals(VoiceCommand.Unknown(""), p("   "))
     @Test fun punctuationIsDropped() = assertEquals(VoiceCommand.Unknown("Kim Minjun"), p("  Kim,  Minjun!  "))
+
+    @Test fun clockDirections() {
+        assertEquals(VoiceCommand.ClockDirections(true), p("clock directions on"))
+        assertEquals(VoiceCommand.ClockDirections(false), p("clock directions off"))
+        assertEquals(VoiceCommand.ClockDirections(true), p("use clock directions"))
+        assertEquals(VoiceCommand.ClockDirections(false), p("directions in words"))
+        assertEquals(VoiceCommand.ClockDirections(true), p("시계 방향 켜 줘"))
+        assertEquals(VoiceCommand.ClockDirections(false), p("시계 방향 꺼"))
+    }
 }
