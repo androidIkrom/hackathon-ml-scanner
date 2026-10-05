@@ -30,6 +30,7 @@ import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.nungil.contract.Detection
 import com.nungil.contract.Facing
 import com.nungil.contract.ScanSettings
+import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.VisionFrame
 import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
@@ -51,7 +52,7 @@ class CameraSession(
     private val options: Options,
     private val onFrame: (VisionFrame) -> Unit,
     private val onError: (Throwable) -> Unit,
-) {
+) : SwitchableCamera {
     data class Options(
         val facing: Facing = Facing.BACK,
         /** Run the object detector. false = frames only (face enrolment). */
@@ -62,7 +63,7 @@ class CameraSession(
         val minScore: Float? = null,
     )
 
-    var facing: Facing = options.facing
+    override var facing: Facing = options.facing
         private set
 
     /** Horizontal field of view of the upright image; 65° until the camera reports its own. */
@@ -145,7 +146,7 @@ class CameraSession(
     }
 
     /** Turns to the camera [to] when it is not on already; null turns to the other one. */
-    fun useCamera(to: Facing?) {
+    override fun useCamera(to: Facing?) {
         if (to != facing) switchCamera()
     }
 

@@ -30,6 +30,21 @@ class FaceIdentifier(context: Context) : Closeable {
         }
     }
 
+    /** A face in a frame, at its middle (0..1), and the saved person it is; null when it is nobody saved or too turned to tell. */
+    data class FaceSeen(val centerX: Float, val centerY: Float, val name: String?)
+
+    /** Every face in [bitmap], recognised or not: "who is this" tells "I don't know this person" from "nobody". */
+    fun faces(bitmap: Bitmap): List<FaceSeen> = finder.find(bitmap).map { face ->
+        val box = face.boundingBox
+        val usable = FaceQuality.usable(min(box.width(), box.height()), face.headEulerAngleY, face.headEulerAngleX)
+        val name = if (!usable || recognizer.isEmpty) {
+            null
+        } else {
+            embedder.embed(bitmap, face)?.let { recognizer.identify(it) }?.let { recognizer.nameOf(it.id) }
+        }
+        FaceSeen(box.exactCenterX() / bitmap.width, box.exactCenterY() / bitmap.height, name)
+    }
+
     override fun close() {
         finder.close()
         embedder.close()
