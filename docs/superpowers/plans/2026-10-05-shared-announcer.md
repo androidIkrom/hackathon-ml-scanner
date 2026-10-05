@@ -51,7 +51,7 @@
 
 **Interfaces — Produces:** `Notice` and `Announcer` exactly as in the spec (`Rules(goneMs, repeatMs, topicRepeatMs)`, `choose(nowMs, candidates): Notice?`, `said(nowMs, text)`, `reset()`), plus `companion object { val WALK; val LIVE; val FIND }` with the Global Constraints' values and `fun durationMs(text: String): Long`. `fun Alert.toNotice(): Notice` (priority = `kind.ordinal`) in `core/walk/WalkAlerts.kt`.
 
-`choose` = today's `WalkAlerts.choose` with `allowed = { now >= busyUntil || it.ahead || it.priority == CLEAR priority }`… — the CLEAR exception becomes a `Notice.cutsIn` flag set by `toNotice()` for `AlertKind.CLEAR`; after a pick, `busyUntil = now + durationMs(text)`.
+`choose` = today's `WalkAlerts.choose`, where a notice may be picked when `now >= busyUntil || it.ahead || it.cutsIn`; after a pick `busyUntil = now + durationMs(text)`. `Notice` gets `val cutsIn: Boolean = false` (today's `AlertKind.CLEAR` exception in `WalkPacing.allows`), set by `toNotice()` for `CLEAR`.
 
 - [ ] **Step 1: Failing tests:** every existing `WalkAlerts` / `WalkPacing` test rewritten against `Announcer(Announcer.WALK)` with `Notice`s, unchanged in meaning; new `aNoticeWaitingForSilenceIsSaidOnceQuiet`; `liveRulesSayAnObjectAgainOnlyAfterTenSecondsAway` (in view 0–1 s, away, back at 10.9 s → not said; back at 11.1 s → said); `aSentenceSaidOutsideHoldsWaitingNoticesBack`; `objectsConfirmedTogetherAreSaidOneAfterAnother` (two non-ahead notices every frame: first at t0, second after the first's duration).
 - [ ] **Step 2:** Run `--tests "com.nungil.core.ui.AnnouncerTest"` — compile failure.
