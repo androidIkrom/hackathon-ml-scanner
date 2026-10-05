@@ -38,6 +38,7 @@
     <string name="person_add_me">나 (앞 카메라)</string>
     <string name="person_add_start">시작하기</string>
     <string name="person_add_need_name">이름을 먼저 알려 주세요.</string>
+    <string name="person_add_named">이름: %1$s.</string>
 
     <string name="enroll_title">%1$s 등록 중</string>
     <string name="enroll_start">시작하기</string>

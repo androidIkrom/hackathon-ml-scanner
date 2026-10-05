@@ -20,6 +20,14 @@ class VoiceBargeInTest {
     @Test fun theAppHearingItselfKeepsTalking() =
         assertEquals(BargeIn.KEEP_TALKING, VoiceBargeIn.onPartial("3 blue chairs in", saying))
 
+    @Test fun aNumberSaidAsDigitsAndHeardAsAWordIsTheAppsOwn() {
+        // The app said "3 blue bottles in front" and the microphone wrote "Three": taken for the user, it
+        // silenced the app and the next thing found was never said (the logs).
+        assertEquals(BargeIn.KEEP_TALKING, VoiceBargeIn.onPartial("Three", "3 blue bottles in front"))
+        assertEquals(BargeIn.KEEP_TALKING, VoiceBargeIn.onPartial("twelve chairs", "12 chairs on your left"))
+        assertFalse(VoiceBargeIn.hasOtherWords("Three", "3 blue bottles in front"))
+    }
+
     @Test fun wordsTheAppIsNotSayingStopIt() =
         assertEquals(BargeIn.STOP_ALL_SOUND, VoiceBargeIn.onPartial("stop that", saying))
 

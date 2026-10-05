@@ -144,6 +144,11 @@ class CameraSession(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    /** Turns to the camera [to] when it is not on already; null turns to the other one. */
+    fun useCamera(to: Facing?) {
+        if (to != facing) switchCamera()
+    }
+
     fun switchCamera() {
         facing = if (facing == Facing.BACK) Facing.FRONT else Facing.BACK
         currentFacing = facing

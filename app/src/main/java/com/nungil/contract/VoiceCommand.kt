@@ -8,7 +8,8 @@ sealed interface VoiceCommand {
     /** Press the current screen's main button. */
     data object Start : VoiceCommand
     data object Stop : VoiceCommand
-    data object SwitchCamera : VoiceCommand
+    /** [to] is the camera asked for ("front camera"); null: the other one ("switch camera"). */
+    data class SwitchCamera(val to: Facing? = null) : VoiceCommand
     /** Say the last spoken sentence again. */
     data object Repeat : VoiceCommand
     data object ReadText : VoiceCommand

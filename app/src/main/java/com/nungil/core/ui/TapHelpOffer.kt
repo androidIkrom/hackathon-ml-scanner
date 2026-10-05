@@ -44,5 +44,8 @@ class TapHelpOffer {
     companion object {
         fun question(lang: Lang): String =
             if (lang == Lang.KO) "이 화면 사용법을 알려 드릴까요?" else "Do you want instructions for this screen?"
+
+        /** Said to a "no": without it the user could not tell the answer was heard. */
+        fun declined(lang: Lang): String = if (lang == Lang.KO) "알겠어요." else "OK."
     }
 }

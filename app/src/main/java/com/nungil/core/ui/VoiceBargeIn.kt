@@ -97,8 +97,17 @@ object VoiceBargeIn {
     private fun endsWhatWasSaid(text: String, appSaid: String?): Boolean =
         appSaid != null && joined(text).isNotEmpty() && joined(appSaid).endsWith(joined(text))
 
+    /**
+     * Number words as digits: the app says "3 blue bottles" and the microphone writes "Three", so both sides are
+     * compared as "3". "Three" taken for the user silenced the app, and the next thing found was lost (the logs).
+     */
+    private val NUMBERS = listOf(
+        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+    ).withIndex().associate { (n, word) -> word to n.toString() }
+
     private fun words(text: String): List<String> =
-        text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+        text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }.map { NUMBERS[it] ?: it }
 
     private fun joined(text: String): String = words(text).joinToString("")
 }

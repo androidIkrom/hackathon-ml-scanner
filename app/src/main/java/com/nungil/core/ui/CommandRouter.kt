@@ -42,7 +42,7 @@ object CommandRouter {
         VoiceCommand.WhatIsThis, VoiceCommand.WhoIsThis ->
             Route.OpenAndSay(Dest.Scan(ScanMode.LIVE), Phrase.OPENING_LIVE_SCAN)
         VoiceCommand.Stop -> Route.StopSpeaking
-        VoiceCommand.Start, VoiceCommand.SwitchCamera, VoiceCommand.Delete -> Route.Say(Phrase.NOT_HERE)
+        VoiceCommand.Start, is VoiceCommand.SwitchCamera, VoiceCommand.Delete -> Route.Say(Phrase.NOT_HERE)
         is VoiceCommand.Unknown -> Route.Say(Phrase.NOT_UNDERSTOOD)
     }
 }

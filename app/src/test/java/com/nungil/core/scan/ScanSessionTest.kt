@@ -60,25 +60,30 @@ class ScanSessionTest {
         val s = ScanSession(ScanMode.FULL, 0L, Lang.EN)
         assertTrue(s.frame(0L, null, chair).phrases.isEmpty())
         assertTrue(s.frame(1_400L, null, chair).phrases.isEmpty())
-        assertEquals(listOf("Compass not available. Switching to live scan.", "a chair in front"), s.frame(1_500L, null, chair).phrases)
+        val step = s.frame(1_500L, null, chair)
+        assertEquals(listOf("Compass not available. Switching to live scan."), step.phrases)
+        assertEquals(listOf("a chair in front"), step.news)
         assertTrue(s.announcesLive)
         val later = s.frame(90_000L, null, chair)
-        assertTrue(later.phrases.isEmpty())
+        assertTrue(later.phrases.isEmpty() && later.news.isEmpty())
         assertFalse(later.done)
         assertEquals(100, s.finish().coveragePercent)
     }
 
     @Test fun liveScanAnnouncesEachObjectOnce() {
         val s = ScanSession(ScanMode.LIVE, 0L, Lang.EN)
-        assertTrue(s.frame(0L, 0f, chair).phrases.isEmpty())
-        assertTrue(s.frame(200L, 0f, chair).phrases.isEmpty())
-        assertEquals(listOf("a chair in front"), s.frame(400L, 0f, chair).phrases)
-        assertTrue(s.frame(600L, 0f, chair).phrases.isEmpty())
+        assertTrue(s.frame(0L, 0f, chair).news.isEmpty())
+        assertTrue(s.frame(200L, 0f, chair).news.isEmpty())
+        assertEquals(listOf("a chair in front"), s.frame(400L, 0f, chair).news)
+        assertTrue(s.frame(600L, 0f, chair).news.isEmpty())
     }
 
     @Test fun fullScanDoesNotAnnounceLive() {
         val s = ScanSession(ScanMode.FULL, 0L, Lang.EN)
-        repeat(4) { assertTrue(s.frame(it * 200L, 0f, chair).phrases.isEmpty()) }
+        repeat(4) {
+            val step = s.frame(it * 200L, 0f, chair)
+            assertTrue(step.phrases.isEmpty() && step.news.isEmpty())
+        }
     }
 
     @Test fun summaryIsRelativeToWhereTheUserFacesAtTheEnd() {

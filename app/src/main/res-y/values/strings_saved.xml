@@ -38,6 +38,7 @@
     <string name="person_add_me">Me (front camera)</string>
     <string name="person_add_start">Start</string>
     <string name="person_add_need_name">Tell me the name first.</string>
+    <string name="person_add_named">Name: %1$s.</string>
 
     <string name="enroll_title">Learning %1$s</string>
     <string name="enroll_start">Start</string>

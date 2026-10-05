@@ -1,6 +1,7 @@
 package com.nungil.core.voice
 
 import com.nungil.contract.Dest
+import com.nungil.contract.Facing
 import com.nungil.contract.ItemKind
 import com.nungil.contract.Lang
 import com.nungil.contract.SavedTab
@@ -107,8 +108,14 @@ class VoiceCommandParserTest {
     // ---- actions --------------------------------------------------------------------------------
     @Test fun stop() = assertEquals(VoiceCommand.Stop, p("stop"))
     @Test fun stopBeatsDestination() = assertEquals(VoiceCommand.Stop, p("stop full scan"))
-    @Test fun switchCamera() = assertEquals(VoiceCommand.SwitchCamera, p("switch camera"))
-    @Test fun backCameraIsNotBack() = assertEquals(VoiceCommand.SwitchCamera, p("back camera"))
+    @Test fun switchCamera() = assertEquals(VoiceCommand.SwitchCamera(), p("switch camera"))
+    @Test fun backCameraIsNotBack() = assertEquals(VoiceCommand.SwitchCamera(Facing.BACK), p("back camera"))
+    @Test fun frontCameraAsksForTheFrontOne() = assertEquals(VoiceCommand.SwitchCamera(Facing.FRONT), p("front camera"))
+    @Test fun selfieIsTheFrontCamera() = assertEquals(VoiceCommand.SwitchCamera(Facing.FRONT), p("selfie"))
+    @Test fun rearCamera() = assertEquals(VoiceCommand.SwitchCamera(Facing.BACK), p("use the rear camera"))
+    @Test fun cameraAloneSwitches() = assertEquals(VoiceCommand.SwitchCamera(), p("Camera"))
+    @Test fun koFrontCamera() = assertEquals(VoiceCommand.SwitchCamera(Facing.FRONT), p("전면 카메라"))
+    @Test fun koBackCamera() = assertEquals(VoiceCommand.SwitchCamera(Facing.BACK), p("후면 카메라"))
     @Test fun readText() = assertEquals(VoiceCommand.ReadText, p("read this"))
     @Test fun delete() = assertEquals(VoiceCommand.Delete, p("delete"))
     @Test fun back() = assertEquals(VoiceCommand.Back, p("go back"))
@@ -116,7 +123,7 @@ class VoiceCommandParserTest {
     @Test fun repeat() = assertEquals(VoiceCommand.Repeat, p("say that again"))
     @Test fun koStop() = assertEquals(VoiceCommand.Stop, p("멈춰"))
     @Test fun koEnough() = assertEquals(VoiceCommand.Stop, p("그만"))
-    @Test fun koSwitchCamera() = assertEquals(VoiceCommand.SwitchCamera, p("카메라 전환"))
+    @Test fun koSwitchCamera() = assertEquals(VoiceCommand.SwitchCamera(), p("카메라 전환"))
     @Test fun koRead() = assertEquals(VoiceCommand.ReadText, p("글자 읽어줘"))
     @Test fun koDelete() = assertEquals(VoiceCommand.Delete, p("삭제해"))
     @Test fun koBack() = assertEquals(VoiceCommand.Back, p("뒤로 가"))

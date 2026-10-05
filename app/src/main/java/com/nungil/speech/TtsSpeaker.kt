@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.util.Log
 import com.nungil.contract.Lang
 import com.nungil.contract.app.Speaker
 import com.nungil.core.ui.SpeechQueue
@@ -149,6 +150,11 @@ class TtsSpeaker(
         pump()
     }
 
+    override fun sayLive(text: String) = onMain {
+        queue.addLive(text)
+        pump()
+    }
+
     /**
      * [text] is good news ("I see it!", "All done!"): the next time it is said, it is said in a brighter voice.
      * The engine has no feelings to pick from; a pitch a little above the user's own setting is the nearest
@@ -236,6 +242,8 @@ class TtsSpeaker(
             pitchRaised = cheer
         }
         val id = "nungil-${counter++}"
+        // With the moment a thing was confirmed ("Live:"), this shows how late it was said.
+        Log.i("Nungil", "Saying \"$text\"")
         currentId = id
         currentText = text
         if (tts.speak(text, mode, null, id) != TextToSpeech.SUCCESS) {

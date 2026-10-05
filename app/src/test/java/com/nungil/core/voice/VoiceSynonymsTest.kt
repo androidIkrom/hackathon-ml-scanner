@@ -71,7 +71,7 @@ class VoiceSynonymsTest {
     )
 
     @Test fun switchCamera() = all(
-        VoiceCommand.SwitchCamera,
+        VoiceCommand.SwitchCamera(),
         "change the camera", "rotate camera", "turn the camera", "other camera", "swap camera",
         "카메라 돌려", "카메라 변경",
     )

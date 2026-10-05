@@ -39,6 +39,7 @@ import com.nungil.contract.app.services
 import com.nungil.core.lang.LabelNames
 import com.nungil.core.scan.BoxGeometry
 import com.nungil.core.scan.ColorPolicy
+import com.nungil.core.scan.FoundPlaces
 import com.nungil.core.scan.ScanLogState
 import com.nungil.core.scan.ScanPhrases
 import com.nungil.core.scan.ScanResult
@@ -67,7 +68,8 @@ class ScanFragment : Fragment(), VoiceHandler {
 
     private enum class State { NO_PERMISSION, IDLE, SCANNING }
 
-    private class PendingTag(val box: Box, val name: String, val isPerson: Boolean)
+    /** [byLook]: a saved item found where the detector drew no box (FoundPlaces), [box] being its place. */
+    private class PendingTag(val box: Box, val name: String, val isPerson: Boolean, val byLook: Boolean = false)
 
     private var _binding: ScanFragmentBinding? = null
     private val binding get() = _binding!!
@@ -90,6 +92,7 @@ class ScanFragment : Fragment(), VoiceHandler {
 
     // Analysis thread only.
     private val sticky = StickyNames()
+    private val places = FoundPlaces()
 
     // Written on the analysis thread, read on the main thread for "what / who is this".
     @Volatile private var lastFrame: VisionFrame? = null
@@ -174,8 +177,8 @@ class ScanFragment : Fragment(), VoiceHandler {
             }
             true
         }
-        VoiceCommand.SwitchCamera -> {
-            switchCamera()
+        is VoiceCommand.SwitchCamera -> {
+            switchCamera(command.to)
             true
         }
         VoiceCommand.WhatIsThis -> {
@@ -198,7 +201,7 @@ class ScanFragment : Fragment(), VoiceHandler {
         val app = requireContext().applicationContext
         extras?.execute {
             taggers = try {
-                createNameTaggers(app)
+                createNameTaggers(app, itemsByLook = true)
             } catch (t: Throwable) {
                 Log.i(TAG, "Name taggers unavailable: ${t.message}")
                 emptyList()
@@ -262,10 +265,12 @@ class ScanFragment : Fragment(), VoiceHandler {
         lastFrame = frame
         while (true) {
             val tag = pendingTags.poll() ?: break
-            sticky.recognized(tag.box, tag.name, tag.isPerson)
+            if (tag.byLook) places.found(tag.box, tag.name, frame.timestampMs) else sticky.recognized(tag.box, tag.name, tag.isPerson)
         }
         val usable = frame.detections.filterNot { BoxGeometry.touchesOneSideEdge(it.box) }
         val names = sticky.apply(usable.map { it.box })
+        // Saved items found by their look, not already the name of one of this frame's boxes.
+        val found = places.current(frame.timestampMs).filter { p -> names.none { it?.name == p.name } }
         lastUsable = usable
         lastNames = names
         val scanning = synchronized(sessionLock) { session != null }
@@ -281,12 +286,13 @@ class ScanFragment : Fragment(), VoiceHandler {
                     null
                 }
                 ScanSession.Seen(name?.name ?: d.label, d.box.centerX, color, isName = name != null, wasPerson = d.label == "person")
-            }
+            } + found.map { ScanSession.Seen(it.name, it.box.centerX, null, isName = true) }
             step = synchronized(sessionLock) {
                 session?.onFrame(frame.timestampMs, frame.headingDeg, frame.hfovDeg, frame.facing, seen)
             }
         }
-        val marks = usable.mapIndexed { i, d -> OverlayView.Mark(d.box, names[i]?.name ?: LabelNames.name(d.label, lang)) }
+        val marks = usable.mapIndexed { i, d -> OverlayView.Mark(d.box, names[i]?.name ?: LabelNames.name(d.label, lang)) } +
+            found.map { OverlayView.Mark(it.box, it.name) }
         main.post { render(frame, marks, step) }
         runTaggers(frame)
     }
@@ -298,6 +304,7 @@ class ScanFragment : Fragment(), VoiceHandler {
         if (step == null || state != State.SCANNING) return
         if (args.mode == ScanMode.FULL) b.scanRing.setCoverage(step.coveragePercent, step.bins)
         step.phrases.forEach { speak(it) }
+        step.news.forEach { speakLive(it) }
         if (step.done) stopScan()
     }
 
@@ -311,6 +318,11 @@ class ScanFragment : Fragment(), VoiceHandler {
                 try {
                     for (tagger in taggers) {
                         for (tag in tagger.tag(frame)) {
+                            val place = tag.box
+                            if (place != null) {
+                                pendingTags.add(PendingTag(place, tag.name, isPerson = false, byLook = true))
+                                continue
+                            }
                             val d = frame.detections.getOrNull(tag.detectionIndex) ?: continue
                             pendingTags.add(PendingTag(d.box, tag.name, tag.kind == TagKind.PERSON))
                         }
@@ -378,9 +390,9 @@ class ScanFragment : Fragment(), VoiceHandler {
         }
     }
 
-    private fun switchCamera() {
+    private fun switchCamera(to: Facing? = null) {
         val c = camera ?: return
-        c.switchCamera()
+        c.useCamera(to)
         speakNow(ScanPhrases.cameraSwitched(c.facing, lang))
     }
 
@@ -429,6 +441,13 @@ class ScanFragment : Fragment(), VoiceHandler {
     private fun speak(text: String) {
         log.add(text)
         if (settings.speechOn) services().speaker.say(text)
+    }
+
+    /** A thing just confirmed: said soon, together with the others still waiting (Speaker.sayLive). */
+    private fun speakLive(text: String) {
+        log.add(text)
+        Log.i(TAG, "Live: \"$text\"")
+        if (settings.speechOn) services().speaker.sayLive(text)
     }
 
     private fun speakNow(text: String) {

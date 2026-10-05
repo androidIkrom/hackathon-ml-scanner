@@ -5,12 +5,19 @@ package com.nungil.core.ui
  * Not thread-safe: TtsSpeaker only touches it on the main thread.
  *
  * - [add] queues a phrase; when more than [MAX_PENDING] wait, the stalest are dropped.
+ * - [addLive] queues news of the moment (a live scan's things): news still waiting is joined into one sentence
+ *   with it, the newest [MAX_LIVE_PARTS] kept, and it follows after [LIVE_GAP_MS]. One at a time with the long
+ *   gap, things were named many seconds after they came into view, on a side the phone had turned from.
  * - [next] hands out the next phrase once the previous one ended at least [GAP_MS] ago.
  * - [now] drops the queue and speaks at once; [final] does the same and holds the queue until it ends.
  * - A phrase the engine never finishes is given up after [SHUTDOWN_SAFETY_MS].
  */
 class SpeechQueue(private val clock: () -> Long) {
-    private val pending = ArrayDeque<String>()
+    private class Entry(val parts: MutableList<String>, val live: Boolean) {
+        val text: String get() = parts.joinToString(", ")
+    }
+
+    private val pending = ArrayDeque<Entry>()
     private var speakingSince: Long? = null
     private var lastEndAt: Long? = null
     private var finalSince: Long? = null
@@ -27,7 +34,22 @@ class SpeechQueue(private val clock: () -> Long) {
 
     fun add(text: String) {
         val t = clean(text) ?: return
-        pending.addLast(t)
+        push(Entry(mutableListOf(t), live = false))
+    }
+
+    fun addLive(text: String) {
+        val t = clean(text) ?: return
+        val last = pending.lastOrNull()
+        if (last != null && last.live) {
+            last.parts += t
+            while (last.parts.size > MAX_LIVE_PARTS) last.parts.removeAt(0)
+        } else {
+            push(Entry(mutableListOf(t), live = true))
+        }
+    }
+
+    private fun push(entry: Entry) {
+        pending.addLast(entry)
         while (pending.size > MAX_PENDING) pending.removeFirst()
     }
 
@@ -53,9 +75,10 @@ class SpeechQueue(private val clock: () -> Long) {
             done()
         }
         if (finalSince != null) return null
+        val head = pending.firstOrNull() ?: return null
         val end = lastEndAt
-        if (end != null && clock() - end < GAP_MS) return null
-        val t = pending.removeFirstOrNull() ?: return null
+        if (end != null && clock() - end < if (head.live) LIVE_GAP_MS else GAP_MS) return null
+        val t = pending.removeFirst().text
         start(t)
         return t
     }
@@ -96,6 +119,8 @@ class SpeechQueue(private val clock: () -> Long) {
         const val GAP_MS = 1_500L
         const val POLL_MS = 250L
         const val MAX_PENDING = 3
+        const val LIVE_GAP_MS = 400L
+        const val MAX_LIVE_PARTS = 3
         const val SHUTDOWN_SAFETY_MS = 15_000L
     }
 }

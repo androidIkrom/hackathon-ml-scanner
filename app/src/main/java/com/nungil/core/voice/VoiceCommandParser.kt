@@ -1,6 +1,7 @@
 package com.nungil.core.voice
 
 import com.nungil.contract.Dest
+import com.nungil.contract.Facing
 import com.nungil.contract.ItemKind
 import com.nungil.contract.Lang
 import com.nungil.contract.SavedTab
@@ -288,6 +289,16 @@ object VoiceCommandParser {
         s.words.zipWithNext().any { (a, b) -> a in stopPlacesEn && (b == "stop" || b == "stops") } &&
             s.words.count { it == "stop" || it == "stops" } == 1 && s.words.first() !in setOf("stop", "cancel", "pause")
 
+    /**
+     * "Front camera" asks for the front one, not the other one: said with the front camera already on, it
+     * turned to the back. On the add-person screen it was not taken at all (the logs).
+     */
+    private fun cameraAskedFor(s: Said): Facing? = when {
+        s.has("front", "selfie") || s.ko("전면", "앞카메라", "셀카") -> Facing.FRONT
+        s.has("back", "rear") || s.ko("후면", "뒤카메라") -> Facing.BACK
+        else -> null
+    }
+
     private fun action(s: Said): VoiceCommand? = when {
         stopIsAPlace(s) -> null
         s.has(
@@ -296,9 +307,9 @@ object VoiceCommandParser {
         ) ||
             s.ko("멈춰", "멈춤", "멈추", "정지", "그만", "중지", "스톱", "취소", "조용", "끝", "잠깐", "쉿") -> VoiceCommand.Stop
         (s.has("camera") && s.has("switch", "flip", "change", "rotate", "turn", "swap", "other", "reverse", "front", "back", "rear")) ||
-            s.has("selfie") ||
+            s.has("selfie") || s.words == listOf("camera") ||
             s.ko("카메라전환", "카메라바꿔", "카메라바꾸", "카메라돌려", "카메라변경", "전면카메라", "후면카메라", "셀카") ->
-            VoiceCommand.SwitchCamera
+            VoiceCommand.SwitchCamera(cameraAskedFor(s))
         s.has("read", "text", "qr", "barcode", "code", "sign", "signs", "label", "labels", "document", "ocr", "reader") ||
             s.ko("글자", "읽어", "텍스트", "큐알", "바코드", "문자", "표지판", "간판", "리더", "라벨") -> VoiceCommand.ReadText
         s.has("delete", "remove", "erase", "forget", "discard") ||

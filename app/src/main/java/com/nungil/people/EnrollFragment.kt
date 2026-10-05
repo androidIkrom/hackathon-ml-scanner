@@ -29,6 +29,7 @@ import com.nungil.core.people.EnrollPhrases
 import com.nungil.core.people.EnrollmentGuide
 import com.nungil.core.people.Pose
 import com.nungil.core.people.VectorBytes
+import com.nungil.core.scan.ScanPhrases
 import com.nungil.data.AppDatabase
 import com.nungil.data.FaceEmbeddingEntity
 import com.nungil.data.PersonEntity
@@ -151,6 +152,13 @@ class EnrollFragment : Fragment(), VoiceHandler {
         }
         VoiceCommand.Stop -> {
             pause()
+            true
+        }
+        is VoiceCommand.SwitchCamera -> {
+            camera?.let {
+                it.useCamera(command.to)
+                services.speaker.sayNow(ScanPhrases.cameraSwitched(it.facing, lang))
+            }
             true
         }
         else -> false

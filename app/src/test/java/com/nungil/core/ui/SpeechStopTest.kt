@@ -1,6 +1,8 @@
 package com.nungil.core.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SpeechStopTest {
@@ -27,5 +29,13 @@ class SpeechStopTest {
     @Test fun notAStopWithMoreToIt() {
         // These keep their meaning: they stop what the screen does, or are not a stop at all.
         assertEquals(List(5) { false }, bare("stop navigation", "stop listening", "bus stop", "그만 가자", ""))
+    }
+
+    @Test fun aStopSaidAgainStopsTheScreen() {
+        // A live scan kept scanning through three "stop"s 2 and 3 s apart: each silenced the talking only (the logs).
+        assertTrue(SpeechStop.talkingOnly(msSinceLastTalkStop = Long.MAX_VALUE / 2))
+        assertFalse(SpeechStop.talkingOnly(msSinceLastTalkStop = 2_000L))
+        assertFalse(SpeechStop.talkingOnly(msSinceLastTalkStop = SpeechStop.AGAIN_MS - 1))
+        assertTrue(SpeechStop.talkingOnly(msSinceLastTalkStop = SpeechStop.AGAIN_MS))
     }
 }
