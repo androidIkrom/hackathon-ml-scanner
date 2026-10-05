@@ -221,7 +221,7 @@ class WalkFragment : Fragment(), VoiceHandler, CameraScreen {
         if (!::progress.isInitialized) progress = GoProgress(goSettings.quietUpdates)
         if (network.isShutdown) network = Executors.newSingleThreadExecutor()
         location = LocationTracker(context) { onFix(it) }
-        vision = WalkVision(context, { services.lang }, stepM, { steps.getAndSet(0) }, { heading.headingDeg }) { onReport(it) }
+        vision = WalkVision(context, { services.lang }, { services.directionStyle }, stepM, { steps.getAndSet(0) }, { heading.headingDeg }) { onReport(it) }
         renderer = WalkRenderer({ binding.walkingGl.display?.rotation ?: Surface.ROTATION_0 }, vision)
         binding.walkingGl.setRenderer(renderer)
         binding.walkingGl.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY

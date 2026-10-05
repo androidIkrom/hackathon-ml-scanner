@@ -62,7 +62,7 @@ class ScanSessionTest {
         assertTrue(s.frame(1_400L, null, chair).phrases.isEmpty())
         val step = s.frame(1_500L, null, chair)
         assertEquals(listOf("Compass not available. Switching to live scan."), step.phrases)
-        assertEquals(listOf("a chair in front"), step.news)
+        assertEquals(listOf("a chair ahead"), step.news)
         assertTrue(s.announcesLive)
         val later = s.frame(90_000L, null, chair)
         assertTrue(later.phrases.isEmpty() && later.news.isEmpty())
@@ -74,7 +74,7 @@ class ScanSessionTest {
         val s = ScanSession(ScanMode.LIVE, 0L, Lang.EN)
         assertTrue(s.frame(0L, 0f, chair).news.isEmpty())
         assertTrue(s.frame(200L, 0f, chair).news.isEmpty())
-        assertEquals(listOf("a chair in front"), s.frame(400L, 0f, chair).news)
+        assertEquals(listOf("a chair ahead"), s.frame(400L, 0f, chair).news)
         assertTrue(s.frame(600L, 0f, chair).news.isEmpty())
     }
 
@@ -124,7 +124,7 @@ class ScanSessionTest {
         repeat(3) {
             s.frame(it * 200L, 0f, ScanSession.Seen("Ali", 0.5f, null, isName = true, wasPerson = true), ScanSession.Seen("person", 0.55f, null))
         }
-        assertEquals("Around you: Ali in front.", s.finish().summary)
+        assertEquals("Around you: Ali ahead.", s.finish().summary)
     }
 
     @Test fun logKeepsTheLast200Lines() {

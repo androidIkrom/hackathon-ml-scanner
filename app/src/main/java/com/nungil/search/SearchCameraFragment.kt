@@ -222,7 +222,7 @@ class SearchCameraFragment : Fragment(), CameraScreen {
         }
         if (update.enteredCenter) services.haptics.buzz(Buzz.CENTERED)
         when (val say = update.say) {
-            is SearchTracker.Say.Where -> services.speaker.say(SearchPhrases.where(spokenName, say.zone, lang))
+            is SearchTracker.Say.Where -> services.speaker.say(SearchPhrases.where(spokenName, say.zone, services.directionStyle, lang))
             SearchTracker.Say.Lost -> services.speaker.say(SearchPhrases.lost(lang))
             null -> Unit
         }

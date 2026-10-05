@@ -1,6 +1,8 @@
 package com.nungil.core.walk
 
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
+import com.nungil.core.ui.Bearings
 import com.nungil.core.lang.Josa
 import com.nungil.core.lang.KoNumbers
 import com.nungil.core.lang.LabelNames
@@ -15,6 +17,9 @@ object WalkPhrases {
 
     /** Closer than this is "very close"; from here up it is at least "1 step" / "1 metre". */
     const val VERY_CLOSE_M = 0.5f
+
+    /** A side third of the frame (about 65° wide) is said from its middle, 22° to that side. */
+    const val ZONE_DEG = 22f
 
     private fun ko(lang: Lang) = lang == Lang.KO
 
@@ -36,24 +41,22 @@ object WalkPhrases {
         else -> maxOf(1, metres.roundToInt())
     }
 
-    private fun zoneEn(zone: Zone) = when (zone) {
-        Zone.AHEAD -> "ahead"
-        Zone.LEFT -> "on your left"
-        Zone.RIGHT -> "on your right"
+    /** A zone of the frame as the bearing every screen says directions from (Bearings): the middle of each third. */
+    fun bearing(zone: Zone): Float = when (zone) {
+        Zone.LEFT -> -ZONE_DEG
+        Zone.AHEAD -> 0f
+        Zone.RIGHT -> ZONE_DEG
     }
 
-    private fun zoneKo(zone: Zone) = when (zone) {
-        Zone.AHEAD -> "앞에"
-        Zone.LEFT -> "왼쪽에"
-        Zone.RIGHT -> "오른쪽에"
-    }
+    private fun where(zone: Zone, style: DirectionStyle, lang: Lang) = Bearings.say(bearing(zone), style, lang)
 
-    fun wall(zone: Zone, metres: Float, stepM: Float?, lang: Lang): String {
+    fun wall(zone: Zone, metres: Float, stepM: Float?, style: DirectionStyle, lang: Lang): String {
         val d = distance(metres, stepM, lang)
+        val w = where(zone, style, lang)
         return if (ko(lang)) {
-            if (zone == Zone.AHEAD) "앞에 벽이 있어요, $d." else "${zoneKo(zone)} 장애물이 있어요, $d."
+            if (zone == Zone.AHEAD) "$w 벽이 있어요, $d." else "$w 장애물이 있어요, $d."
         } else {
-            if (zone == Zone.AHEAD) "Wall ahead, $d." else "Obstacle ${zoneEn(zone)}, $d."
+            if (zone == Zone.AHEAD) "Wall $w, $d." else "Obstacle $w, $d."
         }
     }
 
@@ -83,14 +86,15 @@ object WalkPhrases {
     }
 
     /** [label] is a COCO label; [metres] null when depth is not available. */
-    fun hazard(label: String, zone: Zone, metres: Float?, stepM: Float?, lang: Lang): String {
+    fun hazard(label: String, zone: Zone, metres: Float?, stepM: Float?, style: DirectionStyle, lang: Lang): String {
         val d = metres?.let { distance(it, stepM, lang) }
+        val w = where(zone, style, lang)
         return if (ko(lang)) {
-            val base = "${zoneKo(zone)} ${Josa.iGa(LabelNames.name(label, lang))} 있어요"
+            val base = "$w ${Josa.iGa(LabelNames.name(label, lang))} 있어요"
             if (d == null) "$base." else "$base, $d."
         } else {
             val name = label.replaceFirstChar { it.uppercase() }
-            if (d == null) "$name ${zoneEn(zone)}." else "$name ${zoneEn(zone)}, $d."
+            if (d == null) "$name $w." else "$name $w, $d."
         }
     }
 
@@ -116,8 +120,8 @@ object WalkPhrases {
         LightColor.GREEN -> if (ko(lang)) "초록불이에요." else "Green light."
     }
 
-    fun saved(name: String, zone: Zone, lang: Lang): String =
-        if (ko(lang)) "${zoneKo(zone)} ${Josa.iGa(name)} 있어요." else "$name ${zoneEn(zone)}."
+    fun saved(name: String, zone: Zone, style: DirectionStyle, lang: Lang): String =
+        if (ko(lang)) "${where(zone, style, lang)} ${Josa.iGa(name)} 있어요." else "$name ${where(zone, style, lang)}."
 
     fun sign(text: String, lang: Lang): String = if (ko(lang)) "표지판: ${text.trim()}." else "Sign: ${text.trim()}."
 

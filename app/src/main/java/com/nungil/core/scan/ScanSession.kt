@@ -1,5 +1,6 @@
 package com.nungil.core.scan
 
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
 import com.nungil.contract.ScanMode
@@ -22,6 +23,8 @@ class ScanSession(
     val mode: ScanMode,
     val startedAtMs: Long,
     private val lang: Lang,
+    /** Words or clock hours (Settings), read for each sentence: it can change during a scan. */
+    private val style: () -> DirectionStyle = { DirectionStyle.WORDS },
     private val colorsOn: Boolean = true,
     val timeoutMs: Long = TIMEOUT_MS,
 ) {
@@ -79,7 +82,7 @@ class ScanSession(
         val news = mutableListOf<String>()
         if (announcesLive) {
             for (o in confirmedNow) {
-                news += SummaryBuilder.livePhrase(o.copy(angle = AngleMath.diff(o.angle, rel)), lang, colorsOn)
+                news += SummaryBuilder.livePhrase(o.copy(angle = AngleMath.diff(o.angle, rel)), lang, style(), colorsOn)
             }
         }
         if (!done && mode == ScanMode.FULL && !noCompass && startHeading != null) {
@@ -94,7 +97,7 @@ class ScanSession(
         val objects = NamedPeople.dropShadowedPersons(clusterer.confirmed())
             .map { it.copy(angle = AngleMath.normalize(AngleMath.diff(it.angle, facingNow))) }
         val percent = if (mode == ScanMode.FULL && !noCompass) coverage.percent() else 100
-        return ScanResult(mode, startedAtMs, percent, SummaryBuilder.fullSummary(objects, percent, lang, colorsOn), objects)
+        return ScanResult(mode, startedAtMs, percent, SummaryBuilder.fullSummary(objects, percent, lang, style(), colorsOn), objects)
     }
 
     companion object {

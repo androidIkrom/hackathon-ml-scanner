@@ -223,7 +223,8 @@ class ScanFragment : Fragment(), CameraScreen {
         autoStart = null
         if (camera == null) return
         synchronized(sessionLock) {
-            session = ScanSession(args.mode, System.currentTimeMillis(), lang, settings.colorsOn)
+            val app = services()
+            session = ScanSession(args.mode, System.currentTimeMillis(), lang, { app.directionStyle }, settings.colorsOn)
         }
         showState(State.SCANNING)
     }

@@ -1,5 +1,6 @@
 package com.nungil.core.walk
 
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -28,10 +29,10 @@ class WalkPhrasesTest {
     }
 
     @Test fun walls() {
-        assertEquals("Wall ahead, 2 metres.", WalkPhrases.wall(Zone.AHEAD, 2f, null, Lang.EN))
-        assertEquals("앞에 벽이 있어요, 2미터.", WalkPhrases.wall(Zone.AHEAD, 2f, null, Lang.KO))
-        assertEquals("Obstacle on your left, 3 steps.", WalkPhrases.wall(Zone.LEFT, 2.1f, step, Lang.EN))
-        assertEquals("오른쪽에 장애물이 있어요, 세 걸음.", WalkPhrases.wall(Zone.RIGHT, 2.1f, step, Lang.KO))
+        assertEquals("Wall ahead, 2 metres.", WalkPhrases.wall(Zone.AHEAD, 2f, null, DirectionStyle.WORDS, Lang.EN))
+        assertEquals("앞에 벽이 있어요, 2미터.", WalkPhrases.wall(Zone.AHEAD, 2f, null, DirectionStyle.WORDS, Lang.KO))
+        assertEquals("Obstacle on your left, 3 steps.", WalkPhrases.wall(Zone.LEFT, 2.1f, step, DirectionStyle.WORDS, Lang.EN))
+        assertEquals("오른쪽에 장애물이 있어요, 세 걸음.", WalkPhrases.wall(Zone.RIGHT, 2.1f, step, DirectionStyle.WORDS, Lang.KO))
     }
 
     @Test fun floors() {
@@ -46,10 +47,10 @@ class WalkPhrasesTest {
     }
 
     @Test fun hazards() {
-        assertEquals("Person ahead, 3 steps.", WalkPhrases.hazard("person", Zone.AHEAD, 2.1f, step, Lang.EN))
-        assertEquals("앞에 사람이 있어요, 세 걸음.", WalkPhrases.hazard("person", Zone.AHEAD, 2.1f, step, Lang.KO))
-        assertEquals("Car on your right.", WalkPhrases.hazard("car", Zone.RIGHT, null, step, Lang.EN))
-        assertEquals("왼쪽에 자전거가 있어요.", WalkPhrases.hazard("bicycle", Zone.LEFT, null, step, Lang.KO))
+        assertEquals("Person ahead, 3 steps.", WalkPhrases.hazard("person", Zone.AHEAD, 2.1f, step, DirectionStyle.WORDS, Lang.EN))
+        assertEquals("앞에 사람이 있어요, 세 걸음.", WalkPhrases.hazard("person", Zone.AHEAD, 2.1f, step, DirectionStyle.WORDS, Lang.KO))
+        assertEquals("Car on your right.", WalkPhrases.hazard("car", Zone.RIGHT, null, step, DirectionStyle.WORDS, Lang.EN))
+        assertEquals("왼쪽에 자전거가 있어요.", WalkPhrases.hazard("bicycle", Zone.LEFT, null, step, DirectionStyle.WORDS, Lang.KO))
     }
 
     @Test fun obstaclesGroundAndLights() {
@@ -61,7 +62,7 @@ class WalkPhrasesTest {
     }
 
     @Test fun savedThingsSignsAndCodes() {
-        assertEquals("앞에 내 가방이 있어요.", WalkPhrases.saved("내 가방", Zone.AHEAD, Lang.KO))
+        assertEquals("앞에 내 가방이 있어요.", WalkPhrases.saved("내 가방", Zone.AHEAD, DirectionStyle.WORDS, Lang.KO))
         assertEquals("Sign: EXIT.", WalkPhrases.sign(" EXIT ", Lang.EN))
         assertEquals("Code: " + "x".repeat(80) + ".", WalkPhrases.code("x".repeat(120), Lang.EN))
     }
@@ -98,5 +99,12 @@ class WalkPhrasesTest {
             )
         }
         all.forEach { assertFalse(it, it.contains("safe", ignoreCase = true) || it.contains("안전")) }
+    }
+
+    @Test fun walkDirectionsAsClockHours() {
+        assertEquals("Obstacle at 11 o'clock, 3 steps.", WalkPhrases.wall(Zone.LEFT, 2.1f, step, DirectionStyle.CLOCK, Lang.EN))
+        assertEquals("Wall at 12 o'clock, 2 metres.", WalkPhrases.wall(Zone.AHEAD, 2f, null, DirectionStyle.CLOCK, Lang.EN))
+        assertEquals("Car at 1 o'clock.", WalkPhrases.hazard("car", Zone.RIGHT, null, step, DirectionStyle.CLOCK, Lang.EN))
+        assertEquals("11시 방향에 자전거가 있어요.", WalkPhrases.hazard("bicycle", Zone.LEFT, null, step, DirectionStyle.CLOCK, Lang.KO))
     }
 }

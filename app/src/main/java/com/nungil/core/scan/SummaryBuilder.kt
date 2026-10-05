@@ -1,6 +1,8 @@
 package com.nungil.core.scan
 
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
+import com.nungil.core.ui.Bearings
 import com.nungil.core.lang.Josa
 import com.nungil.core.lang.KoNumbers
 import com.nungil.core.lang.LabelNames
@@ -42,29 +44,34 @@ object SummaryBuilder {
     fun describe(o: ObjectSummary, lang: Lang, colorsOn: Boolean = true): String =
         groupText(Group(o.label, o.isName, o.count, mutableListOf(o.color)), lang, colorsOn, liveKo = false)
 
-    /** One live announcement: "a blue chair in front" / "앞에 파란 의자"; "3 chairs on your left" / "왼쪽에 의자 세 개". */
-    fun livePhrase(o: ObjectSummary, lang: Lang, colorsOn: Boolean = true): String {
+    /**
+     * One live announcement, its direction said as on every screen (Bearings): "a blue chair ahead" / "앞에 파란 의자";
+     * "3 chairs on your left" / "왼쪽에 의자 세 개"; "3 chairs at 9 o'clock". [o]'s angle is relative to where the
+     * user faces.
+     */
+    fun livePhrase(o: ObjectSummary, lang: Lang, style: DirectionStyle, colorsOn: Boolean = true): String {
         val group = Group(o.label, o.isName, o.count, mutableListOf(o.color))
-        val sector = AngleMath.sector4(o.angle)
+        val w = Bearings.say(AngleMath.diff(o.angle, 0f), style, lang)
         return if (lang == Lang.KO) {
-            "${Directions.sector4Phrase(sector, lang)}에 ${groupText(group, lang, colorsOn, liveKo = true)}"
+            "$w ${groupText(group, lang, colorsOn, liveKo = true)}"
         } else {
-            "${groupText(group, lang, colorsOn, liveKo = false)} ${Directions.sector4Phrase(sector, lang)}"
+            "${groupText(group, lang, colorsOn, liveKo = false)} $w"
         }
     }
 
     /**
-     * The full-scan sentence. EN: "Around you: 3 blue chairs in front; a black laptop on your right."
+     * The full-scan sentence. EN: "Around you: 3 blue chairs ahead; a black laptop on your right."
      * KO: "앞에 파란 의자 세 개, 오른쪽에 검은 노트북 한 대가 있어요." Below 100% coverage it admits how much was seen.
+     * Objects are grouped by the four sectors; each is said at its middle (Bearings: ahead, right, behind, left).
      */
-    fun fullSummary(objects: List<ObjectSummary>, coveragePercent: Int, lang: Lang, colorsOn: Boolean = true): String {
+    fun fullSummary(objects: List<ObjectSummary>, coveragePercent: Int, lang: Lang, style: DirectionStyle, colorsOn: Boolean = true): String {
         val prefix = if (coveragePercent in 0..99) coveragePrefix(coveragePercent, lang) else ""
         if (objects.isEmpty()) return prefix + nothingFound(lang)
         val bySector = (0 until 4).map { sector -> groupsIn(objects.filter { AngleMath.sector4(it.angle) == sector }) }
         val clauses = bySector.withIndex().filter { it.value.isNotEmpty() }.map { (sector, groups) ->
             sector to groups.map { groupText(it, lang, colorsOn, liveKo = false) }
         }
-        return prefix + if (lang == Lang.KO) koreanSummary(clauses) else englishSummary(clauses)
+        return prefix + if (lang == Lang.KO) koreanSummary(clauses, style) else englishSummary(clauses, style)
     }
 
     fun coveragePrefix(percent: Int, lang: Lang): String =
@@ -74,16 +81,20 @@ object SummaryBuilder {
         if (lang == Lang.KO) "찾은 물건이 없어요. 밝은 곳에서 천천히 돌아 주세요."
         else "No objects found. Try better lighting and turn slowly."
 
-    private fun englishSummary(clauses: List<Pair<Int, List<String>>>): String =
+    /** The middle of sector [sector] of four (0 ahead, 1 right, 2 behind, 3 left), as Bearings says it. */
+    private fun sectorWords(sector: Int, style: DirectionStyle, lang: Lang): String =
+        Bearings.say(listOf(0f, 90f, 180f, -90f)[sector.mod(4)], style, lang)
+
+    private fun englishSummary(clauses: List<Pair<Int, List<String>>>, style: DirectionStyle): String =
         "Around you: " + clauses.joinToString("; ") { (sector, groups) ->
-            "${joinAnd(groups)} ${Directions.sector4Phrase(sector, Lang.EN)}"
+            "${joinAnd(groups)} ${sectorWords(sector, style, Lang.EN)}"
         } + "."
 
-    private fun koreanSummary(clauses: List<Pair<Int, List<String>>>): String {
+    private fun koreanSummary(clauses: List<Pair<Int, List<String>>>, style: DirectionStyle): String {
         val parts = clauses.mapIndexed { i, (sector, groups) ->
             val last = i == clauses.lastIndex
             val items = if (last) groups.dropLast(1) + Josa.iGa(groups.last()) else groups
-            "${Directions.sector4Phrase(sector, Lang.KO)}에 ${joinKorean(items)}"
+            "${sectorWords(sector, style, Lang.KO)} ${joinKorean(items)}"
         }
         return parts.joinToString(", ") + " 있어요."
     }

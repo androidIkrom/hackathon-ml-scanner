@@ -1,6 +1,8 @@
 package com.nungil.core.search
 
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
+import com.nungil.core.ui.Bearings
 import com.nungil.core.lang.Josa
 
 /** Everything the search screens say, in both languages (team plan §5). */
@@ -15,16 +17,29 @@ object SearchPhrases {
         Lang.KO -> "놓쳤어요."
     }
 
-    fun where(name: String, zone: Zone, lang: Lang): String = when (lang) {
-        Lang.EN -> when (zone) {
-            Zone.AHEAD -> "$name ahead."
-            Zone.LEFT -> "$name on your left."
-            Zone.RIGHT -> "$name on your right."
-            Zone.FAR_LEFT -> "$name far left."
-            Zone.FAR_RIGHT -> "$name far right."
+    /** Where the target is, as every screen says directions (Bearings): "Cup slightly left.", "Cup at 1 o'clock." */
+    fun where(name: String, zone: Zone, style: DirectionStyle, lang: Lang): String {
+        val w = Bearings.say(bearing(zone), style, lang)
+        return when (lang) {
+            Lang.EN -> "$name $w."
+            Lang.KO -> "${Josa.iGa(name)} $w 있어요."
         }
-        Lang.KO -> "${Josa.iGa(name)} ${SearchGuide.zoneWord(zone, lang)}에 있어요."
     }
+
+    /**
+     * A zone of the frame (SearchGuide.zone, fifths) as a bearing: the middle of each fifth of a 65° view. The two
+     * outer fifths are "on your left / right", the inner ones "slightly"; they were "far left" and "on your left".
+     */
+    fun bearing(zone: Zone): Float = when (zone) {
+        Zone.FAR_LEFT -> -FAR_DEG
+        Zone.LEFT -> -NEAR_DEG
+        Zone.AHEAD -> 0f
+        Zone.RIGHT -> NEAR_DEG
+        Zone.FAR_RIGHT -> FAR_DEG
+    }
+
+    private const val NEAR_DEG = 13f
+    private const val FAR_DEG = 26f
 
     fun unknown(lang: Lang): String = when (lang) {
         Lang.EN -> "I don't know that. Say it another way."

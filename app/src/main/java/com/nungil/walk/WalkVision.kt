@@ -22,6 +22,7 @@ import com.nungil.BuildConfig
 import com.nungil.contract.Box
 import com.nungil.contract.Compute
 import com.nungil.contract.Detection
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
 import com.nungil.contract.app.NameTagger
@@ -68,6 +69,8 @@ class WalkReport(val alerts: List<Alert>, val beepM: Float?, val depthWorking: B
 class WalkVision(
     private val context: Context,
     private val lang: () -> Lang,
+    /** Words or clock hours (Settings), read for each frame: it can change while walking. */
+    private val style: () -> DirectionStyle,
     private val stepM: Float?,
     /** Steps taken since the last call (step detector); 0 when there is none. */
     private val takeSteps: () -> Int,
@@ -244,6 +247,7 @@ class WalkVision(
         lastDetections = detections
         lastAt = now
         val l = lang()
+        val st = style()
         val alerts = ArrayList<Alert>()
         var beep: Float? = null
 
@@ -296,12 +300,12 @@ class WalkVision(
             closeHold.update(now, ahead, walked, here, heading())?.let { d ->
                 aheadBlocked = true
                 beep = d
-                if (!stairsUp) alerts.add(wallAhead(d, l))
+                if (!stairsUp) alerts.add(wallAhead(d, st, l))
             }
             aheadMeasuredClear = !ahead.unknown && !ahead.blocked
             // A wall in front fills the left and the right third too: with something ahead, only that is said.
             zones.filter { !aheadBlocked && it.zone != Zone.AHEAD && it.blocked && (it.distanceM ?: 9f) < SIDE_WARN_M }.forEach {
-                alerts.add(Alert(AlertKind.HAZARD, "wall:${it.zone}", WalkPhrases.wall(it.zone, it.distanceM!!, stepM, l)))
+                alerts.add(Alert(AlertKind.HAZARD, "wall:${it.zone}", WalkPhrases.wall(it.zone, it.distanceM!!, stepM, st, l)))
             }
             // Nothing behind a close wall can be seen: a "floor change" beyond it is the wall's own noise.
             val wallAt = if (aheadBlocked) beep else null
@@ -318,7 +322,7 @@ class WalkVision(
             closeHold.update(now, ZoneReading(Zone.AHEAD, false, null, 0f), walked, here, heading())?.let { d ->
                 aheadBlocked = true
                 beep = d
-                alerts.add(wallAhead(d, l))
+                alerts.add(wallAhead(d, st, l))
             }
         }
 
@@ -338,7 +342,7 @@ class WalkVision(
                 if (d != null) beep = minOf(beep ?: d, d)
             }
             val level = d?.let { WalkPhrases.distanceLevel(it, stepM) } ?: Alert.FAR
-            alerts.add(Alert(AlertKind.HAZARD, "hazard:$label:$zone", WalkPhrases.hazard(label, zone, d, stepM, l), topic = "hazard:$label", level = level, ahead = zone == Zone.AHEAD))
+            alerts.add(Alert(AlertKind.HAZARD, "hazard:$label:$zone", WalkPhrases.hazard(label, zone, d, stepM, st, l), topic = "hazard:$label", level = level, ahead = zone == Zone.AHEAD))
         }
 
         if (!aheadBlocked) wallLevel = Int.MAX_VALUE
@@ -380,7 +384,7 @@ class WalkVision(
             for (tag in savedTags(bitmap, detections)) {
                 if ((savedSaidAt[tag.first] ?: Long.MIN_VALUE / 2) + SAVED_REPEAT_MS > now) continue
                 savedSaidAt[tag.first] = now
-                alerts.add(Alert(AlertKind.SAVED, "saved:${tag.first}", WalkPhrases.saved(tag.first, tag.second, l)))
+                alerts.add(Alert(AlertKind.SAVED, "saved:${tag.first}", WalkPhrases.saved(tag.first, tag.second, st, l)))
             }
         }
 
@@ -405,9 +409,9 @@ class WalkVision(
      * The wall is announced again each time its spoken distance gets smaller (3 steps, 2 steps, very
      * close). The level only goes down while the wall is there, so depth noise cannot make it bounce.
      */
-    private fun wallAhead(d: Float, l: Lang): Alert {
+    private fun wallAhead(d: Float, st: DirectionStyle, l: Lang): Alert {
         wallLevel = minOf(wallLevel, WalkPhrases.distanceLevel(d, stepM))
-        return Alert(AlertKind.HAZARD, "wall:ahead:$wallLevel", WalkPhrases.wall(Zone.AHEAD, d, stepM, l), urgent = wallLevel <= 1, ahead = true)
+        return Alert(AlertKind.HAZARD, "wall:ahead:$wallLevel", WalkPhrases.wall(Zone.AHEAD, d, stepM, st, l), urgent = wallLevel <= 1, ahead = true)
     }
 
     // ---- models (worker thread) ------------------------------------------------------------------
