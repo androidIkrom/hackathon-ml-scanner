@@ -1,6 +1,6 @@
 # Live Quality — Handoff and Plan (continue in a new chat)
 
-> Status: findings verified on the device 2026-10-05; tasks below are a proposal. Start the next chat by reading
+> Status: findings verified on the device 2026-10-05; tasks below are a proposal (Task 3's direction decided by the user). Start the next chat by reading
 > this file, then run the brainstorming gate for Tasks 1–3 (bounded changes: short design in chat, user approval).
 
 ## Where things are
@@ -52,11 +52,19 @@ Keep `keyboard` in `ColorPolicy` (it is). Find why it reads blue: log `ColorSamp
 a `laptop`/`tv` box; likely fixes: sample only the lower half of a keyboard box, or drop very bright / saturated
 pixels (screen glow) before voting. Decide from the logged votes, then test with `ColorVote`/`ColorMapper` cases.
 
-### Task 3 — Old-style items (from finding 2)
-- Data (no code): re-learn the old-style items with the current Add Object, delete duplicates
-  (three glasses items; Toca = Chuckle, the same jar).
-- Code options to discuss: Saved list marks items "learned the old way — learn again"; and/or a live scan names
-  old-style items only on a detector box, never by look (they are the source of the false finds).
+### Task 3 — The old enrolment method is not used any more (user's decision, 2026-10-05)
+Items learned the old way (squares only: `ItemEnrollmentGuide.learnedAlone(vectors) == false`, 12 vectors) are the
+source of the false finds and are no longer used for recognition anywhere (Live, Look around, Walk, Find):
+- `ItemRecognizer` / `ItemFinder` leave them out of `ItemSearch` (no box, no square, no near search for them).
+- The Saved list marks them "learned the old way — learn it again" and says so when one is opened; Find on such an
+  item says it must be learned again instead of searching.
+- Add Object already stores both kinds of samples; keep it that way, and make sure a new item can never be saved
+  with square samples only (a step left early must still store the item-alone samples; `ItemEnrollmentGuide`
+  saves a 12-vector list as 13 for exactly this — verify with a test).
+- Data the user will clean: delete duplicates (three glasses items; Toca = Chuckle, the same jar) and re-learn the
+  old-style items with the current Add Object.
+Tests: recognizer ignores an item with square samples only; Saved/Find say "learn again" for it; a new enrolment
+always yields `learnedAlone == true`.
 
 ### Task 4 — Finish `speed-laptop`
 After Tasks 1–3 (or before, as its own PR): push `speed-laptop`, open the PR with the device numbers above, merge.
