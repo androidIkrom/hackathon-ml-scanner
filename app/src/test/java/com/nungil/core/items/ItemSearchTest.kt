@@ -113,6 +113,85 @@ class ItemSearchTest {
         assertEquals(1L, hits[0].id)
     }
 
+    // ---- All saved items -------------------------------------------------------------------------------------
+
+    private val bottle = 3L
+    private val towel = 5L
+    private val glass = 6L
+    private val all = mapOf(bottle to "My bottle", towel to "My towel", glass to "My glass", other to "Pen")
+    private val left = Box(0.1f, 0.2f, 0.3f, 0.6f)
+    private val right = Box(0.55f, 0.3f, 0.9f, 0.7f)
+
+    private fun centreIn(box: Box, area: Box) = box.centerX in area.left..area.right && box.centerY in area.top..area.bottom
+
+    @Test fun aDetectorBoxNamesTheItemOnIt() {
+        val scene = Scene { if (centreIn(it, left)) ItemMatcher.Match(bottle, 0.6f) else ItemMatcher.Match(other, 0.2f) }
+        val hits = search(finder(all), scene, only = null, detections = listOf(Detection("bottle", 0.8f, left))).hits
+        assertEquals(1, hits.size)
+        assertEquals(bottle, hits[0].id)
+        assertEquals(0, hits[0].detectionIndex)
+        assertEquals(left, hits[0].box)
+    }
+
+    @Test fun aBoxedItemDoesNotStopTheSearchForAnother() {
+        val scene = Scene {
+            when {
+                centreIn(it, left) -> ItemMatcher.Match(bottle, 0.6f)
+                centreIn(it, right) -> ItemMatcher.Match(towel, 0.6f)
+                else -> ItemMatcher.Match(other, 0.2f)
+            }
+        }
+        val hits = search(finder(all), scene, only = null, detections = listOf(Detection("bottle", 0.8f, left))).hits
+        assertEquals(setOf(bottle, towel), hits.map { it.id }.toSet())
+        assertNull(hits.single { it.id == towel }.detectionIndex)
+    }
+
+    @Test fun onlyOneWholeFrameTargetPerCall() {
+        val scene = Scene {
+            when {
+                centreIn(it, left) -> ItemMatcher.Match(towel, 0.6f)
+                centreIn(it, right) -> ItemMatcher.Match(glass, 0.65f)
+                else -> ItemMatcher.Match(other, 0.2f)
+            }
+        }
+        val hits = search(finder(all), scene, only = null).hits
+        assertEquals(listOf(glass), hits.map { it.id })
+    }
+
+    @Test fun nothingInAFrameOfOtherThings() {
+        val hits = search(finder(all), Scene { ItemMatcher.Match(bottle, 0.29f) }, only = null,
+            detections = listOf(Detection("cup", 0.7f, left))).hits
+        assertTrue(hits.isEmpty())
+    }
+
+    @Test fun boxesAndNearNeverSearchTheWholeFrame() {
+        val scene = cupAt(0.9f)
+        assertTrue(search(finder(reach = Reach.BOXES_AND_NEAR), scene, only = null).hits.isEmpty())
+        assertEquals(0, scene.calls)
+    }
+
+    @Test fun aPlaceWithADetectorBoxInItsMiddleTakesThatBox() {
+        // The detector's boxes are not the cup by their own squares (a 480 px square, a 74 px one); the grid finds it.
+        val scene = Scene {
+            when {
+                it.width * W < 150f || abs(it.width * W - 480f) < 1f -> ItemMatcher.Match(other, 0.2f)
+                inPlace(it) -> ItemMatcher.Match(cup, 0.6f)
+                else -> ItemMatcher.Match(other, 0.2f)
+            }
+        }
+        val small = Detection("vase", 0.6f, Box(0.45f, 0.45f, 0.55f, 0.55f))
+        val big = Detection("tv", 0.6f, Box(0.05f, 0.05f, 0.95f, 0.95f))
+        assertEquals(0, search(finder(), scene, only = null, detections = listOf(small)).hits.single().detectionIndex)
+        assertNull(search(finder(), scene, only = null, detections = listOf(big)).hits.single().detectionIndex)
+    }
+
+    @Test fun aPersonBoxIsNeverAnItem() {
+        val person = Detection("person", 0.9f, left)
+        val square = ItemWindows.square(left, W, H)
+        val scene = Scene { if (it == square) ItemMatcher.Match(bottle, 0.9f) else ItemMatcher.Match(other, 0.2f) }
+        assertTrue(search(finder(all), scene, only = null, detections = listOf(person)).hits.isEmpty())
+    }
+
     private companion object {
         const val W = 640
         const val H = 480

@@ -51,6 +51,19 @@ class ItemSearch(
     /** The square each target was found in by the last call, by the target's smallest id. */
     private val last = HashMap<Long, Box>()
 
+    /** What decided about one target in this call, for the log. */
+    private class Trace(val needs: Float) {
+        val scored = mutableListOf<String>()
+        var verdict: Verdict? = null
+    }
+
+    /**
+     * The saved items in one frame: [only] and the items saved under its name, or every saved item when null.
+     * In this order: the detector's boxes (not people), each as the square it would be learned in; near the square
+     * of each item found by the last call; and, with [Reach.WHOLE_FRAME], squares all over the frame for the one
+     * item not found yet that the frame looks most like. Searching the frame for every saved item would take a
+     * second per item.
+     */
     fun search(
         detections: List<Detection>,
         width: Int,
@@ -59,38 +72,85 @@ class ItemSearch(
         match: (Box) -> ItemMatcher.Match?,
         cut: (Box) -> CutThing?,
     ): Result {
-        if (only == null) TODO("All saved items: task 2")
-        val target = ItemMatcher.sameName(only, names)
-        val key = target.min()
+        val targets = (if (only != null) listOf(only) else names.keys).map { ItemMatcher.sameName(it, names) }.distinct()
+        val byKey = targets.associateBy { it.min() }
+        val keyOf = HashMap<Long, Long>()
+        for ((key, target) in byKey) for (id in target) keyOf[id] = key
+        val hits = LinkedHashMap<Long, Hit>()
+        val found = HashMap<Long, Box>()
+        val traces = LinkedHashMap<Long, Trace>()
         var looked = 0
-        val scored = mutableListOf<String>()
-        val kept = last[key]
-        val needs = if (kept != null) ItemMatcher.KEEP_THRESHOLD else ItemMatcher.FIND_THRESHOLD
-        var verdict: Verdict? = null
+
+        fun record(key: Long, v: Verdict) {
+            if (v.seen == ItemMatcher.Seen.NO) return
+            hits[key] = Hit(key, v.shown, boxIn(v.square, detections), v.score, v.seen)
+            found[key] = v.square
+        }
+
+        for (index in ItemCrop.candidates(detections, width, height)) {
+            val square = ItemWindows.square(detections[index].box, width, height)
+            looked++
+            val m = match(square) ?: continue
+            val key = keyOf[m.id] ?: continue
+            traces.getOrPut(key) { Trace(ItemMatcher.FIND_THRESHOLD) }.scored += fmt("box %.2f", m.score)
+            if (m.score < ItemMatcher.FIND_THRESHOLD || (hits[key]?.score ?: -1f) >= m.score) continue
+            hits[key] = Hit(key, detections[index].box, index, m.score, ItemMatcher.Seen.BY_SQUARES)
+            found[key] = square
+        }
 
         // Seen a moment ago: look only where it was and next to it (nine squares, not forty). The whole frame is
         // searched again only when it is not there any more; every frame took a second otherwise (the logs).
-        if (kept != null) {
+        for ((key, kept) in last) {
+            val target = byKey[key] ?: continue
+            if (key in hits) continue
+            val trace = traces.getOrPut(key) { Trace(ItemMatcher.KEEP_THRESHOLD) }
             val near = ItemWindows.near(kept)
             val scores = FloatArray(near.size) { score(match(near[it]), target) }
             val best = scores.indices.maxBy { scores[it] }
             looked += near.size
-            scored += fmt("near %.2f", scores[best])
-            if (scores[best] >= ItemMatcher.LOOK_CLOSER) verdict = judge(near[best], scores[best], needs, target, cut)
+            trace.scored += fmt("near %.2f", scores[best])
+            if (scores[best] >= ItemMatcher.LOOK_CLOSER) {
+                trace.verdict = judge(near[best], scores[best], ItemMatcher.KEEP_THRESHOLD, target, cut).also { record(key, it) }
+            }
         }
-        if ((verdict == null || verdict.seen == ItemMatcher.Seen.NO) && reach == Reach.WHOLE_FRAME) {
+
+        val open = byKey.filterKeys { it !in hits }
+        if (reach == Reach.WHOLE_FRAME && open.isNotEmpty()) {
             val windows = ItemWindows.grid(width, height)
+            val matches = windows.map(match)
             looked += windows.size
-            val scores = FloatArray(windows.size) { score(match(windows[it]), target) }
-            val wide = wholeFrame(windows, scores, needs, target, match, cut)
+            var key = -1L
+            var scores = FloatArray(0)
+            for ((k, target) in open) {
+                val s = FloatArray(windows.size) { score(matches[it], target) }
+                if (key < 0 || s.max() > scores.max()) {
+                    key = k
+                    scores = s
+                }
+            }
+            val needs = if (key in last) ItemMatcher.KEEP_THRESHOLD else ItemMatcher.FIND_THRESHOLD
+            val trace = traces.getOrPut(key) { Trace(needs) }
+            val wide = wholeFrame(windows, scores, needs, open.getValue(key), match, cut)
             looked += wide.looked
-            scored += wide.log
-            if (wide.verdict != null) verdict = wide.verdict
+            trace.scored += wide.log
+            wide.verdict?.let {
+                trace.verdict = it
+                record(key, it)
+            }
         }
-        val hit = verdict?.takeIf { it.seen != ItemMatcher.Seen.NO }
-        if (hit != null) last[key] = hit.square else last.remove(key)
-        val hits = listOfNotNull(hit?.let { Hit(key, it.shown, null, it.score, it.seen) })
-        return Result(hits, looked, logLine(scored, needs, verdict, hit))
+        last.clear()
+        last.putAll(found)
+        val log = traces.entries.joinToString(" | ") { (key, t) ->
+            (if (only == null) "\"${names[key]}\" " else "") + logLine(t.scored, t.needs, t.verdict, hits[key])
+        }
+        return Result(hits.values.toList(), looked, log)
+    }
+
+    /** A detector box that is the thing found in [place]: its middle in the place, not much bigger than it, not a person. */
+    private fun boxIn(place: Box, detections: List<Detection>): Int? = detections.indices.firstOrNull { i ->
+        val b = detections[i].box
+        detections[i].label != PERSON && b.area <= place.area * MAX_BOX_SHARE &&
+            b.centerX in place.left..place.right && b.centerY in place.top..place.bottom
     }
 
     private class Wide(val verdict: Verdict?, val looked: Int, val log: String)
@@ -151,16 +211,23 @@ class ItemSearch(
     /** How much a square looks like [target]: 0 when it looks more like another saved item. */
     private fun score(m: ItemMatcher.Match?, target: Set<Long>): Float = m?.takeIf { it.id in target }?.score ?: 0f
 
-    private fun logLine(scored: List<String>, needs: Float, verdict: Verdict?, hit: Verdict?): String {
+    private fun logLine(scored: List<String>, needs: Float, verdict: Verdict?, hit: Hit?): String {
         val alone = verdict?.alone?.let { fmt("%.2f", it) } ?: "-"
         val seen = when (hit?.seen) {
             ItemMatcher.Seen.BY_SQUARES -> "seen by squares"
             ItemMatcher.Seen.BY_ITEM_ALONE -> "seen by the item alone"
             else -> "not seen"
-        } + if (hit?.outlined == true) ", outlined" else ""
-        val box = hit?.shown?.let { fmt(", box %.2f x %.2f at %.2f, %.2f", it.width, it.height, it.centerX, it.centerY) } ?: ""
+        } + if (hit != null && verdict?.outlined == true) ", outlined" else ""
+        val box = hit?.box?.let { fmt(", box %.2f x %.2f at %.2f, %.2f", it.width, it.height, it.centerX, it.centerY) } ?: ""
         return scored.joinToString(", ") + fmt(" (needs %.2f), alone %s (needs %.2f), ", needs, alone, ItemMatcher.ALONE_MIN) + seen + box
     }
 
     private fun fmt(pattern: String, vararg args: Any): String = String.format(Locale.US, pattern, *args)
+
+    private companion object {
+        const val PERSON = "person"
+
+        /** A detector box up to this many times the found place's area may be the thing's own box. */
+        const val MAX_BOX_SHARE = 1.5f
+    }
 }
