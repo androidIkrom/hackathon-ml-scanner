@@ -21,11 +21,14 @@ import com.nungil.contract.app.VisionFrame
 import com.nungil.contract.app.CameraScreen
 import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.services
-import com.nungil.core.search.SearchGuide
 import com.nungil.core.scan.ScanPhrases
+import com.nungil.core.search.SearchGuide
 import com.nungil.core.search.SearchPhrases
 import com.nungil.core.search.SearchTracker
 import com.nungil.core.search.TargetType
+import com.nungil.core.search.Zone
+import com.nungil.core.ui.Announcer
+import com.nungil.core.ui.Notice
 import com.nungil.databinding.SearchCameraFragmentBinding
 import com.nungil.scan.CameraSession
 import com.nungil.scan.OverlayView
@@ -57,6 +60,10 @@ class SearchCameraFragment : Fragment(), CameraScreen {
     private val busy = AtomicBoolean(false)
     private val matcher = AtomicReference<TargetMatcher?>(null)
     private val tracker = SearchTracker()
+
+    // Guarded by tracker: frames are handled on the analysis or the extras thread.
+    private val announcer = Announcer(Announcer.FIND)
+    private var pending: Notice? = null
 
     @Volatile
     private var lastPulseMs = -1L
@@ -221,11 +228,22 @@ class SearchCameraFragment : Fragment(), CameraScreen {
             services.beeper.pulse(pulse)
         }
         if (update.enteredCenter) services.haptics.buzz(Buzz.CENTERED)
-        when (val say = update.say) {
-            is SearchTracker.Say.Where -> services.speaker.say(SearchPhrases.where(spokenName, say.zone, services.directionStyle, lang))
-            SearchTracker.Say.Lost -> services.speaker.say(SearchPhrases.lost(lang))
-            null -> Unit
+        // The tracker says when the target's place is worth saying; the announcer, when it is said (no queue, no
+        // talking over). A sentence it holds back stays pending until said or replaced by a newer one.
+        val chosen = synchronized(tracker) {
+            when (val say = update.say) {
+                is SearchTracker.Say.Where -> pending = Notice(
+                    "find:${say.zone}",
+                    SearchPhrases.where(spokenName, say.zone, services.directionStyle, lang),
+                    0,
+                    ahead = say.zone == Zone.AHEAD,
+                )
+                SearchTracker.Say.Lost -> pending = Notice("find:lost", SearchPhrases.lost(lang), 0)
+                null -> Unit
+            }
+            announcer.choose(SystemClock.elapsedRealtime(), listOfNotNull(pending))?.also { pending = null }
         }
+        chosen?.let { services.speaker.sayNow(it.text) }
 
         val marks = frame.detections.filter { it.box != target }.map { OverlayView.Mark(it.box, null, OverlayView.Style.DIM) } +
             listOfNotNull(target?.let { OverlayView.Mark(it, spokenName, OverlayView.Style.TARGET) })
