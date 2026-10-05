@@ -304,7 +304,12 @@ class ScanFragment : Fragment(), CameraScreen {
         b.scanOverlay.show(marks, frame.imageWidth, frame.imageHeight, frame.facing == Facing.FRONT)
         if (step == null || state != State.SCANNING) return
         if (args.mode == ScanMode.FULL) b.scanRing.setCoverage(step.coveragePercent, step.bins)
-        step.phrases.forEach { speak(it) }
+        // "Slow down.", "Compass not available…": said at once and told to the announcer, so the next thing in view
+        // waits for it. Queued, it was flushed by the next thing said (review).
+        step.phrases.forEach {
+            announcer.said(SystemClock.elapsedRealtime(), it)
+            speakNow(it)
+        }
         announceInView(step.inView)
         if (step.done) stopScan()
     }
