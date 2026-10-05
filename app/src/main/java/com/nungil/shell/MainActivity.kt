@@ -36,6 +36,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.nungil.R
 import com.nungil.contract.Buzz
 import com.nungil.contract.Dest
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
 import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppNavigator
@@ -201,6 +202,8 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     override val haptics: Haptics get() = vibration
     override val beeper: Beeper get() = tones
     override val navigator: AppNavigator get() = this
+    override val directionStyle: DirectionStyle
+        get() = if (::prefs.isInitialized && prefs.clockDirections) DirectionStyle.CLOCK else DirectionStyle.WORDS
 
     override fun onCreate(savedInstanceState: Bundle?) {
         prefs = AppPrefs(this)

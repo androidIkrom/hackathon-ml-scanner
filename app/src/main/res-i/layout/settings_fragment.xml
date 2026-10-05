@@ -268,6 +268,13 @@
                     android:text="@string/settings_voice_guide" />
 
                 <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/settings_clock_directions"
+                    style="@style/Widget.Nungil.Switch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/settings_clock_directions" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/settings_learner"
                     style="@style/Widget.Nungil.Switch"
                     android:layout_width="match_parent"

@@ -1,5 +1,6 @@
 package com.nungil.core.ui
 
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
 import org.junit.Assert.assertEquals
 import org.junit.Test

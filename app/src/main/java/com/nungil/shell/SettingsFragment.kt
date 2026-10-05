@@ -68,6 +68,7 @@ class SettingsFragment : Fragment() {
         )
         settingsHighContrast.isChecked = main.highContrast
         settingsVoiceGuide.isChecked = prefs.voiceGuideOn
+        settingsClockDirections.isChecked = prefs.clockDirections
         settingsLearner.isChecked = main.learnerOn
     }
 
@@ -107,6 +108,7 @@ class SettingsFragment : Fragment() {
         }
         settingsHighContrast.setOnCheckedChangeListener { _, on -> main.setHighContrast(on) }
         settingsVoiceGuide.setOnCheckedChangeListener { _, on -> prefs.voiceGuideOn = on }
+        settingsClockDirections.setOnCheckedChangeListener { _, on -> prefs.clockDirections = on }
         settingsLearner.setOnCheckedChangeListener { _, on -> main.setLearner(on) }
     }
 

@@ -1,11 +1,9 @@
 package com.nungil.core.ui
 
+import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
 import kotlin.math.abs
 import kotlin.math.roundToInt
-
-/** How directions are said: words ("on your left") or clock hours ("at 9 o'clock"), a setting. */
-enum class DirectionStyle { WORDS, CLOCK }
 
 /**
  * The one way every screen says a direction (spec 2026-10-05-shared-announcer). A screen gives a bearing in degrees,
