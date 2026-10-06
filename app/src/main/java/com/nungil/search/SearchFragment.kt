@@ -22,6 +22,7 @@ import com.nungil.core.lang.LabelNames
 import com.nungil.core.search.SavedName
 import com.nungil.core.search.SearchPhrases
 import com.nungil.core.search.SearchResolver
+import com.nungil.core.search.TargetType
 import com.nungil.databinding.SearchFragmentBinding
 import com.nungil.shell.MainActivity
 import kotlinx.coroutines.launch
@@ -37,6 +38,9 @@ class SearchFragment : Fragment(), VoiceHandler {
     private lateinit var services: AppServices
     private lateinit var lang: Lang
     private var saved: List<SavedName> = emptyList()
+
+    /** Items learned the old way: named, but not searched for (SavedNames.oldItems). */
+    private var oldItems: Set<Long> = emptySet()
 
     /** The nav-argument query is used once; coming Back from the camera must not jump forward again. */
     private var queryConsumed = false
@@ -68,6 +72,7 @@ class SearchFragment : Fragment(), VoiceHandler {
         }
         viewLifecycleOwner.lifecycleScope.launch {
             saved = SavedNames.load(requireContext().applicationContext)
+            oldItems = SavedNames.oldItems(requireContext().applicationContext)
             if (_binding == null) return@launch
             showChips()
             val query = args.query
@@ -142,6 +147,10 @@ class SearchFragment : Fragment(), VoiceHandler {
             return
         }
         binding.searchInputLayout.error = null
+        if (target.type == TargetType.ITEM && target.id in oldItems) {
+            services.speaker.say(SearchPhrases.learnAgain(target.spokenName, lang))
+            return
+        }
         val args = SearchCameraFragmentArgs(
             targetType = target.type.name,
             targetId = target.id,

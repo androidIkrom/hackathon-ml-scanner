@@ -501,6 +501,15 @@ class ItemEnrollFragment : Fragment(), VoiceHandler, CameraScreen {
     private fun finish() {
         phase = Phase.FINISHED
         running = false
+        if (!guide.hasAlone) {
+            // Squares only is the old way, which matched things on the same desk: nothing is saved.
+            Log.i(TAG, "Item not enrolled: ${guide.taken} samples, none of the thing alone")
+            main.post {
+                services.speaker.say(ItemPhrases.notSaved(lang))
+                if (_binding != null) services.navigator.back()
+            }
+            return
+        }
         val vectors = guide.samples.toList()
         // No detector here, so no kind of thing to show under the name; saved items are found by their look.
         val label = if (kind == ItemKind.CAR) "car" else "object"

@@ -22,13 +22,16 @@ import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppServices
 import com.nungil.contract.app.VoiceHandler
 import com.nungil.contract.app.services
+import com.nungil.core.items.ItemEnrollmentGuide
 import com.nungil.core.lang.LabelNames
 import com.nungil.data.AppDatabase
+import com.nungil.data.byItem
 import com.nungil.databinding.SavedFragmentBinding
 import com.nungil.items.ItemFragmentArgs
 import com.nungil.people.PersonFragmentArgs
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -126,14 +129,20 @@ class SavedFragment : Fragment(), VoiceHandler {
     private fun rowsFor(tab: SavedTab): Flow<List<SavedRow>> {
         val db = AppDatabase.get(requireContext())
         val personSubtitle = getString(R.string.saved_person_subtitle)
+        val oldSubtitle = getString(R.string.saved_item_old)
         return when (tab) {
             SavedTab.PEOPLE -> db.people().observePeople().map { people ->
                 people.map { SavedRow(it.id, it.name, personSubtitle, isPerson = true) }
             }
             SavedTab.CARS, SavedTab.OBJECTS -> {
                 val kind = if (tab == SavedTab.CARS) ItemKind.CAR else ItemKind.OBJECT
-                db.items().observeItems(kind.name).map { items ->
-                    items.map { SavedRow(it.id, it.name, LabelNames.name(it.label, lang), isPerson = false) }
+                // An item learned the old way finds nothing any more (ItemRecognizer): it says so instead of its label.
+                db.items().observeItems(kind.name).combine(db.items().observeVectorCounts()) { items, counts ->
+                    val old = ItemEnrollmentGuide.oldStyle(counts.byItem())
+                    items.map {
+                        val subtitle = if (it.id in old) oldSubtitle else LabelNames.name(it.label, lang)
+                        SavedRow(it.id, it.name, subtitle, isPerson = false)
+                    }
                 }
             }
         }

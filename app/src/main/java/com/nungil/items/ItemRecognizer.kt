@@ -25,9 +25,12 @@ class ItemRecognizer(context: Context) {
         val embeddings = db.items().allEmbeddings()
         val byId = items.associate { it.id to it.name }
         names = byId
-        known = embeddings
+        val saved = embeddings
             .filter { it.itemId in byId }
             .groupBy({ it.itemId }, { VectorBytes.toFloats(it.vector) })
+        // Items learned the old way (squares only) matched things on the same desk: they find nothing any more.
+        val old = ItemEnrollmentGuide.oldStyle(saved.mapValues { it.value.size })
+        known = saved - old
     }
 
     fun identify(vector: FloatArray, threshold: Float = ItemMatcher.THRESHOLD): ItemMatcher.Match? =

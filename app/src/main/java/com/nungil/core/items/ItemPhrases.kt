@@ -151,4 +151,10 @@ object ItemPhrases {
         Lang.EN -> "All done. I will remember $name."
         Lang.KO -> "다 됐어요. ${Josa.eulReul(name)} 기억할게요."
     }
+
+    /** Learning ended with no sample of the thing alone (ItemEnrollmentGuide.hasAlone): nothing was saved. */
+    fun notSaved(lang: Lang): String = when (lang) {
+        Lang.EN -> "I could not see the thing on its own, so it is not saved. Try again on a plain surface."
+        Lang.KO -> "물건만 따로 보이지 않아서 저장하지 않았어요. 단순한 바닥 위에서 다시 해 주세요."
+    }
 }

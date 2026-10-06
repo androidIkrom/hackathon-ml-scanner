@@ -51,6 +51,27 @@ class ItemEnrollmentTest {
         assertFalse(ItemEnrollmentGuide.learnedAlone(0))
     }
 
+    @Test fun itemsLearnedTheOldWayAreTheOnesWithSquaresOnly() {
+        assertEquals(setOf(1L), ItemEnrollmentGuide.oldStyle(mapOf(1L to 12, 2L to 24, 3L to 13, 4L to 6)))
+        assertEquals(emptySet<Long>(), ItemEnrollmentGuide.oldStyle(emptyMap()))
+    }
+
+    @Test fun samplesWithoutTheThingAloneCannotBeSaved() {
+        // The segmenter never cut the thing out: the squares alone would read as learned alone by their count.
+        val g = ItemEnrollmentGuide()
+        repeat(2) { g.add(view(0.0)) }
+        assertEquals(2, g.taken)
+        assertFalse(g.hasAlone)
+        g.add(ItemEnrollmentGuide.View(at(0.0), 0.5f, 0.5f, 0.1f, alone = at(90.0)))
+        assertTrue(g.hasAlone)
+        assertTrue(ItemEnrollmentGuide.learnedAlone(g.samples.size))
+        assertEquals(
+            "I could not see the thing on its own, so it is not saved. Try again on a plain surface.",
+            ItemPhrases.notSaved(Lang.EN),
+        )
+        assertEquals("물건만 따로 보이지 않아서 저장하지 않았어요. 단순한 바닥 위에서 다시 해 주세요.", ItemPhrases.notSaved(Lang.KO))
+    }
+
     @Test fun sixSamplesAreNotSavedAsTwelveVectors() {
         // Held still and left, then right and up left early (the logs): 6 squares and 6 alone would read as old.
         val g = ItemEnrollmentGuide()
