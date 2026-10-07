@@ -75,8 +75,11 @@ class ScanFragment : Fragment(), CameraScreen {
 
     private enum class State { NO_PERMISSION, IDLE, SCANNING }
 
-    /** [byLook]: a saved item found where the detector drew no box (FoundPlaces), [box] being its place. */
-    private class PendingTag(val box: Box, val name: String, val isPerson: Boolean, val byLook: Boolean = false)
+    /**
+     * [byLook]: a saved item found where the detector drew no box (FoundPlaces), [box] being its place, and
+     * [outlined] when that is the thing's own outline.
+     */
+    private class PendingTag(val box: Box, val name: String, val isPerson: Boolean, val byLook: Boolean = false, val outlined: Boolean = false)
 
     private var _binding: ScanFragmentBinding? = null
     private val binding get() = _binding!!
@@ -273,7 +276,11 @@ class ScanFragment : Fragment(), CameraScreen {
         lastFrame = frame
         while (true) {
             val tag = pendingTags.poll() ?: break
-            if (tag.byLook) places.found(tag.box, tag.name, frame.timestampMs) else sticky.recognized(tag.box, tag.name, tag.isPerson)
+            if (tag.byLook) {
+                places.found(tag.box, tag.name, frame.timestampMs, outline = tag.box.takeIf { tag.outlined })
+            } else {
+                sticky.recognized(tag.box, tag.name, tag.isPerson)
+            }
         }
         while (true) {
             val (box, label) = pendingChecks.poll() ?: break
@@ -306,7 +313,8 @@ class ScanFragment : Fragment(), CameraScreen {
         }
         logSeen(frame, usable, names, found)
         val marks = usable.mapIndexed { i, d -> OverlayView.Mark(d.box, names[i]?.name ?: LabelNames.name(d.label, lang)) } +
-            found.map { OverlayView.Mark(it.box, it.name) }
+            // A place found by look is drawn as the thing's own outline, never as the square (none without one).
+            found.mapNotNull { p -> p.outline?.let { OverlayView.Mark(it, p.name) } }
         main.post { render(frame, marks, step) }
         runTaggers(frame, check)
     }
@@ -339,7 +347,7 @@ class ScanFragment : Fragment(), CameraScreen {
         lastSeenLogMs = frame.timestampMs
         val seen = usable.mapIndexed { i, d ->
             String.format(Locale.US, "%s %.2f", d.label, d.score) + (names[i]?.let { " [${it.name}]" } ?: "")
-        } + found.map { "[${it.name}] by look" }
+        } + found.map { "[${it.name}] by look" + if (it.outline != null) ", outlined" else "" }
         val cut = frame.detections.size - usable.size
         Log.i(TAG, "Live sees: " + seen.joinToString(", ").ifEmpty { "nothing" } + if (cut > 0) " ($cut at the edge)" else "")
     }
@@ -369,7 +377,7 @@ class ScanFragment : Fragment(), CameraScreen {
                         for (tag in tagger.tag(frame)) {
                             val place = tag.box
                             if (place != null) {
-                                pendingTags.add(PendingTag(place, tag.name, isPerson = false, byLook = true))
+                                pendingTags.add(PendingTag(place, tag.name, isPerson = false, byLook = true, outlined = tag.outlined))
                                 continue
                             }
                             val d = frame.detections.getOrNull(tag.detectionIndex) ?: continue

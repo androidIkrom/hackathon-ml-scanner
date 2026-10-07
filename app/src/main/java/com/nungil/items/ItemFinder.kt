@@ -45,7 +45,7 @@ class ItemFinder(private val context: Context, reach: Reach) : SavedFinder {
             Log.i(TAG, "Item search: ${result.looked} squares in ${now - started} ms, ${result.log}")
         }
         return result.hits.mapNotNull { hit ->
-            recognizer.nameOf(hit.id)?.let { Found(TagKind.ITEM, hit.id, it, hit.box, hit.detectionIndex, hit.score) }
+            recognizer.nameOf(hit.id)?.let { Found(TagKind.ITEM, hit.id, it, hit.box, hit.detectionIndex, hit.score, hit.outlined) }
         }
     }
 

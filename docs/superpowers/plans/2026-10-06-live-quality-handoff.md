@@ -69,7 +69,29 @@ always yields `learnedAlone == true`.
 ### Task 4 — Finish `speed-laptop`
 After Tasks 1–3 (or before, as its own PR): push `speed-laptop`, open the PR with the device numbers above, merge.
 
+### Task 5 — Live says "bed" where there is none (user, 2026-10-06)
+Device log `log-task1.txt` (scratchpad of session 736533c0), 22:09:59: "Live sees: bed 0.72", then 0.70, spoken as
+"a gray bed at 12 o'clock" on a desk scene (laptop, charger, bottle nearby). The detector (lite2, ACCURATE) gives
+`bed` at 0.70–0.72, above the 0.7 min score. First find what was in view (ask the user, or save a frame when `bed`
+is detected), then decide: a stricter score for `bed` (and other big furniture labels seen from close up), a
+`Relabels`/classifier check like `LaptopCheck`, or a size/shape rule (a bed fills most of the frame and is wide).
+Tests: the chosen rule with the logged boxes and scores.
+
+### Task 6 — Live speaks late while the microphone hears other voices (user, 2026-10-07)
+Device log `log-task1b.txt` (scratchpad of session 736533c0): Live decided "My new white bottle at 12 o'clock" at
+23:23:59.1 but it was said at 23:24:03.8. The recognizer had a partial ("Stop alarm": the user or a voice in the
+room), `VoiceBargeIn` stopped all app sound (`beginHold`), and the hold lasted until the recognizer gave up after
+8 s with no words. The room is noisy ("heard sound for 8–12 s but no words" all session), so this repeats.
+Proposal: end the hold when no new partial word has come for ~1.5 s and no command was heard (the user who really
+talks keeps producing partials); keep `HOLD_SAFETY_MS` as the outer limit. Tests: the hold-release rule as a pure
+function (time since last new partial, final result or not).
+Smaller delays seen: a place found by look needs two finds (~1.5–2.5 s from view to speech); a detector `bottle`
+was said ("a blue bottle") 2 s before its saved name came.
+
 ### Later
+- "Find my charging" said "Looking for My.": the first guess matched the saved *person* "My" (a filler-word name)
+  before the second guess "Find my charger" was tried. `SearchResolver.resolve(text, guesses, …)` should try the
+  other guesses for a non-filler name before falling back to a filler-word name.
 - Stage 4 (frame source: one camera pipeline, one model instance per kind) — spec not written yet.
 - "Delete <name>" by voice on the Saved list (said "That does not work on this screen").
 - "How sure before speaking" by voice (min score; default 0.7 hides detections at 0.5–0.69).

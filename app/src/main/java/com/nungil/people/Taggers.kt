@@ -44,7 +44,7 @@ class SavedTagger(
     override fun tag(frame: VisionFrame): List<NameTag> {
         if (skip(frame) || !throttle.take()) return emptyList()
         return finder.find(frame).map {
-            NameTag(it.detectionIndex ?: -1, it.name, it.kind, box = if (it.detectionIndex == null) it.box else null)
+            NameTag(it.detectionIndex ?: -1, it.name, it.kind, box = if (it.detectionIndex == null) it.box else null, outlined = it.outlined)
         }
     }
 

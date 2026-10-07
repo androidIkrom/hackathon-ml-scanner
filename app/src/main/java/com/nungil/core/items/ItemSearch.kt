@@ -32,8 +32,11 @@ class ItemSearch(
     private val learnedAlone: Set<Long>,
     private val reach: Reach,
 ) {
-    /** [id]: the target's smallest saved id; [box]: what is shown (the thing's outline, or the square). */
-    data class Hit(val id: Long, val box: Box, val detectionIndex: Int?, val score: Float, val seen: ItemMatcher.Seen)
+    /**
+     * [id]: the target's smallest saved id; [box]: what is shown (the thing's outline, or the square); [outlined]:
+     * [box] is the thing's own outline, cut out in this call.
+     */
+    data class Hit(val id: Long, val box: Box, val detectionIndex: Int?, val score: Float, val seen: ItemMatcher.Seen, val outlined: Boolean = false)
 
     /** [log]: the scores that decided, for a log line after "<looked> squares in <ms> ms, ". */
     class Result(val hits: List<Hit>, val looked: Int, val log: String)
@@ -53,6 +56,11 @@ class ItemSearch(
 
     /** Calls made for all saved items; the whole frame is searched on every other one. */
     private var allCalls = 0
+
+    /**
+     * A live scan's finds of each target since its outline was last cut out; a target not here has no outline yet. Found by squares, the square is not the thing: the outline is drawn instead.
+     */
+    private val sinceOutline = HashMap<Long, Int>()
 
     /** Whole-frame searches for all saved items, for taking the square sizes in turn. */
     private var gridTurn = 0
@@ -82,12 +90,23 @@ class ItemSearch(
         // a live scan looks for every saved item: a search there took up to 4.2 s (the logs).
         // In a live scan only one borderline place per call is cut out ([ItemMatcher.KEEP_THRESHOLD] up to what finds
         // it): thin things (glasses, a spoon) stopped at 0.50 to 0.53 by squares alone (the logs).
+        // An item the squares found is cut out for its outline until it has one, then every [OUTLINE_EVERY]
+        // finds, one per call: about 0.3 to 0.5 s each.
         var cutsLeft = 1
-        val thingIn: (Box, Float, Float) -> CutThing? = when {
-            reach != Reach.WHOLE_FRAME -> { _, _, _ -> null }
-            only != null -> { square, _, _ -> cut(square) }
-            else -> { square, score, needs ->
-                if (score >= ItemMatcher.KEEP_THRESHOLD && score < needs && cutsLeft-- > 0) cut(square) else null
+        var outlinesLeft = 1
+        val cutFor = HashSet<Long>()
+        val thingIn: (Box, Float, Float, Long) -> CutThing? = when {
+            reach != Reach.WHOLE_FRAME -> { _, _, _, _ -> null }
+            only != null -> { square, _, _, _ -> cut(square) }
+            else -> { square, score, needs, key ->
+                val borderline = score >= ItemMatcher.KEEP_THRESHOLD && score < needs && cutsLeft > 0
+                val outline = score >= needs && outlinesLeft > 0 && (sinceOutline[key] ?: OUTLINE_EVERY) >= OUTLINE_EVERY - 1
+                when {
+                    borderline -> cutsLeft--
+                    outline -> outlinesLeft--
+                }
+                if (borderline || outline) cutFor += key
+                if (borderline || outline) cut(square) else null
             }
         }
         // All saved items: the whole frame on every other call, the boxes and the near squares on each.
@@ -103,8 +122,16 @@ class ItemSearch(
 
         fun record(key: Long, v: Verdict) {
             if (v.seen == ItemMatcher.Seen.NO) return
-            hits[key] = Hit(key, v.shown, boxIn(v.square, detections), v.score, v.seen)
+            hits[key] = Hit(key, v.shown, boxIn(v.square, detections), v.score, v.seen, v.outlined)
             found[key] = v.square to v.score
+            if (only != null) return
+            val since = sinceOutline[key]
+            when {
+                v.outlined -> sinceOutline[key] = 0
+                // Cut out but not the item (the table, another thing): tried again on the next find.
+                key in cutFor -> sinceOutline.remove(key)
+                since != null -> sinceOutline[key] = since + 1
+            }
         }
 
         for (index in ItemCrop.candidates(detections, width, height)) {
@@ -132,7 +159,7 @@ class ItemSearch(
             looked += near.size
             trace.scored += fmt("near %.2f", scores[best])
             if (scores[best] >= ItemMatcher.LOOK_CLOSER) {
-                trace.verdict = judge(near[best], scores[best], ItemMatcher.KEEP_THRESHOLD, target, thingIn).also { record(key, it) }
+                trace.verdict = judge(near[best], scores[best], ItemMatcher.KEEP_THRESHOLD, target, key, thingIn).also { record(key, it) }
             }
         }
 
@@ -154,7 +181,7 @@ class ItemSearch(
             }
             val needs = if (key in last) ItemMatcher.KEEP_THRESHOLD else ItemMatcher.FIND_THRESHOLD
             val trace = traces.getOrPut(key) { Trace(needs) }
-            val wide = wholeFrame(windows, scores, needs, open.getValue(key), match, thingIn)
+            val wide = wholeFrame(windows, scores, needs, open.getValue(key), key, match, thingIn)
             looked += wide.looked
             trace.scored += wide.log
             wide.verdict?.let {
@@ -164,6 +191,7 @@ class ItemSearch(
         }
         last.clear()
         last.putAll(found)
+        sinceOutline.keys.retainAll(found.keys)
         val log = traces.entries.joinToString(" | ") { (key, t) ->
             (if (only == null) "\"${names[key]}\" " else "") + logLine(t.scored, t.needs, t.verdict, hits[key])
         }
@@ -189,8 +217,9 @@ class ItemSearch(
         scores: FloatArray,
         needs: Float,
         target: Set<Long>,
+        key: Long,
         match: (Box) -> ItemMatcher.Match?,
-        cut: (Box, Float, Float) -> CutThing?,
+        cut: (Box, Float, Float, Long) -> CutThing?,
     ): Wide {
         val best = scores.indices.maxBy { scores[it] }
         var looked = 0
@@ -211,7 +240,7 @@ class ItemSearch(
         val top = maxOf(scores[best], closerScore)
         val place = bySquares
             ?: (closer?.takeIf { closerScore > scores[best] } ?: windows[best]).takeIf { top >= ItemMatcher.LOOK_CLOSER }
-        val verdict = place?.let { judge(it, top, needs, target, cut) }
+        val verdict = place?.let { judge(it, top, needs, target, key, cut) }
         return Wide(verdict, looked, fmt("grid %.2f, closer %.2f", scores[best], closerScore))
     }
 
@@ -220,8 +249,15 @@ class ItemSearch(
      * the thing in its middle is the item by itself, that thing's outline is shown and its own square is followed.
      * Else the squares decide as they did, and the outline is shown only when it is the item's (ItemMatcher.outlined).
      */
-    private fun judge(square: Box, squareScore: Float, needs: Float, target: Set<Long>, cut: (Box, Float, Float) -> CutThing?): Verdict {
-        val thing = cut(square, squareScore, needs)
+    private fun judge(
+        square: Box,
+        squareScore: Float,
+        needs: Float,
+        target: Set<Long>,
+        key: Long,
+        cut: (Box, Float, Float, Long) -> CutThing?,
+    ): Verdict {
+        val thing = cut(square, squareScore, needs, key)
         val alone = thing?.let { score(it.match, target) }
         val seen = ItemMatcher.seen(squareScore, needs, alone)
         if (thing == null || alone == null) return Verdict(seen, square, square, false, null, squareScore)
@@ -256,5 +292,8 @@ class ItemSearch(
 
         /** A detector box up to this many times the found place's area may be the thing's own box. */
         const val MAX_BOX_SHARE = 1.5f
+
+        /** A live scan cuts a found item out on each find until it has its outline, then on every this many. */
+        const val OUTLINE_EVERY = 3
     }
 }
