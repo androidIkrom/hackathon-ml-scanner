@@ -31,6 +31,19 @@ class FoundPlacesTest {
         assertTrue(places.current(9_000L).isEmpty())
     }
 
+    @Test fun anItemASearchDidNotFindIsGoneAtOnce() {
+        // "My drug" kept its frame for 3 s after the phone turned away (device log 2026-10-07 20:05:46-49).
+        places.found(left, "My drug", 0L)
+        places.found(left, "My drug", 1_000L)
+        places.found(right, "My towel", 500L)
+        places.found(right, "My towel", 1_500L)
+        places.searched(setOf("My towel"))
+        assertEquals(listOf("My towel"), places.current(1_600L).map { it.name })
+        // Found again, it needs two finds again.
+        places.found(left, "My drug", 2_000L)
+        assertEquals(listOf("My towel"), places.current(2_000L).map { it.name })
+    }
+
     @Test fun eachItemCountsOnItsOwn() {
         places.found(left, "My towel", 0L)
         places.found(right, "My charger", 500L)

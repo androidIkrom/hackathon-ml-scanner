@@ -76,10 +76,10 @@ class ScanFragment : Fragment(), CameraScreen {
     private enum class State { NO_PERMISSION, IDLE, SCANNING }
 
     /**
-     * [byLook]: a saved item found where the detector drew no box (FoundPlaces), [box] being its place, and
-     * [outlined] when that is the thing's own outline.
+     * A saved name on [box]: a detector box, or, in a [Look], the place of an item found where the detector drew no
+     * box (FoundPlaces), [outlined] when that is the thing's own outline.
      */
-    private class PendingTag(val box: Box, val name: String, val isPerson: Boolean, val byLook: Boolean = false, val outlined: Boolean = false)
+    private class PendingTag(val box: Box, val name: String, val isPerson: Boolean, val outlined: Boolean = false)
 
     private var _binding: ScanFragmentBinding? = null
     private val binding get() = _binding!!
@@ -102,6 +102,10 @@ class ScanFragment : Fragment(), CameraScreen {
     @Volatile private var taggers: List<NameTagger> = emptyList()
     @Volatile private var classifier: SceneClassifier? = null
     private val pendingTags = ConcurrentLinkedQueue<PendingTag>()
+
+    /** One item search's finds by look; [Look.complete]: it searched the frame, so items it did not find are gone. */
+    private class Look(val tags: List<PendingTag>, val complete: Boolean)
+    private val pendingLooks = ConcurrentLinkedQueue<Look>()
 
     /** Keyboard boxes looked at by the classifier (LaptopCheck), and what they are. */
     private val pendingChecks = ConcurrentLinkedQueue<Pair<Box, String>>()
@@ -276,11 +280,12 @@ class ScanFragment : Fragment(), CameraScreen {
         lastFrame = frame
         while (true) {
             val tag = pendingTags.poll() ?: break
-            if (tag.byLook) {
-                places.found(tag.box, tag.name, frame.timestampMs, outline = tag.box.takeIf { tag.outlined })
-            } else {
-                sticky.recognized(tag.box, tag.name, tag.isPerson)
-            }
+            sticky.recognized(tag.box, tag.name, tag.isPerson)
+        }
+        while (true) {
+            val look = pendingLooks.poll() ?: break
+            for (tag in look.tags) places.found(tag.box, tag.name, frame.timestampMs, outline = tag.box.takeIf { tag.outlined })
+            if (look.complete) places.searched(look.tags.mapTo(HashSet()) { it.name })
         }
         while (true) {
             val (box, label) = pendingChecks.poll() ?: break
@@ -291,6 +296,8 @@ class ScanFragment : Fragment(), CameraScreen {
         val usable = relabels.apply(frame.detections).filterNot { BoxGeometry.touchesOneSideEdge(it.box) }
         val check = if (checking == null) usable.firstOrNull { relabels.needsCheck(it) }?.box else null
         val names = sticky.apply(usable.map { it.box })
+        // Why each box got its colour, for the log line (Task 2 of the live-quality plan).
+        val colorNotes = arrayOfNulls<String>(usable.size)
         // Saved items found by their look, not already the name of one of this frame's boxes.
         val found = places.current(frame.timestampMs).filter { p -> names.none { it?.name == p.name } }
         val scanning = synchronized(sessionLock) { session != null }
@@ -301,7 +308,9 @@ class ScanFragment : Fragment(), CameraScreen {
             val seen = usable.mapIndexed { i, d ->
                 val name = names[i]
                 val color = if (name == null && bitmap != null && light != null && ColorPolicy.hasColor(d.label)) {
-                    ColorSampler.colorOf(bitmap, d.box, light)
+                    ColorSampler.colorOf(bitmap, d.box, light).also {
+                        if (it != null) colorNotes[i] = "${it.en}: " + ColorSampler.explain(bitmap, d.box, light)
+                    }
                 } else {
                     null
                 }
@@ -311,7 +320,7 @@ class ScanFragment : Fragment(), CameraScreen {
                 session?.onFrame(frame.timestampMs, frame.headingDeg, frame.hfovDeg, frame.facing, seen)
             }
         }
-        logSeen(frame, usable, names, found)
+        logSeen(frame, usable, names, found, colorNotes)
         val marks = usable.mapIndexed { i, d -> OverlayView.Mark(d.box, names[i]?.name ?: LabelNames.name(d.label, lang)) } +
             // A place found by look is drawn as the thing's own outline, never as the square (none without one).
             found.mapNotNull { p -> p.outline?.let { OverlayView.Mark(it, p.name) } }
@@ -342,11 +351,18 @@ class ScanFragment : Fragment(), CameraScreen {
      * Once a second, what the detector sees and which saved names stick: a laptop in view was never said, and the log
      * could not tell whether it was not detected or renamed (2026-10-05).
      */
-    private fun logSeen(frame: VisionFrame, usable: List<Detection>, names: List<StickyNames.Sticky?>, found: List<FoundPlaces.Place>) {
+    private fun logSeen(
+        frame: VisionFrame,
+        usable: List<Detection>,
+        names: List<StickyNames.Sticky?>,
+        found: List<FoundPlaces.Place>,
+        colorNotes: Array<String?>,
+    ) {
         if (frame.timestampMs - lastSeenLogMs < SEEN_LOG_MS) return
         lastSeenLogMs = frame.timestampMs
         val seen = usable.mapIndexed { i, d ->
-            String.format(Locale.US, "%s %.2f", d.label, d.score) + (names[i]?.let { " [${it.name}]" } ?: "")
+            String.format(Locale.US, "%s %.2f", d.label, d.score) + (names[i]?.let { " [${it.name}]" } ?: "") +
+                (colorNotes[i]?.let { " ($it)" } ?: "")
         } + found.map { "[${it.name}] by look" + if (it.outline != null) ", outlined" else "" }
         val cut = frame.detections.size - usable.size
         Log.i(TAG, "Live sees: " + seen.joinToString(", ").ifEmpty { "nothing" } + if (cut > 0) " ($cut at the edge)" else "")
@@ -374,15 +390,18 @@ class ScanFragment : Fragment(), CameraScreen {
                         pendingChecks.add(check to label)
                     }
                     for (tagger in taggers) {
+                        val byLook = mutableListOf<PendingTag>()
                         for (tag in tagger.tag(frame)) {
                             val place = tag.box
                             if (place != null) {
-                                pendingTags.add(PendingTag(place, tag.name, isPerson = false, byLook = true, outlined = tag.outlined))
+                                byLook += PendingTag(place, tag.name, isPerson = false, outlined = tag.outlined)
                                 continue
                             }
                             val d = frame.detections.getOrNull(tag.detectionIndex) ?: continue
                             pendingTags.add(PendingTag(d.box, tag.name, tag.kind == TagKind.PERSON))
                         }
+                        val complete = tagger.lookedFor == TagKind.ITEM
+                        if (byLook.isNotEmpty() || complete) pendingLooks.add(Look(byLook, complete))
                     }
                 } catch (t: Throwable) {
                     Log.i(TAG, "Name tagger failed: ${t.message}")

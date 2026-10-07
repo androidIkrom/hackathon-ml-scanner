@@ -5,7 +5,8 @@ import com.nungil.contract.Box
 /**
  * Saved items found by their look where the detector drew no box (a towel, a charger, a box: things it does not
  * know). Such an item is shown and announced only after it was found twice in a row, each find at most
- * [KEEP_MS] after the last, and only while it keeps being found; a find is about once a second.
+ * [KEEP_MS] after the last, and only while it keeps being found (a search that misses it forgets it, [searched]);
+ * a find is about once a second.
  * A place keeps the thing's own [Place.outline] (the segmenter's, ItemSearch) while the squares that find it still
  * hold its middle; that outline, not the square, is drawn.
  * Not thread-safe: the scan screen calls it from its analysis thread.
@@ -32,6 +33,14 @@ class FoundPlaces {
         } else {
             tracks[name] = Track(box, 1, nowMs, outline)
         }
+    }
+
+    /**
+     * A search of the whole frame found only [names]: every other item is not in view any more and is forgotten at
+     * once, not after [KEEP_MS] (its frame stayed on the screen while the phone turned away).
+     */
+    fun searched(names: Set<String>) {
+        tracks.keys.retainAll(names)
     }
 
     private fun Box.holds(x: Float, y: Float): Boolean = x in left..right && y in top..bottom

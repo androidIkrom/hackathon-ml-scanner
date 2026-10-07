@@ -5,6 +5,7 @@ import android.util.Log
 import com.nungil.contract.app.NameTag
 import com.nungil.contract.app.NameTagger
 import com.nungil.contract.app.SavedFinder
+import com.nungil.contract.app.TagKind
 import com.nungil.contract.app.VisionFrame
 import com.nungil.core.items.Reach
 import com.nungil.core.people.EveryNth
@@ -23,10 +24,10 @@ fun createNameTaggers(context: Context, reach: Reach = Reach.BOXES_AND_NEAR): Li
     val taggers = mutableListOf<NameTagger>()
     if (FaceRecognizer.hasPeople(app)) {
         tryCreate("face") {
-            SavedTagger(PersonFinder(app), everyNth = EVERY_NTH_PERSON_FRAME) { f -> f.detections.none { it.label == FaceBoxes.PERSON } }
+            SavedTagger(PersonFinder(app), TagKind.PERSON, everyNth = EVERY_NTH_PERSON_FRAME) { f -> f.detections.none { it.label == FaceBoxes.PERSON } }
         }?.let(taggers::add)
     }
-    if (ItemRecognizer.hasItems(app)) tryCreate("item") { SavedTagger(ItemFinder(app, reach)) }?.let(taggers::add)
+    if (ItemRecognizer.hasItems(app)) tryCreate("item") { SavedTagger(ItemFinder(app, reach), TagKind.ITEM) }?.let(taggers::add)
     return taggers
 }
 
@@ -36,13 +37,19 @@ fun createNameTaggers(context: Context, reach: Reach = Reach.BOXES_AND_NEAR): Li
  */
 class SavedTagger(
     private val finder: SavedFinder,
+    private val kind: TagKind,
     everyNth: Int = 1,
     private val skip: (VisionFrame) -> Boolean = { false },
 ) : NameTagger {
     private val throttle = EveryNth(everyNth)
 
+    override var lookedFor: TagKind? = null
+        private set
+
     override fun tag(frame: VisionFrame): List<NameTag> {
+        lookedFor = null
         if (skip(frame) || !throttle.take()) return emptyList()
+        lookedFor = kind
         return finder.find(frame).map {
             NameTag(it.detectionIndex ?: -1, it.name, it.kind, box = if (it.detectionIndex == null) it.box else null, outlined = it.outlined)
         }

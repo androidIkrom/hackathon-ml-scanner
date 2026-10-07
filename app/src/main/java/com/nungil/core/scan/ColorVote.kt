@@ -55,13 +55,7 @@ object ColorVote {
     /** Majority colour of [pixels] after white balance with [gains]; null in a dark frame. */
     fun vote(pixels: IntArray, gains: FloatArray, frameIsDark: Boolean): ColorName? {
         if (frameIsDark || pixels.isEmpty()) return null
-        val counts = IntArray(ColorName.entries.size)
-        for (p in pixels) {
-            val q = WhiteBalance.apply(p, gains)
-            val hsv = ColorMapper.hsv((q shr 16) and 0xFF, (q shr 8) and 0xFF, q and 0xFF)
-            val name = ColorMapper.nameFromHsv(hsv[0], hsv[1], hsv[2], frameIsDark = false) ?: continue
-            counts[name.ordinal]++
-        }
+        val counts = counts(pixels, gains)
         val named = counts.sum()
         if (named == 0) return null
         val chromatic = ColorName.entries.filter { it.isChromatic }
@@ -70,6 +64,35 @@ object ColorVote {
         val sharePercent = (MIN_CHROMATIC_SHARE * 100).roundToInt()
         val pool = if (chromaticTotal > 0 && chromaticTotal * 100 >= sharePercent * named) chromatic else ColorName.entries
         return pool.maxByOrNull { counts[it.ordinal] }
+    }
+
+    /**
+     * How many of [pixels] each colour name gets after white balance with [gains], by ColorName.ordinal. A pixel
+     * with no colour (white, gray, black) keeps its own name: gains that raise blue painted a white bottle blue.
+     */
+    fun counts(pixels: IntArray, gains: FloatArray): IntArray {
+        val counts = IntArray(ColorName.entries.size)
+        for (p in pixels) {
+            val raw = nameOf(p) ?: continue
+            val name = if (raw.isChromatic) nameOf(WhiteBalance.apply(p, gains)) ?: continue else raw
+            counts[name.ordinal]++
+        }
+        return counts
+    }
+
+    private fun nameOf(p: Int): ColorName? {
+        val hsv = ColorMapper.hsv((p shr 16) and 0xFF, (p shr 8) and 0xFF, p and 0xFF)
+        return ColorMapper.nameFromHsv(hsv[0], hsv[1], hsv[2], frameIsDark = false)
+    }
+
+    /** The three biggest of [counts] as whole percents, for the log: "white 75%, black 25%". */
+    fun shares(counts: IntArray): String {
+        val total = counts.sum()
+        if (total == 0) return "nothing"
+        return ColorName.entries.filter { counts[it.ordinal] > 0 }
+            .sortedByDescending { counts[it.ordinal] }
+            .take(3)
+            .joinToString(", ") { "${it.en} ${(counts[it.ordinal] * 100f / total).roundToInt()}%" }
     }
 }
 
