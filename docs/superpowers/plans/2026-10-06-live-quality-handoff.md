@@ -101,6 +101,18 @@ other threads. First reproduce (say "Live scan" twice), then decide: a "Live" co
 nothing (or says it is already on), and/or one shared model instance per kind (Stage 4), and/or the new screen
 waits until the old one has closed its tasks.
 
+### Paused 2026-10-11 (user: text reading and QR first)
+- Done and committed: Task 2 colour + frame (1921f9c), Task 7 crash (1fc963c, ModelLock; 8 screen switches on the
+  phone, no crash).
+- Built, unit-tested, on the phone, **not tried on the phone, not committed**: "Delete <name>" / "Open <name>" on the
+  Saved list (`core/saved/SavedByVoice.kt`, `VoiceDelete.kt`, `saved/SavedFragment.kt`), and `SearchResolver`
+  preferring a real name in another guess over a filler-word name (fixes "Find my charging" -> "My", see Later).
+  Try: Saved -> Objects, "Open my charger test one", "Delete my charger test one", "delete".
+- Temporary, not committed: charger cut diagnostics (`items/CutDiagnostics.kt`, its call in `ItemFinder.cut`;
+  images in /sdcard/Android/data/com.nungil/files/cuts). Finding: the cut is right, the saved item-alone samples
+  show another side of the charger (no pins, no text, no cable): learn it again, then remove the diagnostics.
+- Next after that: Task 6 (voice hold), Task 5 (bed), Task 4 (PR).
+
 ### Later
 - "Find my charging" said "Looking for My.": the first guess matched the saved *person* "My" (a filler-word name)
   before the second guess "Find my charger" was tried. `SearchResolver.resolve(text, guesses, …)` should try the

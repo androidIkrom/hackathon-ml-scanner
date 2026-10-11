@@ -113,6 +113,16 @@ class SearchResolverTest {
         assertNull(SearchResolver.resolve("spaceship", guesses, listOf(dopey), Lang.EN))
     }
 
+    @Test fun aRealNameInAnotherGuessBeatsAFillerName() {
+        // The logs: "Delete my charger test on" chose the person "My"; the second guess had the item's real name.
+        val my = SavedName(1, "My", TargetType.PERSON, "person")
+        val charger = SavedName(23, "My charger test one", TargetType.ITEM, "object")
+        val guesses = listOf("Delete my charger test on", "Delete my charger test one")
+        assertEquals(23L, SearchResolver.resolve(guesses[0], guesses, listOf(my, charger), Lang.EN)?.id)
+        // With nothing better, the filler name is still found.
+        assertEquals(1L, SearchResolver.resolve("Find my keys", listOf("Find my keys"), listOf(my, charger), Lang.EN)?.id)
+    }
+
     @Test fun labelForChips() {
         assertEquals("backpack", SearchResolver.labelFor("가방"))
         assertEquals("cell phone", SearchResolver.labelFor("Phone"))
