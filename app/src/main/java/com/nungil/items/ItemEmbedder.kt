@@ -10,6 +10,7 @@ import com.google.mediapipe.tasks.vision.imageembedder.ImageEmbedder
 import com.nungil.contract.Box
 import com.nungil.core.items.ItemCrop
 import com.nungil.core.items.ItemMask
+import com.nungil.core.scan.ModelLock
 import java.io.Closeable
 
 /**
@@ -17,15 +18,17 @@ import java.io.Closeable
  * One worker thread only. Throws from the constructor when the model is missing.
  */
 class ItemEmbedder(context: Context) : Closeable {
-    private val embedder: ImageEmbedder = ImageEmbedder.createFromOptions(
-        context,
-        ImageEmbedder.ImageEmbedderOptions.builder()
-            .setBaseOptions(BaseOptions.builder().setModelAssetPath(MODEL).build())
-            .setRunningMode(RunningMode.IMAGE)
-            .setL2Normalize(true)
-            .setQuantize(false)
-            .build(),
-    )
+    private val embedder: ImageEmbedder = ModelLock.shared.load {
+        ImageEmbedder.createFromOptions(
+            context,
+            ImageEmbedder.ImageEmbedderOptions.builder()
+                .setBaseOptions(BaseOptions.builder().setModelAssetPath(MODEL).build())
+                .setRunningMode(RunningMode.IMAGE)
+                .setL2Normalize(true)
+                .setQuantize(false)
+                .build(),
+        )
+    }
 
     /** Embedding of the part of [frame] inside [box], or null when it is under 16 x 16 px or fails. */
     fun embed(frame: Bitmap, box: Box): FloatArray? {
@@ -38,18 +41,21 @@ class ItemEmbedder(context: Context) : Closeable {
      * painted over (ItemMask.alone). Learning and finding both make the picture here, so they make the same one.
      * Null as [embed].
      */
-    fun embedAlone(frame: Bitmap, square: Box, mask: ItemMask): FloatArray? {
+    fun embedAlone(frame: Bitmap, square: Box, mask: ItemMask): FloatArray? = aloneImage(frame, square, mask)?.let(::embed)
+
+    /** The image [embedAlone] embeds: [square] of [frame] with everything but the item masked out. */
+    fun aloneImage(frame: Bitmap, square: Box, mask: ItemMask): Bitmap? {
         val r = ItemCrop.rect(square, frame.width, frame.height) ?: return null
         val w = r[2] - r[0]
         val h = r[3] - r[1]
         val pixels = IntArray(w * h)
         frame.getPixels(pixels, 0, w, r[0], r[1], w, h)
         mask.alone(pixels, r[0], r[1], w, h, frame.width, frame.height)
-        return embed(Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888))
+        return Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888)
     }
 
     fun embed(image: Bitmap): FloatArray? = try {
-        embedder.embed(BitmapImageBuilder(image).build())
+        ModelLock.shared.run { embedder.embed(BitmapImageBuilder(image).build()) }
             .embeddingResult()
             .embeddings()
             .firstOrNull()
@@ -59,7 +65,7 @@ class ItemEmbedder(context: Context) : Closeable {
         null
     }
 
-    override fun close() = embedder.close()
+    override fun close() = ModelLock.shared.load { embedder.close() }
 
     private companion object {
         const val MODEL = "mobilenet_v3_small.tflite"

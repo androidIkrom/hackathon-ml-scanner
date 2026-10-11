@@ -7,6 +7,7 @@ import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.imageclassifier.ImageClassifier
+import com.nungil.core.scan.ModelLock
 import com.nungil.core.scan.SceneRules
 import java.io.Closeable
 
@@ -16,20 +17,22 @@ import java.io.Closeable
  * Create and use it on one worker thread; it is slow to load (about 18 MB).
  */
 class SceneClassifier(context: Context) : Closeable {
-    private val classifier: ImageClassifier = ImageClassifier.createFromOptions(
-        context,
-        ImageClassifier.ImageClassifierOptions.builder()
-            .setBaseOptions(BaseOptions.builder().setModelAssetPath(MODEL_FILE).build())
-            .setRunningMode(RunningMode.IMAGE)
-            .setMaxResults(MAX_GUESSES)
-            .build(),
-    )
+    private val classifier: ImageClassifier = ModelLock.shared.load {
+        ImageClassifier.createFromOptions(
+            context,
+            ImageClassifier.ImageClassifierOptions.builder()
+                .setBaseOptions(BaseOptions.builder().setModelAssetPath(MODEL_FILE).build())
+                .setRunningMode(RunningMode.IMAGE)
+                .setMaxResults(MAX_GUESSES)
+                .build(),
+        )
+    }
 
     /** The best guess for the middle of [bitmap], or null below [SceneRules.MIN_SCORE] (checked here: [guesses] wants the low ones too). */
     fun nameCenter(bitmap: Bitmap): String? {
         val c = SceneRules.centerCrop(bitmap.width, bitmap.height)
         val crop = Bitmap.createBitmap(bitmap, c[0], c[1], c[2], c[3])
-        val result = classifier.classify(BitmapImageBuilder(crop).build())
+        val result = ModelLock.shared.run { classifier.classify(BitmapImageBuilder(crop).build()) }
         val top = result.classificationResult().classifications().firstOrNull()?.categories()?.firstOrNull() ?: return null
         if (top.score() < SceneRules.MIN_SCORE) return null
         return top.displayName().ifBlank { top.categoryName() }
@@ -42,12 +45,12 @@ class SceneClassifier(context: Context) : Closeable {
         val r = (box.right * bitmap.width).toInt().coerceIn(l + 1, bitmap.width)
         val b = (box.bottom * bitmap.height).toInt().coerceIn(t + 1, bitmap.height)
         val crop = Bitmap.createBitmap(bitmap, l, t, r - l, b - t)
-        val result = classifier.classify(BitmapImageBuilder(crop).build())
+        val result = ModelLock.shared.run { classifier.classify(BitmapImageBuilder(crop).build()) }
         return result.classificationResult().classifications().firstOrNull()?.categories().orEmpty()
             .map { (it.displayName().ifBlank { it.categoryName() }) to it.score() }
     }
 
-    override fun close() = classifier.close()
+    override fun close() = ModelLock.shared.load { classifier.close() }
 
     companion object {
         const val MODEL_FILE = "efficientnet-lite0.tflite"

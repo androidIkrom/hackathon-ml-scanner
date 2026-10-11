@@ -232,6 +232,20 @@ class ScanFragment : Fragment(), CameraScreen {
             .also { main.postDelayed(it, AUTO_START_MS) }
     }
 
+    val mode: ScanMode get() = args.mode
+
+    /** "Live scan" said on this screen: running, it says so; stopped, it starts again. Main thread. */
+    fun liveAgain() {
+        when (state) {
+            State.SCANNING -> speakNow(ScanPhrases.liveAlreadyOn(lang))
+            State.IDLE -> {
+                speakNow(ScanPhrases.intro(args.mode, lang))
+                startScan()
+            }
+            State.NO_PERMISSION -> askCamera.launch(Manifest.permission.CAMERA)
+        }
+    }
+
     private fun onMainButton() = when (state) {
         State.NO_PERMISSION -> askCamera.launch(Manifest.permission.CAMERA)
         State.IDLE -> startScan()

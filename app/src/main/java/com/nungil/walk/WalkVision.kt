@@ -28,6 +28,7 @@ import com.nungil.contract.Lang
 import com.nungil.contract.app.NameTagger
 import com.nungil.contract.app.VisionFrame
 import com.nungil.core.scan.DetectorPlan
+import com.nungil.core.scan.ModelLock
 import com.nungil.core.walk.Alert
 import com.nungil.core.walk.CameraHeight
 import com.nungil.core.walk.ApproachSpeed
@@ -418,7 +419,8 @@ class WalkVision(
 
     private fun detect(bitmap: Bitmap): List<Detection> {
         val started = SystemClock.elapsedRealtime()
-        val result = detector().detect(BitmapImageBuilder(bitmap).build())
+        val d = detector()
+        val result = ModelLock.shared.run { d.detect(BitmapImageBuilder(bitmap).build()) }
         inferenceTotalMs += SystemClock.elapsedRealtime() - started
         if (++loggedFrames % LOG_EVERY == 0) {
             Log.i(TAG, "Walk inference ${inferenceTotalMs / LOG_EVERY} ms average")
@@ -458,18 +460,20 @@ class WalkVision(
     }.getOrNull()
 
     private fun nameObstacle(bitmap: Bitmap): Pair<String, String>? = runCatching {
-        val c = classifier ?: ImageClassifier.createFromOptions(
-            context,
-            ImageClassifier.ImageClassifierOptions.builder()
-                .setBaseOptions(BaseOptions.builder().setModelAssetPath(CLASSIFIER_FILE).build())
-                .setRunningMode(RunningMode.IMAGE)
-                .setMaxResults(1)
-                .build(),
-        ).also { classifier = it }
+        val c = classifier ?: ModelLock.shared.load {
+            ImageClassifier.createFromOptions(
+                context,
+                ImageClassifier.ImageClassifierOptions.builder()
+                    .setBaseOptions(BaseOptions.builder().setModelAssetPath(CLASSIFIER_FILE).build())
+                    .setRunningMode(RunningMode.IMAGE)
+                    .setMaxResults(1)
+                    .build(),
+            )
+        }.also { classifier = it }
         val cx = bitmap.width / 4
         val cy = bitmap.height / 4
         val crop = Bitmap.createBitmap(bitmap, cx, cy, bitmap.width / 2, bitmap.height / 2)
-        val top = c.classify(BitmapImageBuilder(crop).build()).classificationResult().classifications()
+        val top = ModelLock.shared.run { c.classify(BitmapImageBuilder(crop).build()) }.classificationResult().classifications()
             .firstOrNull()?.categories()?.firstOrNull() ?: return null
         ObstacleName.of(top.displayName().ifBlank { top.categoryName() }, top.score())
     }.getOrNull()
@@ -503,8 +507,8 @@ class WalkVision(
     override fun close() {
         closed = true
         executor.execute {
-            runCatching { detector?.close() }
-            runCatching { classifier?.close() }
+            runCatching { detector?.let { d -> ModelLock.shared.load { d.close() } } }
+            runCatching { classifier?.let { c -> ModelLock.shared.load { c.close() } } }
             taggers.forEach { runCatching { it.close() } }
             runCatching { textRecognizer.close() }
             runCatching { barcodes.close() }

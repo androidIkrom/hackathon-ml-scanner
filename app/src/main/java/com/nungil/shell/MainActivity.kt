@@ -38,6 +38,7 @@ import com.nungil.contract.Buzz
 import com.nungil.contract.Dest
 import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
+import com.nungil.contract.ScanMode
 import com.nungil.contract.SettingChange
 import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppNavigator
@@ -67,6 +68,7 @@ import com.nungil.core.ui.TapHelpOffer
 import com.nungil.core.ui.VoiceChoice
 import com.nungil.core.voice.QuickAsk
 import com.nungil.core.weather.Clock
+import com.nungil.scan.ScanFragment
 import java.util.Calendar
 import com.nungil.core.voice.VoiceCommandParser
 import com.nungil.core.voice.WakeResult
@@ -371,7 +373,12 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         when (dest) {
             Dest.Home -> navController.popBackStack(R.id.home, false)
             Dest.ScanHub -> go(R.id.scan_hub)
-            is Dest.Scan -> go(R.id.scan, ScanFragmentArgs(dest.mode).toBundle())
+            is Dest.Scan -> {
+                // Opening Live again while it is open closed and loaded every model at once (live-quality plan, Task 7).
+                val open = currentScreen() as? ScanFragment
+                if (dest.mode == ScanMode.LIVE && open?.mode == ScanMode.LIVE) open.liveAgain()
+                else go(R.id.scan, ScanFragmentArgs(dest.mode).toBundle())
+            }
             Dest.Walk -> go(R.id.walk)
             is Dest.Search -> go(R.id.search, SearchFragmentArgs(dest.query).toBundle())
             is Dest.Saved -> go(R.id.saved, SavedFragmentArgs(dest.tab?.ordinal ?: -1).toBundle())

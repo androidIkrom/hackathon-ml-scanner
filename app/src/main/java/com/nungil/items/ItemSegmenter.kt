@@ -8,6 +8,7 @@ import com.google.mediapipe.framework.image.ByteBufferExtractor
 import com.google.mediapipe.tasks.components.containers.NormalizedKeypoint
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.vision.interactivesegmenterlegacy.InteractiveSegmenterLegacy
+import com.nungil.core.scan.ModelLock
 import java.io.Closeable
 import java.nio.ByteOrder
 import java.util.Locale
@@ -22,14 +23,16 @@ class ItemSegmenter(context: Context) : Closeable {
     /** One answer: [values] row by row for a [width] x [height] picture (ItemMask reads them). */
     class Answer(val values: FloatArray, val width: Int, val height: Int)
 
-    private val segmenter: InteractiveSegmenterLegacy = InteractiveSegmenterLegacy.createFromOptions(
-        context,
-        InteractiveSegmenterLegacy.InteractiveSegmenterLegacyOptions.builder()
-            .setBaseOptions(BaseOptions.builder().setModelAssetPath(MODEL).build())
-            .setOutputConfidenceMasks(true)
-            .setOutputCategoryMask(false)
-            .build(),
-    )
+    private val segmenter: InteractiveSegmenterLegacy = ModelLock.shared.load {
+        InteractiveSegmenterLegacy.createFromOptions(
+            context,
+            InteractiveSegmenterLegacy.InteractiveSegmenterLegacyOptions.builder()
+                .setBaseOptions(BaseOptions.builder().setModelAssetPath(MODEL).build())
+                .setOutputConfidenceMasks(true)
+                .setOutputCategoryMask(false)
+                .build(),
+        )
+    }
 
     private var calls = 0
 
@@ -40,7 +43,7 @@ class ItemSegmenter(context: Context) : Closeable {
     fun at(frame: Bitmap, x: Float, y: Float): Answer? = try {
         // The point is given in pixels: with 0.5, 0.5 the mask came out at the top-left corner (the logs).
         val point = InteractiveSegmenterLegacy.RegionOfInterest.create(NormalizedKeypoint.create(x * frame.width, y * frame.height))
-        val result = segmenter.segment(BitmapImageBuilder(frame).build(), point)
+        val result = ModelLock.shared.run { segmenter.segment(BitmapImageBuilder(frame).build(), point) }
         val masks = result.confidenceMasks().get()
         if (calls++ % 8 == 0) {
             val about = masks.joinToString(" | ") { m ->
@@ -75,7 +78,7 @@ class ItemSegmenter(context: Context) : Closeable {
         null
     }
 
-    override fun close() = segmenter.close()
+    override fun close() = ModelLock.shared.load { segmenter.close() }
 
     private companion object {
         const val MODEL = "magic_touch.tflite"

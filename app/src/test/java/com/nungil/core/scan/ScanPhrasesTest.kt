@@ -22,6 +22,11 @@ class ScanPhrasesTest {
         assertEquals("Point the phone around. I will say what I find.", ScanPhrases.intro(ScanMode.LIVE, Lang.EN))
     }
 
+    @Test fun liveAlreadyOn() {
+        assertEquals("Live scan is already on.", ScanPhrases.liveAlreadyOn(Lang.EN))
+        assertEquals("실시간 안내가 이미 켜져 있어요.", ScanPhrases.liveAlreadyOn(Lang.KO))
+    }
+
     @Test fun thisIsUsesTheRightKoreanEnding() {
         assertEquals("This is Ali.", ScanPhrases.thisIs("Ali", Lang.EN))
         assertEquals("Ali예요.", ScanPhrases.thisIs("Ali", Lang.KO))

@@ -11,6 +11,7 @@ import com.google.mediapipe.tasks.vision.objectdetector.ObjectDetector
 import com.nungil.contract.Compute
 import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
+import com.nungil.core.scan.ModelLock
 import java.io.File
 
 /**
@@ -29,7 +30,9 @@ class DetectorFactory(private val context: Context) {
      * on a Mali-G57. They are kept on disk after the first start; when a start with that copy fails, the
      * copy is deleted and the GPU gets one more try without it.
      */
-    fun create(modelFile: String, compute: Compute): Built {
+    fun create(modelFile: String, compute: Compute): Built = ModelLock.shared.load { createNow(modelFile, compute) }
+
+    private fun createNow(modelFile: String, compute: Compute): Built {
         var lastError: Throwable? = null
         for (candidate in DetectorPlan.delegateOrder(compute, modelFile)) {
             val cache = if (candidate == Compute.GPU) gpuCache(modelFile) else null
