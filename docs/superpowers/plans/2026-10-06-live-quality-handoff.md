@@ -88,6 +88,19 @@ function (time since last new partial, final result or not).
 Smaller delays seen: a place found by look needs two finds (~1.5–2.5 s from view to speech); a detector `bottle`
 was said ("a blue bottle") 2 s before its saved name came.
 
+### Task 7 — Crash when Live is opened again by voice (user, 2026-10-07)
+Native crash in MediaPipe, `Fatal signal 7 (SIGBUS), code 2 (BUS_ADRERR)` in `libmediapipe_tasks_jni.so`, on a
+MediaPipe thread ("Thread-19", "Thread-20"), 0.1–0.3 s after the scan screen is replaced. Seen three times
+(scratchpad of session 736533c0):
+- `log-task1b.txt` 2026-10-06 23:24:51: "Stop lights" → Leave, then Find ("Looking for My charger test one.");
+- `log-cuts.txt` 2026-10-07 20:33:21: "Livescan" said while Live was open;
+- `log-cuts2.txt` 2026-10-07 20:40:53: "Live skin" (heard as Live) said while Live was open.
+Likely cause: the old screen closes its MediaPipe tasks (detector on the camera thread, item finder and segmenter
+on the extras thread, `ScanFragment.onDestroyView`, `CameraSession.stop`) while the new screen creates its own on
+other threads. First reproduce (say "Live scan" twice), then decide: a "Live" command while Live is open does
+nothing (or says it is already on), and/or one shared model instance per kind (Stage 4), and/or the new screen
+waits until the old one has closed its tasks.
+
 ### Later
 - "Find my charging" said "Looking for My.": the first guess matched the saved *person* "My" (a filler-word name)
   before the second guess "Find my charger" was tried. `SearchResolver.resolve(text, guesses, …)` should try the
