@@ -608,7 +608,7 @@ def build(results, paths, target):
            "Values such as a detection accuracy of 95.19%[[joshi2020]] or a mean average precision of 93.9%[[zhang2024]] were measured on a few custom classes. "
            "Second, none of the twelve reports colour naming, a summary of a full turn or user-taught personal objects, and face enrolment appears in only two.[[mekonnen2025,alhammad2026]] "
            "Third, several were tested with visually impaired participants,[[lin2017,bai2019,joshi2020,chen2024,gao2025]] which the present work has not yet done.")
-    d.para("A concurrent preprint, VisionAId, is the closest in spirit: an offline-first Android assistant with six on-device models and a few-shot pipeline for personal objects, with an optional cloud language model for scene narration.[[visionaid]] It has not been peer reviewed, and we know it only from its abstract.")
+    d.para("A concurrent preprint, VisionAId, is the closest in spirit: an offline-first Android assistant with six on-device models and a few-shot pipeline for personal objects, with an optional cloud language model for scene narration.[[visionaid]] It has not been peer reviewed; it reports a depth latency of about 491 ms and a banknote-detector mAP@50 of 0.986 on a Samsung Galaxy S21 Ultra, no public-benchmark results and no user study.")
 
     d.orient(landscape=True)
     d.heading("Commercial applications", level=2)
@@ -896,8 +896,7 @@ def build(results, paths, target):
     d.para("<b>To verify before submission:</b>", count=False)
     d.bullets([
         "The cells of the related-work table were extracted from the papers by an automated literature search and quoted from their text; the bibliographic data of every reference were checked against Crossref, PubMed or arXiv, but the reported numbers should be checked once more against the PDFs.",
-        "See et al. 2022 was read as abstract only; Bai et al. 2019 and Chen et al. 2024 were read as arXiv preprints; the POPE accuracy of Chen et al. was reconstructed from a flattened table; the WalkVLM numbers come from arXiv version 4.",
-        "VisionAId is cited from its arXiv abstract only.",
+        "On 12 October 2026 every quoted number of ten of the twelve systems was confirmed against the full text (Europe PMC or arXiv); See et al. 2022 and DeepNAVI could not be retrieved (HTTP 403) and still rest on the original extraction. Bai et al. 2019, Chen et al. 2024 and WalkVLM were read as arXiv versions.",
         "Two product pages (Be My AI help, Sullivan+ on Google Play) could not be opened directly and rest on search-result excerpts; several cells of the applications table are marked unverified.",
         "The GPU name (Mali-G57) and the amount of memory (8 GB) of the test phone come from the project documentation, not from a measurement on the phone.",
         "The statement that a cosine of 0.3 on one sample was the project's initial rule comes from the project's source comments.",
