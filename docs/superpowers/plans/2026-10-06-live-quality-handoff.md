@@ -113,6 +113,31 @@ waits until the old one has closed its tasks.
   show another side of the charger (no pins, no text, no cable): learn it again, then remove the diagnostics.
 - Next after that: Task 6 (voice hold), Task 5 (bed), Task 4 (PR).
 
+### Text reading and QR (in progress, not committed; break 2026-10-12)
+- Done in the working tree, unit tests green (950), on the phone:
+  - `ReaderPolicy.sameLine`: one line read twice by OCR agrees on 80 % of its letters (case and spaces ignored),
+    and lines with other numbers are other lines. Before, a line had to come twice letter for letter, which OCR
+    never does, so nothing was said (since d8bff72).
+  - `ReaderPolicy.toSay` / `inOrder` / `sentence`: every clear line in view, top to bottom and left to right on a
+    row; lines under 60 % of the biggest line's height are small print and left out; a line is said once seen in
+    two reads in a row, not again within 10 s, at most 300 characters at once. Device: it read the chat top down.
+  - `READ_EVERY_MS` 1.5 s -> 0.6 s (the user: "needs a bit more time to read"); English (Latin) model only (the
+    Korean model was tried: slower, one 2 s timeout; the user: English first).
+  - TEMP log "Reader sees N lines in X ms: unsure, small, readable (biggest), to read, saying" in `ReaderFragment`.
+- Replay test (2026-10-12): `ReaderEngine` (one read: code, else text via ReaderPolicy) is used by the reader
+  screen and by androidTest `ReaderReplayTest`, which draws frames on the phone (8-line page with hand shake,
+  sign with small print, QR code, small text, blurred page) and reads them with the real ML Kit. All 6 pass in
+  26 s: QR on the first frame (27 ms); sign at the 2nd read without its small print; pages read top down from the
+  2nd read (0.6 s), every line once. It found `MIN_HEIGHT` 0.03 dropping normal page lines (0.028-0.033 high):
+  now 0.015. Run it: see memory "on-device-tests-infinix" (am instrument; Hiber freezes background apps, so the
+  test shows the debug-only `ReplayHostActivity`).
+- Offer first, read on the user's word (user, 2026-10-12): text in view is announced ("Text found, titled 'X'" when
+  1-3 lines are 1.4x the lower-middle height, else "beginning with" the first 6 words; "Say read to hear it"), and
+  read in full (all readable lines, small print too, top down) on "read"/"yes"/a tap on the text; "no" drops it;
+  no answer in 15 s drops it; the same text is not offered again for 30 s. Codes are still said at once. Replay:
+  page offered at 0.6 s once, sign titled 'EMERGENCY EXIT'; voice answer and tap not covered by the replay.
+- Left: one live check by the user at the end (also the voice answer "read"); real reader frames for `androidTest/assets/replay/<scene>/`.
+
 ### Later
 - "Find my charging" said "Looking for My.": the first guess matched the saved *person* "My" (a filler-word name)
   before the second guess "Find my charger" was tried. `SearchResolver.resolve(text, guesses, …)` should try the

@@ -11,11 +11,6 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
-import com.google.android.gms.tasks.Tasks
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.nungil.R
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
@@ -25,20 +20,22 @@ import com.nungil.core.scan.ScanPhrases
 import com.nungil.contract.app.CameraScreen
 import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.services
+import com.nungil.shell.MainActivity
+import com.nungil.contract.app.VoiceHandler
+import com.nungil.contract.VoiceCommand
 import com.nungil.databinding.ReaderFragmentBinding
 import com.nungil.scan.CameraSession
 import com.nungil.search.CameraGate
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Reads QR codes, barcodes and printed text aloud, every 1.5 s, never the same text twice within 10 s.
  * Version 1 reads Latin text only (Korean OCR needs an extra ML Kit model; see the Hand-offs).
  */
-class ReaderFragment : Fragment(), CameraScreen {
+class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
     private var _binding: ReaderFragmentBinding? = null
     private val binding get() = _binding!!
     private val gate = CameraGate(this) { startCamera() }
@@ -50,9 +47,7 @@ class ReaderFragment : Fragment(), CameraScreen {
     private var camera: CameraSession? = null
     private var extras: ExecutorService? = null
     private val busy = AtomicBoolean(false)
-    private val scanner = BarcodeScanning.getClient()
-    private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-    private val policy = ReaderPolicy()
+    private val engine = ReaderEngine()
 
     @Volatile
     private var running = true
@@ -75,6 +70,8 @@ class ReaderFragment : Fragment(), CameraScreen {
         lang = services.lang
         ViewCompat.setAccessibilityHeading(binding.readerTitle, true)
         binding.readerButton.setOnClickListener { if (running) stopReading() else startReading() }
+        // A tap on what was found reads it, as "read" does.
+        binding.readerText.setOnClickListener { main.removeCallbacks(giveUp); readOffer() }
         gate.attach(binding.readerPermission)
         extras = Executors.newSingleThreadExecutor()
     }
@@ -102,8 +99,7 @@ class ReaderFragment : Fragment(), CameraScreen {
 
     override fun onDestroy() {
         super.onDestroy()
-        scanner.close()
-        recognizer.close()
+        engine.close()
     }
 
     @Volatile private var last: VisionFrame? = null
@@ -165,38 +161,87 @@ class ReaderFragment : Fragment(), CameraScreen {
         }
     }
 
-    /** Extras thread: a code wins over text in the same frame. */
+    /** Extras thread: a code wins over text in the same frame; text is read top to bottom (ReaderEngine). */
     private fun read(bitmap: Bitmap) {
-        val image = InputImage.fromBitmap(bitmap, 0)
-        val spoken = try {
-            val code = Tasks.await(scanner.process(image), 2, TimeUnit.SECONDS)
-                .firstNotNullOfOrNull { it.rawValue?.takeIf { v -> v.isNotBlank() } }
-            if (code != null) {
-                ReaderPolicy.codePhrase(code, lang)
-            } else {
-                val text = Tasks.await(recognizer.process(image), 2, TimeUnit.SECONDS)
-                val w = bitmap.width.toFloat()
-                val h = bitmap.height.toFloat()
-                val lines = text.textBlocks.flatMap { block -> block.lines }.mapNotNull { line ->
-                    val box = line.boundingBox ?: return@mapNotNull null
-                    SeenLine(line.text, line.confidence, box.height() / h, box.exactCenterX() / w, box.exactCenterY() / h)
-                }
-                val picked = ReaderPolicy.pickLine(lines)
-                // Text must be seen in two reads in a row; a code is exact and is read at once.
-                if (!policy.steady(picked)) null else picked
-            }
+        val read = try {
+            engine.read(bitmap, SystemClock.elapsedRealtime(), lang)
         } catch (e: Exception) {
             Log.i("Nungil", "Reader failed: ${e.message}")
-            null
-        } ?: return
-        if (leaving || !policy.shouldSpeak(spoken, SystemClock.elapsedRealtime())) return
-        Log.i("Nungil", "Reader says \"$spoken\"")
-        services.speaker.say(spoken)
-        main.post { _binding?.readerText?.text = spoken }
+            return
+        }
+        if (leaving) return
+        read.spoken?.let { code ->
+            Log.i("Nungil", "Reader says \"$code\"")
+            services.speaker.say(code)
+            main.post { _binding?.readerText?.text = code }
+        }
+        read.offer?.let { offer -> main.post { offer(offer) } }
+    }
+
+    // ---- Text found: offered first, read on the user's word -----------------------------------------
+
+    /** Main thread: "Text found, …. Say read to hear it." and the next words are the answer. */
+    private fun offer(offer: ReaderPolicy.Offer) {
+        val b = _binding ?: return
+        val phrase = offer.phrase(lang)
+        Log.i("Nungil", "Reader offers ${offer.lines.size} lines: \"$phrase\"")
+        services.speaker.say(phrase)
+        b.readerText.text = phrase
+        listenForAnswer()
+        main.removeCallbacks(giveUp)
+        main.postDelayed(giveUp, ANSWER_MS)
+    }
+
+    private fun listenForAnswer() {
+        (activity as? MainActivity)?.let {
+            it.dictationAccepts = { text -> ReaderPolicy.answer(text) != null }
+            it.dictationEarly = true
+        }
+        services.askForWords(viewLifecycleOwner) { text -> answer(text) }
+    }
+
+    /** Main thread: "read" or "yes" reads the text found in full; "no" lets it go. */
+    private fun answer(text: String) {
+        main.removeCallbacks(giveUp)
+        when (ReaderPolicy.answer(text)) {
+            true -> readOffer()
+            false -> {
+                engine.decline()
+                services.speaker.say(ReaderPolicy.skipped(lang))
+            }
+            null -> listenForAnswer()
+        }
+    }
+
+    private fun readOffer(): Boolean {
+        val full = engine.accept() ?: return false
+        Log.i("Nungil", "Reader reads \"${full.take(80)}\"")
+        services.speaker.say(full)
+        _binding?.readerText?.text = full
+        return true
+    }
+
+    /** No answer in time: the microphone is let go, so the next words are not taken for one. */
+    private val giveUp = Runnable {
+        engine.decline()
+        (activity as? MainActivity)?.dropWords()
+    }
+
+    /** "Read" or "read text" said on this screen: the text offered, not the reader opened again. */
+    override fun onVoiceCommand(command: VoiceCommand): Boolean {
+        if (command != VoiceCommand.ReadText) return false
+        main.removeCallbacks(giveUp)
+        if (!readOffer()) services.speaker.say(ReaderPolicy.nothingFound(lang))
+        return true
     }
 
     private fun onCameraError(error: Throwable) {
         Log.i("Nungil", "Reader camera error", error)
         if (_binding != null) services.speaker.say(getString(R.string.search_camera_error))
+    }
+
+    private companion object {
+        /** How long an offer waits for "read". */
+        const val ANSWER_MS = 15_000L
     }
 }
