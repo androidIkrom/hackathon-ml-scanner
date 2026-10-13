@@ -329,6 +329,18 @@ class ReaderPolicyTest {
         assertFalse(ReaderPolicy.sameLine("EXIT", "EX1T X"))
         assertFalse(ReaderPolicy.sameLine("SeenLine(Line.text, line.confidence", "TEMP diagnostics (text reading)"))
         assertFalse(ReaderPolicy.sameLine("Step 1: open the box", "Step 2: open the box"))
+        // A plaque's ornaments read as "O", "6", "9" at the ends, and O for 0 (real photo, 2026-10-13).
+        assertTrue(ReaderPolicy.sameLine("O FIELD MUSEUMO", "6 FIELD MUSEUM"))
+        assertTrue(ReaderPolicy.sameLine("FIELD MUSEUM", "9 FIELD MUSEUMO"))
+        assertTrue(ReaderPolicy.sameLine("100000 DOLLARS OR MORE", "10000O DOLLARS OR MORE"))
+        assertTrue(ReaderPolicy.sameLine("100.000 DOLLARS OR MORE", "100000 DOLLARS OR MORE"))
+        assertFalse(ReaderPolicy.sameLine("Room 12 is open", "Room 13 is open"))
+    }
+
+    @Test fun twoReadingsOnTopOfEachOtherAreNotPiecesOfOneLine() {
+        val a = SeenLine("100000 DOLLARS OR MORE", 0.7f, 0.04f, 0.49f, 0.26f, width = 0.66f)
+        val b = SeenLine("10000O DOLLARS OR MORE", 0.7f, 0.04f, 0.50f, 0.26f, width = 0.67f)
+        assertEquals(2, ReaderPolicy.rows(listOf(a, b)).size)
     }
 
     @Test fun linesAreJoinedIntoSentences() =

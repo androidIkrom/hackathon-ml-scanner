@@ -195,6 +195,17 @@ waits until the old one has closed its tasks.
   frames), so "2 bottles at 12 o'clock" is said when it grows; with more than one no colour is said (one vote for
   both), and a colour that is the thing's name is not said ("2 orange oranges"). Unit-tested; live check left.
 
+- Reader on real photos, on the emulator (user, 2026-10-13: "not on the phone, on the emulator, real images from
+  online"). `tools/reader-photos/make_frames.py` fetches free photos from Wikimedia Commons (a laptop with English
+  Wikipedia, code on a screen, a drive-thru menu board, a 1969 newspaper held at a slant, a museum plaque), cuts what
+  a phone in portrait sees (1440 x 1920, a little hand shake) and writes the phrases that must be read; frames and
+  photos stay out of git. `ReaderReplayTest.realPhotos` (`-e scene <name>`, `-e lines all`) reads them. Found and
+  fixed: a read could time out (2 s, now 6 s; the emulator needs `ReaderEngine(timeoutS = 120)`); a plaque line was
+  never read because its ornaments came as "O", "6", "9" in turn (sameLine leaves out a lone character at either
+  end, and O among digits is 0); two readings of one line on top of each other were joined as pieces of a line.
+  Emulator: `Pixel_8_2`, headless, `-memory 1536`; Play Store, Google app and other heavy apps disabled on it
+  (`pm disable-user`) or the test process was killed for memory.
+
 ### After the plan: YOLO26 (user, 2026-10-13)
 When this plan is done, add Ultralytics YOLO26 to the project as a detector. To look at first: its licence (Ultralytics
 models are AGPL-3.0 unless an Enterprise licence is bought; the app's licence and distribution), the export to

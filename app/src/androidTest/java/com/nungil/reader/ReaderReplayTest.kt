@@ -51,12 +51,13 @@ class ReaderReplayTest {
 
     private fun replay(scene: String, frames: List<Bitmap>): List<Said> {
         val out = mutableListOf<Said>()
-        ReaderEngine().use { engine ->
+        // The emulator has no GPU: a read takes many times longer than on the phone.
+        ReaderEngine(timeoutS = 120).use { engine ->
             var t = 0L
             var offeredAt: Long? = null
             for (frame in frames) {
                 val read = engine.read(frame, t, Lang.EN)
-                if (t == 0L) {
+                if (t == 0L || EVERY_FRAME) {
                     for (l in read.lines) {
                         Log.i(TAG, String.format(java.util.Locale.US, "  line h %.3f c %.2f b %d x %.2f w %.2f y %.2f %s \"%s\"", l.height, l.confidence, l.block, l.centerX, l.width, l.centerY, if (ReaderPolicy.readable(l)) "read" else "dropped", l.text))
                     }
@@ -195,12 +196,25 @@ class ReaderReplayTest {
         assertTrue("$read of ${SCREEN.size} lines read: \"$heard\"", read >= SCREEN.size * 8 / 10)
     }
 
-    private fun laptop(w: Int, h: Int, shift: Int): Bitmap {
+    /**
+     * A full laptop screen, 36 lines (a chat): how long one read takes at two frame sizes. On the phone a dense screen
+     * took over 2 s and the read timed out twice (the logs, 2026-10-13). Measured, not asserted.
+     */
+    @Test fun aDenseLaptopScreenAtTwoSizes() {
+        val lines = List(36) { SCREEN[it % SCREEN.size] }
+        for ((w, h) in listOf(1440 to 1920, 1080 to 1440)) {
+            val reads = replay("dense laptop screen, ${w}x$h", List(6) { laptop(w, h, shift = it % 3, lines = lines) })
+            val heard = reads.firstNotNullOfOrNull { it.full }.orEmpty()
+            Log.i(TAG, "dense ${w}x$h: ${heard.split(". ").size} sentences read, OCR ${reads.map { it.ocrMs }}")
+        }
+    }
+
+    private fun laptop(w: Int, h: Int, shift: Int, lines: List<String> = SCREEN): Bitmap {
         val screen = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
         val c = Canvas(screen)
         c.drawColor(Color.rgb(30, 30, 36))
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(225, 225, 225); textSize = 16f; typeface = Typeface.SANS_SERIF }
-        SCREEN.forEachIndexed { i, line -> c.drawText(line, 120f, 120f + i * 30f, paint) }
+        lines.forEachIndexed { i, line -> c.drawText(line, 120f, 60f + i * 28f, paint) }
         val frame = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
         val f = Canvas(frame)
         f.drawColor(Color.rgb(70, 60, 50))
@@ -221,7 +235,8 @@ class ReaderReplayTest {
         assertNotNull("never offered", offer)
         val heard = reads.firstNotNullOf { it.full }
         assertTrue("a full stop inside a line: \"$heard\"", !heard.contains("at. ") && !heard.contains("start at."))
-        if (page === INLINE) assertTrue("a big word lost: \"$heard\"", heard.contains("start at FIVE dollars", ignoreCase = true))
+        // A letter or two may be misread ("IVE dolars" on the emulator); the word gone is not.
+        if (page === INLINE) assertTrue("a big word lost: \"$heard\"", found(heard, "start at FIVE dollars for") >= 0 && !heard.contains("start at dollars", ignoreCase = true))
         val lines = page.map { line -> line.joinToString("") { it.text } }
         val at = lines.map { found(heard, it) }
         assertTrue("not read: ${lines.filterIndexed { i, _ -> at[i] < 0 }} in \"$heard\"", at.all { it >= 0 })
@@ -247,6 +262,35 @@ class ReaderReplayTest {
             }
             if (frames.isNotEmpty()) assertNotNull(replay("real: $scene", frames))
         }
+    }
+
+    /**
+     * Real photos (Wikimedia Commons, free licences) cut as a phone held in portrait sees them, 1440 x 1920, in assets
+     * `photos/<scene>/` with the phrases that must be read (`expect.txt`); made by tools/reader-photos/make_frames.py and
+     * not kept in git. Run on the emulator (the phone is the user's). Skipped when there are none.
+     */
+    @Test fun realPhotos() {
+        val assets = InstrumentationRegistry.getInstrumentation().context.assets
+        val missing = mutableListOf<String>()
+        // -e scene <name>: that scene only.
+        val only = InstrumentationRegistry.getArguments().getString("scene")
+        for (scene in assets.list("photos").orEmpty().sorted().filter { only == null || it == only }) {
+            val names = assets.list("photos/$scene").orEmpty().sorted()
+            // RGB_565: half the memory; six 1440 x 1920 frames in ARGB ran the emulator out of it.
+            val options = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.RGB_565 }
+            val frames = names.filter { it.endsWith(".jpg") }.mapNotNull { name ->
+                assets.open("photos/$scene/$name").use { BitmapFactory.decodeStream(it, null, options) }
+            }
+            val expect = assets.open("photos/$scene/expect.txt").bufferedReader().readLines().filter { it.isNotBlank() }
+            // The user says "read" a few reads after the offer: the frames go round until then.
+            val reads = replay("photo: $scene", List(12) { frames[it % frames.size] })
+            val heard = reads.firstNotNullOfOrNull { it.full }.orEmpty()
+            val lost = expect.filter { found(heard, it) < 0 }
+            Log.i(TAG, "photo $scene: ${expect.size - lost.size} of ${expect.size} phrases read" + if (lost.isEmpty()) "" else ", not: $lost")
+            missing += lost.map { "$scene: $it" }
+            frames.forEach { it.recycle() }
+        }
+        assertTrue("not read: $missing", missing.isEmpty())
     }
 
     // ---- frames ------------------------------------------------------------------------------------
@@ -354,6 +398,9 @@ class ReaderReplayTest {
 
     companion object {
         private const val TAG = "NungilReplay"
+
+        /** -e lines all: what OCR saw in every frame, not only the first. */
+        private val EVERY_FRAME = InstrumentationRegistry.getArguments().getString("lines") == "all"
 
         /** "Text found, …. Say read to hear it." takes about 3 s to say. */
         private const val ANSWER_AFTER_MS = 2_400L
