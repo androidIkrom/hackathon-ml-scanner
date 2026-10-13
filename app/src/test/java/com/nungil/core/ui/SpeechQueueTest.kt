@@ -122,4 +122,83 @@ class SpeechQueueTest {
         q.add("one")
         assertEquals("one", q.next())
     }
+
+    @Test fun aTextReadAloudKeepsEveryLineAndShortPauses() {
+        // The reader queued 31 lines and 3 were said: the queue kept only the last 3, with 1.5 s between them (2026-10-12).
+        val lines = (1..31).map { "Line $it." }
+        q.addLines(lines)
+        val said = mutableListOf<String>()
+        while (said.size < lines.size) {
+            val next = q.next()
+            if (next != null) {
+                said += next
+                q.done()
+            }
+            t += SpeechQueue.LINE_GAP_MS
+        }
+        assertEquals(lines, said)
+    }
+
+    @Test fun aVoiceInTheRoomPausesATextAndItGoesOnFromTheLineCut() {
+        // Other voices held the app's sound, and the hold dropped the whole text: 27 lines queued, none said (2026-10-13).
+        q.addLines(listOf("Line 1.", "Line 2.", "Line 3."))
+        assertEquals("Line 1.", q.next())
+        q.done()
+        t += SpeechQueue.LINE_GAP_MS
+        assertEquals("Line 2.", q.next())
+        q.add("a chair ahead")
+        assertTrue(q.reading)
+        q.hold()
+        assertFalse(q.isSpeaking)
+        // The line cut is said again, then the rest; the announcement is stale.
+        t += SpeechQueue.LINE_GAP_MS
+        assertEquals("Line 2.", q.next())
+        q.done()
+        t += SpeechQueue.LINE_GAP_MS
+        assertEquals("Line 3.", q.next())
+        q.done()
+        t += SpeechQueue.GAP_MS
+        assertNull(q.next())
+        assertFalse(q.reading)
+    }
+
+    @Test fun aStopRemembersTheLineItCut() {
+        q.addLines(listOf("Line 1.", "Line 2.", "Line 3."))
+        q.next()
+        q.done()
+        t += SpeechQueue.LINE_GAP_MS
+        q.next()
+        q.clear()
+        assertEquals("Line 2.", q.cutLine)
+        assertFalse(q.reading)
+        // "Stopped." said after it does not forget where the text was.
+        q.now("Stopped.")
+        assertEquals("Line 2.", q.cutLine)
+        // A new text starts afresh.
+        q.addLines(listOf("Other."))
+        assertNull(q.cutLine)
+    }
+
+    @Test fun aStopBetweenLinesRemembersTheNextOne() {
+        q.addLines(listOf("Line 1.", "Line 2."))
+        q.next()
+        q.done()
+        q.clear()
+        assertEquals("Line 2.", q.cutLine)
+    }
+
+    @Test fun aHoldWithNoTextDropsAnnouncementsAsBefore() {
+        q.add("a chair")
+        q.add("a table")
+        q.next()
+        q.hold()
+        assertEquals(0, q.pendingCount)
+        assertNull(q.cutLine)
+    }
+
+    @Test fun anAnnouncementStillDropsTheStalest() {
+        q.addLines(listOf("Line 1.", "Line 2."))
+        repeat(SpeechQueue.MAX_PENDING + 2) { q.add("note $it") }
+        assertEquals(2 + SpeechQueue.MAX_PENDING, q.pendingCount)
+    }
 }

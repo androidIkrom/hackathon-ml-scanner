@@ -137,6 +137,30 @@ waits until the old one has closed its tasks.
   no answer in 15 s drops it; the same text is not offered again for 30 s. Codes are still said at once. Replay:
   page offered at 0.6 s once, sign titled 'EMERGENCY EXIT'; voice answer and tap not covered by the replay.
 - Left: one live check by the user at the end (also the voice answer "read"); real reader frames for `androidTest/assets/replay/<scene>/`.
+- 2026-10-12/13, the text was read only in part (a demo to the professor, then in class):
+  - `SpeechQueue` kept 3 phrases and dropped the rest, with 1.5 s between them: 31 lines queued, 3 said. Lines of a
+    text (`Speaker.sayLines`) are now never dropped and follow after 0.15 s.
+  - Other voices in the room held the app's sound (barge-in), and the hold dropped the whole text: 27 lines queued,
+    none said. Now a hold pauses a text and it goes on from the line cut (`SpeechQueue.hold`); while a text is read
+    only a command stops it (`VoiceInput.bargesIn`); "stop" / "continue" go on from `SpeechQueue.cutLine`.
+  - A lecture went to commands ("Play function is…" -> Start, "Number of item…" -> Saved objects): a phrase of more
+    than 8 words is no command (`VoiceCommandParser.MAX_COMMAND_WORDS`) and gets no "I did not understand"; reader
+    answers are at most 4 words.
+  - Device (volume 0): `SpeakLinesTest` (6 lines in order; a hold at line 3 and the text goes on) and
+    `ReaderReplayTest` 6/6.
+- 2026-10-13, every size, family and weight read, in order (user). New replay scenes: mixed fonts (sizes 14-44 px,
+  serif / sans / mono / italic, bold and normal in one line, a big word next to small ones), the same tilted 7° and
+  -6°, soft and noisy, other families light on dark, two columns. Fixed:
+  - a crooked page: lines measured along their slant and the page set straight (`ReaderPolicy.straighten`, from
+    ML Kit's corner points); before, "Tuesday" came before "Monday" and the title was lost;
+  - columns: blocks side by side are read column by column (`inOrder` with ML Kit's blocks); lines far apart, each a
+    block of its own, are read row by row as a table;
+  - the title is the first run of big lines only (not "Weekly Notes SALE all shoes");
+  - small print in a noisy frame: `MIN_CONFIDENCE` 0.5, and a waiting offer gathers the lines of each reading
+    (`merge`); the replay says "read" 2.4 s after the offer, as a user does.
+  - Device: `ReaderReplayTest` 12/12 and `SpeakLinesTest` 2/2; unit tests 974.
+  - Also seen: the offer said "beginning with 'Tuzatishe'" but the reading began higher up ("Saved Messages"): the
+    waiting offer takes the fuller reading of the same text. Open.
 
 ### Later
 - "Find my charging" said "Looking for My.": the first guess matched the saved *person* "My" (a filler-word name)

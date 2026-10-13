@@ -3,13 +3,22 @@ package com.nungil.reader
 import com.nungil.contract.Lang
 import com.nungil.core.search.SearchResolver
 import com.nungil.core.walk.RoutePhrases
-import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
 
 /**
  * One recognised line of text. [height], [centerX] and [centerY] are fractions of the frame (0..1); [confidence]
  * is ML Kit's line confidence (0..1).
  */
-data class SeenLine(val text: String, val confidence: Float, val height: Float, val centerX: Float, val centerY: Float)
+data class SeenLine(
+    val text: String, val confidence: Float, val height: Float, val centerX: Float, val centerY: Float,
+    /** Fraction of the frame width; 0 when not known. */
+    val width: Float = 0f,
+    /** ML Kit's block (a paragraph, a piece of a column) the line is in; -1 when not known. */
+    val block: Int = -1,
+)
 
 /**
  * When to read and what to say in the reader (pure Kotlin, unit-tested). Text in view is first offered ([found]:
@@ -17,9 +26,13 @@ data class SeenLine(val text: String, val confidence: Float, val height: Float, 
  * read at once ([shouldSpeak]). Use from one thread.
  */
 class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgainMs: Long = OFFER_AGAIN_MS) {
+    /** One line as ML Kit gives it: its corners in pixels, clockwise from the top-left ([xs], [ys], four each). */
+    class RawLine(val text: String, val confidence: Float, val xs: FloatArray, val ys: FloatArray, val block: Int = -1)
     /** Text found in view, its lines top to bottom. */
     class Offer(val lines: List<SeenLine>) {
-        val text: String get() = sentence(lines.map { it.text.trim() })
+        /** Each line as one thing to say, so the reading can stop and go on line by line. */
+        val sentences: List<String> get() = lines.map { sentence(listOf(it.text.trim())) }
+        val text: String get() = sentences.joinToString(" ")
 
         /** What to say when it is found: its title (lines much bigger than the rest), else its first words. */
         fun phrase(lang: Lang): String {
@@ -36,6 +49,10 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
     private val spokenAt = HashMap<String, Long>()
     private var lastRead: List<String> = emptyList()
     private var waiting: Offer? = null
+    private var waitingSince = 0L
+
+    /** Until then the text accepted is being read: nothing new is offered on top of it. */
+    private var quietUntil = 0L
     private val offeredAt = ArrayList<Pair<List<String>, Long>>()
 
     /** An offer waits for the user's answer. */
@@ -44,26 +61,46 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
     /**
      * Text to offer from one read's [lines], or null: only lines also seen in the read before (a one-frame
      * misreading is never offered), and not the text offered last within [offerAgainMs], nor anything while an
-     * offer waits (the waiting one takes the fuller reading of the same text). Call once per read.
+     * offer waits for its answer (up to [ANSWER_MS]; the waiting one gathers the lines of each new reading of the
+     * same text, [merge]) or while accepted text is being read. Five offers in a minute queued up behind each other (the logs).
+     * Call once per read.
      */
     fun found(lines: List<SeenLine>, nowMs: Long): Offer? {
         val now = inOrder(lines)
         val steady = now.filter { line -> lastRead.any { sameLine(it, line.text) } }
         lastRead = now.map { it.text }
-        if (steady.isEmpty()) return null
+        if (waiting != null && nowMs - waitingSince >= ANSWER_MS) waiting = null
+        if (steady.isEmpty() || nowMs < quietUntil) return null
         val texts = steady.map { it.text }
         waiting?.let { w ->
-            if (sameText(w.lines.map { it.text }, texts) && steady.size >= w.lines.size) waiting = Offer(steady)
+            if (sameText(w.lines.map { it.text }, texts)) waiting = Offer(merge(w.lines, steady))
             return null
         }
         offeredAt.removeAll { nowMs - it.second >= offerAgainMs }
         if (offeredAt.any { sameText(it.first, texts) }) return null
         offeredAt += texts to nowMs
+        waitingSince = nowMs
         return Offer(steady).also { waiting = it }
     }
 
-    /** "Read": the waiting offer's whole text, or null when nothing waits. */
-    fun accept(): String? = waiting?.text.also { waiting = null }
+    /** "Read" at [nowMs]: the waiting offer's lines to say, or null when nothing waits. */
+    fun accept(nowMs: Long): List<String>? {
+        val lines = waiting?.sentences ?: return null
+        waiting = null
+        reading(nowMs, lines.sumOf { it.length })
+        return lines
+    }
+
+    /** [chars] of text are being read from [nowMs]: nothing new is offered on top of them. */
+    fun reading(nowMs: Long, chars: Int) {
+        quietUntil = nowMs + chars * MS_PER_CHAR
+    }
+
+    /** "Another text": the offer and the reading are dropped, and other text in view is offered at once. */
+    fun another() {
+        waiting = null
+        quietUntil = 0L
+    }
 
     /** "No", or no answer: the offer is dropped; the same text is not offered again for a while. */
     fun decline() {
@@ -103,8 +140,11 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
 
         fun truncateCode(text: String): String = if (text.length > MAX_CHARS) text.take(MAX_CHARS) else text
 
-        /** Lines ML Kit is less sure of are background noise or misreadings. */
-        const val MIN_CONFIDENCE = 0.6f
+        /**
+         * Lines ML Kit is less sure of are background noise or misreadings. It was 0.6: small print in a camera-like
+         * frame came at 0.57 and was left out (replay, 2026-10-13).
+         */
+        const val MIN_CONFIDENCE = 0.5f
 
         /** Letters and digits must be at least this share of the non-space characters ("|||", "~~" are not text). */
         const val MIN_LETTER_SHARE = 0.6f
@@ -131,17 +171,113 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
         const val TITLE_SCALE = 1.4f
         const val MAX_TITLE_LINES = 3
 
+        /** A title is short: a long big line was a chat message, not a heading (the logs). */
+        const val MAX_TITLE_LINE_WORDS = 5
+        const val MAX_TITLE_WORDS = 8
+
+        /** How long an offer waits for "read". */
+        const val ANSWER_MS = 20_000L
+
+        /** About how long the voice takes per character, so nothing is offered while a text is being read. */
+        const val MS_PER_CHAR = 70L
+
+        /** "Yes read it please", "read another text please". */
+        const val MAX_ANSWER_WORDS = 4
+
+        private fun wordCount(text: String): Int = text.split(Regex("\\s+")).count { it.isNotEmpty() }
+
         /** The words of the first line said when there is no title. */
         const val BEGINNING_WORDS = 6
 
-        /** Readable lines top to bottom, and left to right on one row. */
-        fun inOrder(lines: List<SeenLine>): List<SeenLine> {
-            val rows = mutableListOf<MutableList<SeenLine>>()
-            for (line in lines.filter(::readable).sortedBy { it.centerY }) {
-                val row = rows.lastOrNull()
-                if (row != null && abs(line.centerY - row.first().centerY) < row.first().height / 2) row += line else rows += mutableListOf(line)
+        /**
+         * The lines of a [width] x [height] frame as on a page held straight: each line's height measured along its
+         * own slant, and its centre turned back by the page's slant (the middle one of the lines'). A phone held 7°
+         * crooked made the lines' upright boxes taller than the gaps between them, and lines were read out of order
+         * ("Tuesday" before "Monday", replay 2026-10-13).
+         */
+        fun straighten(lines: List<RawLine>, width: Float, height: Float): List<SeenLine> {
+            if (lines.isEmpty()) return emptyList()
+            val slant = lines.map { atan2(it.ys[1] - it.ys[0], it.xs[1] - it.xs[0]) }.sorted()[lines.size / 2]
+            val c = cos(-slant)
+            val s = sin(-slant)
+            return lines.map { l ->
+                val tall = (hypot(l.xs[3] - l.xs[0], l.ys[3] - l.ys[0]) + hypot(l.xs[2] - l.xs[1], l.ys[2] - l.ys[1])) / 2
+                val wide = (hypot(l.xs[1] - l.xs[0], l.ys[1] - l.ys[0]) + hypot(l.xs[2] - l.xs[3], l.ys[2] - l.ys[3])) / 2
+                val dx = l.xs.average().toFloat() - width / 2
+                val dy = l.ys.average().toFloat() - height / 2
+                SeenLine(
+                    l.text, l.confidence, tall / height, (width / 2 + dx * c - dy * s) / width, (height / 2 + dx * s + dy * c) / height,
+                    wide / width, l.block,
+                )
             }
-            return rows.flatMap { row -> row.sortedBy { it.centerX } }
+        }
+
+        /** The readable lines of one block (a line with no block is one alone), and where they are. */
+        private class Box(val lines: List<SeenLine>) {
+            val top = lines.minOf { it.centerY - it.height / 2 }
+            val bottom = lines.maxOf { it.centerY + it.height / 2 }
+            val left = lines.minOf { it.centerX - it.width / 2 }
+            val right = lines.maxOf { it.centerX + it.width / 2 }
+            val firstMiddle = lines.first().centerY
+        }
+
+        /**
+         * Readable lines in reading order: blocks side by side (a band) are read as columns, left to right, each top
+         * to bottom; bands top to bottom. Two columns were read across, a line of one and a line of the other (replay,
+         * 2026-10-13). Lines with no block: top to bottom, left to right on one row.
+         */
+        fun inOrder(lines: List<SeenLine>): List<SeenLine> {
+            val boxes = lines.filter(::readable).withIndex()
+                .groupBy({ (i, l) -> if (l.block >= 0) l.block else -1 - i }, { it.value })
+                .values.map { Box(it.sortedWith(compareBy({ l -> l.centerY }, { l -> l.centerX }))) }
+                .sortedBy { it.top }
+            // A band: boxes beside each other, each one's first line starting above the band's bottom.
+            val bands = mutableListOf<MutableList<Box>>()
+            var bottom = 0f
+            for (box in boxes) {
+                if (bands.isEmpty() || box.firstMiddle >= bottom) {
+                    bands += mutableListOf(box)
+                    bottom = box.bottom
+                } else {
+                    bands.last() += box
+                    bottom = maxOf(bottom, box.bottom)
+                }
+            }
+            return bands.flatMap { band ->
+                // Columns: boxes that share some width, left to right; in a column, top to bottom.
+                val columns = mutableListOf<MutableList<Box>>()
+                var right = 0f
+                for (box in band.sortedBy { it.left }) {
+                    if (columns.isEmpty() || box.left >= right) {
+                        columns += mutableListOf(box)
+                        right = box.right
+                    } else {
+                        columns.last() += box
+                        right = maxOf(right, box.right)
+                    }
+                }
+                columns.flatMap { column -> column.sortedBy { it.top }.flatMap { it.lines } }
+            }
+        }
+
+        /**
+         * One text from two readings of it, [older] then [newer], in [newer]'s order: a line only one of them has
+         * goes after the line it followed. Of one line read twice the surer reading is kept. Small print in a noisy
+         * frame was read in one frame and not the next, and was left out (replay, 2026-10-13).
+         */
+        fun merge(older: List<SeenLine>, newer: List<SeenLine>): List<SeenLine> {
+            val out = newer.toMutableList()
+            var after = -1
+            for (line in older) {
+                val i = out.indexOfFirst { sameLine(it.text, line.text) }
+                if (i >= 0) {
+                    if (line.confidence > out[i].confidence) out[i] = line
+                    after = i
+                } else {
+                    out.add(++after, line)
+                }
+            }
+            return out
         }
 
         /** Two readings of one text: at least half the lines of the shorter one are in the other ([sameLine]). */
@@ -151,13 +287,20 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
             return few.count { line -> many.any { sameLine(it, line) } } * 2 >= few.size
         }
 
-        /** The lines much bigger than the middle-sized one, when there are a few of them; else null. */
+        /**
+         * The first lines much bigger than the middle-sized one, one after the other, when there are a few of them;
+         * else null. A big line further down is not part of it ("Weekly Notes" … "SALE all shoes", replay 2026-10-13).
+         * [lines] in reading order.
+         */
         fun title(lines: List<SeenLine>): String? {
             if (lines.size < 2) return null
             // The lower middle: with two big lines over two small ones the small ones are the body text.
             val middle = lines.map { it.height }.sorted()[(lines.size - 1) / 2]
-            val big = lines.filter { it.height >= middle * TITLE_SCALE }
+            val isBig = { l: SeenLine -> l.height >= middle * TITLE_SCALE }
+            val big = lines.dropWhile { !isBig(it) }.takeWhile(isBig)
             if (big.isEmpty() || big.size > MAX_TITLE_LINES) return null
+            val words = big.map { it.text.trim().split(Regex("\\s+")).size }
+            if (words.any { it > MAX_TITLE_LINE_WORDS } || words.sum() > MAX_TITLE_WORDS) return null
             return big.joinToString(" ") { it.text.trim() }
         }
 
@@ -168,9 +311,13 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
             return if (words.size > BEGINNING_WORDS) "$head…" else head
         }
 
-        /** The user's answer to an offer: true to read it, false not to, null when it is no answer. */
+        /**
+         * The user's answer to an offer: true to read it, false not to, null when it is no answer. A long sentence
+         * is someone talking nearby: "read" in a lecture is not the user's answer (2026-10-13).
+         */
         fun answer(text: String): Boolean? {
             val t = text.trim().lowercase()
+            if (wordCount(t) > MAX_ANSWER_WORDS) return null
             return when {
                 Regex("\\bread\\b").containsMatchIn(t) || t.contains("읽") -> true
                 t == "skip" || t.startsWith("skip ") -> false
@@ -186,6 +333,20 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
          */
         fun sentence(lines: List<String>): String =
             lines.joinToString(" ") { if (it.last().isLetterOrDigit()) "$it." else it }
+
+        /** "Another text", "next": not this text, other text. */
+        fun wantsAnother(text: String): Boolean {
+            val t = text.trim().lowercase()
+            if (wordCount(t) > MAX_ANSWER_WORDS) return false
+            return t == "next" || t == "다음" || t.contains("another") || t.contains("new text") || t.contains("other text") ||
+                t.contains("something else") || t.contains("different") || t.contains("다른")
+        }
+
+        /** Where to go on after a stop: the line that was being said, or null when none of them was. */
+        fun resumeAt(lines: List<String>, speaking: String?): Int? =
+            speaking?.let { lines.indexOf(it) }?.takeIf { it >= 0 }
+
+        fun lookingForAnother(lang: Lang): String = if (lang == Lang.KO) "다른 글자를 찾을게요." else "Looking for other text."
 
         /** "No" to an offer. */
         fun skipped(lang: Lang): String = if (lang == Lang.KO) "알겠어요." else "Okay."

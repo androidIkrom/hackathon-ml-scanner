@@ -64,10 +64,20 @@ class TtsSpeaker(
     fun recentSpeech(): String? =
         currentText ?: lastEndText?.takeIf { SystemClock.elapsedRealtime() - lastEndAt < ECHO_WINDOW_MS }
 
-    /** The user started talking: stop at once, drop what was queued and stay quiet. Main thread. */
-    fun holdForUser() {
+    /** A text is being read aloud (sayLines). Main thread. */
+    val reading: Boolean get() = queue.reading
+
+    /** The line of a text read aloud that the last stop cut, where "continue" goes on. Main thread. */
+    val cutLine: String? get() = queue.cutLine
+
+    /**
+     * The user started talking: stop at once and stay quiet. Announcements are dropped; a text read aloud waits
+     * and goes on from the line cut. Main thread.
+     */
+    fun holdForUser() = onMain {
         held = true
-        stop()
+        if (queue.reading) queue.hold() else queue.clear()
+        silence()
     }
 
     /** The user finished: speak again (answers to their command come next). Main thread. */
@@ -150,6 +160,11 @@ class TtsSpeaker(
         pump()
     }
 
+    override fun sayLines(lines: List<String>) = onMain {
+        queue.addLines(lines)
+        pump()
+    }
+
     /**
      * [text] is good news ("I see it!", "All done!"): the next time it is said, it is said in a brighter voice.
      * The engine has no feelings to pick from; a pitch a little above the user's own setting is the nearest
@@ -189,6 +204,10 @@ class TtsSpeaker(
 
     override fun stop() = onMain {
         queue.clear()
+        silence()
+    }
+
+    private fun silence() {
         currentId = null
         // What was cut off is still in the air: the microphone may hand it back as words (recentSpeech).
         currentText?.let {

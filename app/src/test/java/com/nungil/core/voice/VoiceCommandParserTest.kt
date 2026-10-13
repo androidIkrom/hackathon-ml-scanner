@@ -26,6 +26,23 @@ class VoiceCommandParserTest {
     @Test fun koMicOffWithoutSpaces() = assertEquals(VoiceCommand.StopListening, p("마이크꺼"))
     @Test fun koVoiceOff() = assertEquals(VoiceCommand.StopListening, p("음성 명령 꺼 줘"))
 
+    // ---- people talking nearby ----------------------------------------------------------------------
+    // A lecture heard in class went to commands by one word in a long sentence (2026-10-13).
+    @Test fun aLongSentenceIsNoCommand() {
+        assertEquals(VoiceCommand.Unknown("Play function is supposed to produce some type of"), p("Play function is supposed to produce some type of"))
+        assertEquals(
+            VoiceCommand.Unknown("Number of item present on the inside the valid to provided as"),
+            p("Number of item present on the inside the valid to provided as"),
+        )
+        assertEquals(
+            VoiceCommand.Unknown("So where is the function that you just wrote in the file"),
+            p("So where is the function that you just wrote in the file"),
+        )
+    }
+
+    @Test fun aCommandOfEightWordsStillWorks() =
+        assertEquals(Go(Dest.Search("my new white bottle")), p("where did I put my new white bottle"))
+
     // ---- stop and back beat the screen they name --------------------------------------------------
     @Test fun stopScanStops() = assertEquals(VoiceCommand.Stop, p("stop scan"))
     @Test fun stopTheScanningStops() = assertEquals(VoiceCommand.Stop, p("stop the scanning"))

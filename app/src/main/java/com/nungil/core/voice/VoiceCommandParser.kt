@@ -25,13 +25,19 @@ import java.util.Locale
  * 7. destinations, including known mishearings ("safe", "working mode", "fool scan", "light skin", bare "person");
  * 8. start and repeat;
  * 9. anything else is Unknown with the original text (dictation for names and queries).
+ *
+ * A phrase of more than [MAX_COMMAND_WORDS] words is someone talking nearby, not a command: a lecture heard in class
+ * went to Start ("Play function is supposed to…") and to the Saved objects ("Number of item present…", 2026-10-13).
  */
 object VoiceCommandParser {
+    /** "Where did I put my new white bottle" is eight. */
+    const val MAX_COMMAND_WORDS = 8
 
     fun parse(text: String): VoiceCommand {
         val original = clean(text)
         if (original.isEmpty()) return VoiceCommand.Unknown("")
         val s = Said(original)
+        if (s.words.size > MAX_COMMAND_WORDS) return VoiceCommand.Unknown(original)
         return micOff(s)
             ?: search(s)
             ?: question(s)

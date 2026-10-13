@@ -19,6 +19,9 @@ interface Speaker {
     /** Flush the queue, speak [text], then call [onDone] on the main thread (after 15 s at most). */
     fun sayFinal(text: String, onDone: () -> Unit = {})
 
+    /** The lines of a text read aloud, in order, none dropped and with short pauses (the reader). */
+    fun sayLines(lines: List<String>) = lines.forEach(::say)
+
     /** Stop speaking and clear the queue. */
     fun stop()
 }

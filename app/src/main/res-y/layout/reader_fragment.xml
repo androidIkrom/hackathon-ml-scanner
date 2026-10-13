@@ -72,11 +72,40 @@
                 android:id="@+id/reader_text"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="4"
                 android:layout_marginTop="4dp"
                 android:text="@string/reader_nothing"
                 android:textAppearance="@style/TextAppearance.Nungil.Title" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
+
+    <!-- Shown while text found waits for an answer: the same as saying "read" or "no". -->
+    <LinearLayout
+        android:id="@+id/reader_answer"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/ng_gap"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/reader_read"
+            style="@style/Widget.Nungil.Button"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="@dimen/ng_gap"
+            android:layout_weight="1"
+            android:text="@string/reader_read" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/reader_skip"
+            style="@style/Widget.Nungil.Button.Tonal"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/reader_skip" />
+    </LinearLayout>
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/reader_button"

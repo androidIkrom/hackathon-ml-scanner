@@ -41,16 +41,26 @@ class ReaderEngine : Closeable {
         val ms = (System.nanoTime() - started) / 1_000_000
         val w = bitmap.width.toFloat()
         val h = bitmap.height.toFloat()
-        val lines = text.textBlocks.flatMap { block -> block.lines }.mapNotNull { line ->
-            val box = line.boundingBox ?: return@mapNotNull null
-            SeenLine(line.text, line.confidence, box.height() / h, box.exactCenterX() / w, box.exactCenterY() / h)
+        val raw = text.textBlocks.withIndex().flatMap { (b, block) ->
+            block.lines.mapNotNull { line ->
+                val corners = line.cornerPoints?.takeIf { it.size == 4 } ?: return@mapNotNull null
+                ReaderPolicy.RawLine(line.text, line.confidence, FloatArray(4) { corners[it].x.toFloat() }, FloatArray(4) { corners[it].y.toFloat() }, b)
+            }
         }
+        // A page held crooked is set straight, so its lines keep their order.
+        val lines = ReaderPolicy.straighten(raw, w, h)
         val offer = synchronized(policy) { policy.found(lines, nowMs) }
         return Read(null, offer, lines, null, ms)
     }
 
-    /** "Read": the offered text in full, or null when nothing was offered. */
-    fun accept(): String? = synchronized(policy) { policy.accept() }
+    /** "Read" at [nowMs]: the offered text's lines, or null when nothing was offered. */
+    fun accept(nowMs: Long): List<String>? = synchronized(policy) { policy.accept(nowMs) }
+
+    /** [chars] of text are being read again from [nowMs]. */
+    fun reading(nowMs: Long, chars: Int) = synchronized(policy) { policy.reading(nowMs, chars) }
+
+    /** "Another text". */
+    fun another() = synchronized(policy) { policy.another() }
 
     /** "No", or no answer in time. */
     fun decline() = synchronized(policy) { policy.decline() }

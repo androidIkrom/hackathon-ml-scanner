@@ -41,6 +41,8 @@ import com.nungil.core.voice.WakeWord
  *   still being said (VoiceBargeIn.answerIn), not at the end of the phrase.
  * @param onGuesses every guess for the phrase, just before [onHeard] gets the chosen one.
  * @param bias words the recognizer should lean towards right now (place names while a place is expected).
+ * @param bargesIn whether words still being said may stop the app's sound: while a text is read aloud only a
+ *   command does, so people talking nearby do not keep cutting it (a lecture in class, 2026-10-13).
  */
 class VoiceInput(
     private val context: Context,
@@ -53,6 +55,7 @@ class VoiceInput(
     private val answersNow: (String) -> Boolean,
     private val onGuesses: (List<String>) -> Unit,
     private val bias: () -> List<String>,
+    private val bargesIn: (String) -> Boolean,
     private val onHeard: (String) -> Unit,
     private val onProblem: (Phrase) -> Unit,
 ) : RecognitionListener {
@@ -76,7 +79,7 @@ class VoiceInput(
 
     /** One word the app is not saying has stood alone: it was the user's, not the app's own misheard. */
     private val unsureWord = Runnable {
-        if (!holding && isAwake() && VoiceBargeIn.onPartial(lastPartial, appSaying()) != BargeIn.KEEP_TALKING) beginHold()
+        if (!holding && isAwake() && VoiceBargeIn.onPartial(lastPartial, appSaying()) != BargeIn.KEEP_TALKING && bargesIn(lastPartial)) beginHold()
     }
     private var earlyPending = false
 
@@ -257,7 +260,7 @@ class VoiceInput(
             return
         }
         when (VoiceBargeIn.onPartial(text, appSaying())) {
-            BargeIn.STOP_ALL_SOUND -> beginHold()
+            BargeIn.STOP_ALL_SOUND -> if (bargesIn(text)) beginHold()
             BargeIn.UNSURE -> main.postDelayed(unsureWord, RecognizerPolicy.UNSURE_WORD_MS)
             BargeIn.KEEP_TALKING -> Unit
         }

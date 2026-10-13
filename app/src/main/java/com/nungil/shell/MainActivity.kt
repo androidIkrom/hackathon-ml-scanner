@@ -276,6 +276,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                 if (guesses.size > 1) Log.i(TAG, "Guesses: " + guesses.joinToString(" | "))
             },
             bias = { (currentScreen() as? WalkFragment)?.placeWords().orEmpty() },
+            bargesIn = { words -> !tts.reading || isCommand(words) },
             onHeard = ::onHeard,
             onProblem = ::onVoiceProblem,
         )
@@ -511,6 +512,11 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             claim(command.text)
             return
         }
+        // A long sentence is people talking nearby (a lecture in class, 2026-10-13): no "I did not understand".
+        if (command is VoiceCommand.Unknown && command.text.split(' ').size > VoiceCommandParser.MAX_COMMAND_WORDS) {
+            Log.i(TAG, "Not for the app: \"${command.text.take(60)}\"")
+            return
+        }
         // A screen that takes free words (Go: the place to search) gets them before "I did not understand".
         if (command is VoiceCommand.Unknown && (currentScreen() as? VoiceHandler)?.onVoiceCommand(command) == true) return
         // An always-on microphone also hears people nearby: say "I did not understand" only now and then.
@@ -533,6 +539,8 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     /** Runs one parsed command: global ones here, the rest on the current screen first. Main thread. */
     fun handleCommand(command: VoiceCommand) {
+        // "Again" is global (the last sentence said), but a screen may have more to say again: the reader, a text.
+        if (command == VoiceCommand.Repeat && (currentScreen() as? VoiceHandler)?.onVoiceCommand(command) == true) return
         if (!CommandRouter.isGlobal(command)) {
             // Camera commands are taken the same way on every camera screen, before the screen's own handler.
             (currentScreen() as? CameraScreen)?.let { cam ->

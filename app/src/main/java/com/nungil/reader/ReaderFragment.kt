@@ -10,6 +10,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.view.ViewCompat
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import com.nungil.R
 import com.nungil.contract.Facing
@@ -21,6 +22,7 @@ import com.nungil.contract.app.CameraScreen
 import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.services
 import com.nungil.shell.MainActivity
+import com.nungil.speech.TtsSpeaker
 import com.nungil.contract.app.VoiceHandler
 import com.nungil.contract.VoiceCommand
 import com.nungil.databinding.ReaderFragmentBinding
@@ -52,6 +54,9 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
     @Volatile
     private var running = true
 
+    /** The text being read, line by line. */
+    private var reading: List<String> = emptyList()
+
     /** Set while the view is gone, so a read still in flight does not speak. */
     @Volatile
     private var leaving = false
@@ -70,8 +75,10 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
         lang = services.lang
         ViewCompat.setAccessibilityHeading(binding.readerTitle, true)
         binding.readerButton.setOnClickListener { if (running) stopReading() else startReading() }
-        // A tap on what was found reads it, as "read" does.
-        binding.readerText.setOnClickListener { main.removeCallbacks(giveUp); readOffer() }
+        // Read it, Skip, or a tap on what was found: the same as saying "read" or "no".
+        binding.readerRead.setOnClickListener { answered(true) }
+        binding.readerSkip.setOnClickListener { answered(false) }
+        binding.readerText.setOnClickListener { if (binding.readerAnswer.isVisible) answered(true) }
         gate.attach(binding.readerPermission)
         extras = Executors.newSingleThreadExecutor()
     }
@@ -110,15 +117,20 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
 
     override val isWorking: Boolean get() = running
 
+    /** "Stop": the voice stops at once (in the middle of a text too), and so does the looking. */
     override fun pause() {
         if (_binding == null || !running) return
+        services.speaker.stop()
         stopReading()
         services.speaker.sayNow(ScanPhrases.paused(lang))
     }
 
+    /** "Continue": a text stopped in the middle goes on from the line it was at, and the looking starts again. */
     override fun resume() {
         if (_binding == null) return
         startReading()
+        // The line the stop cut: "stop" here, or a bare "stop" that only silenced the voice.
+        ReaderPolicy.resumeAt(reading, (services.speaker as? TtsSpeaker)?.cutLine)?.let { readLines(reading, it) }
     }
 
     private fun startCamera() {
@@ -180,68 +192,114 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
 
     // ---- Text found: offered first, read on the user's word -----------------------------------------
 
-    /** Main thread: "Text found, …. Say read to hear it." and the next words are the answer. */
+    /**
+     * Main thread: "Text found, …. Say read to hear it.", with Read it / Skip. The answer is listened for once
+     * that has been said: the app's own "Read text or a code" was taken for "read" (the logs, 2026-10-12).
+     */
     private fun offer(offer: ReaderPolicy.Offer) {
         val b = _binding ?: return
         val phrase = offer.phrase(lang)
         Log.i("Nungil", "Reader offers ${offer.lines.size} lines: \"$phrase\"")
-        services.speaker.say(phrase)
         b.readerText.text = phrase
-        listenForAnswer()
+        b.readerAnswer.isVisible = true
+        services.speaker.sayFinal(phrase) { if (_binding?.readerAnswer?.isVisible == true) listenForAnswer() }
         main.removeCallbacks(giveUp)
-        main.postDelayed(giveUp, ANSWER_MS)
+        main.postDelayed(giveUp, ReaderPolicy.ANSWER_MS)
     }
 
     private fun listenForAnswer() {
         (activity as? MainActivity)?.let {
-            it.dictationAccepts = { text -> ReaderPolicy.answer(text) != null }
+            it.dictationAccepts = { text -> ReaderPolicy.wantsAnother(text) || ReaderPolicy.answer(text) != null }
             it.dictationEarly = true
         }
-        services.askForWords(viewLifecycleOwner) { text -> answer(text) }
-    }
-
-    /** Main thread: "read" or "yes" reads the text found in full; "no" lets it go. */
-    private fun answer(text: String) {
-        main.removeCallbacks(giveUp)
-        when (ReaderPolicy.answer(text)) {
-            true -> readOffer()
-            false -> {
-                engine.decline()
-                services.speaker.say(ReaderPolicy.skipped(lang))
+        services.askForWords(viewLifecycleOwner) { text ->
+            val yes = ReaderPolicy.answer(text)
+            when {
+                ReaderPolicy.wantsAnother(text) -> another()
+                yes == null -> listenForAnswer()
+                else -> answered(yes)
             }
-            null -> listenForAnswer()
         }
     }
 
-    private fun readOffer(): Boolean {
-        val full = engine.accept() ?: return false
-        Log.i("Nungil", "Reader reads \"${full.take(80)}\"")
-        services.speaker.say(full)
-        _binding?.readerText?.text = full
-        return true
+    /** Main thread: "read", "yes", Read it or a tap on the text reads it in full; "no" or Skip lets it go. */
+    private fun answered(yes: Boolean) {
+        main.removeCallbacks(giveUp)
+        (activity as? MainActivity)?.dropWords()
+        _binding?.readerAnswer?.isVisible = false
+        if (!yes) {
+            engine.decline()
+            services.speaker.say(ReaderPolicy.skipped(lang))
+            return
+        }
+        val lines = engine.accept(SystemClock.elapsedRealtime())
+        if (lines == null) {
+            services.speaker.say(ReaderPolicy.nothingFound(lang))
+            return
+        }
+        readLines(lines, 0)
     }
 
-    /** No answer in time: the microphone is let go, so the next words are not taken for one. */
+    /** The text, line by line from [from], so "stop" knows where it was and "continue" goes on from there. */
+    private fun readLines(lines: List<String>, from: Int) {
+        reading = lines
+        val rest = lines.drop(from)
+        Log.i("Nungil", "Reader reads ${rest.size} lines from line $from: \"${rest.firstOrNull()?.take(60)}\"")
+        services.speaker.sayLines(rest)
+        engine.reading(SystemClock.elapsedRealtime(), rest.sumOf { it.length })
+        _binding?.readerText?.text = lines.joinToString(" ")
+    }
+
+    /** "Another text", "next": this text is dropped and other text in view is offered at once. */
+    private fun another() {
+        main.removeCallbacks(giveUp)
+        (activity as? MainActivity)?.dropWords()
+        services.speaker.stop()
+        engine.another()
+        reading = emptyList()
+        _binding?.readerAnswer?.isVisible = false
+        if (!running) startReading()
+        services.speaker.say(ReaderPolicy.lookingForAnother(lang))
+    }
+
+    /**
+     * No answer in ReaderPolicy.ANSWER_MS (it was 15 s, and "yes" came 17 s after the offer, the app still talking:
+     * the logs): the buttons go and the microphone is let go, so the next words are not taken for an answer.
+     */
     private val giveUp = Runnable {
-        engine.decline()
+        _binding?.readerAnswer?.isVisible = false
         (activity as? MainActivity)?.dropWords()
     }
 
-    /** "Read" or "read text" said on this screen: the text offered, not the reader opened again. */
+    /**
+     * "Read" or "read text" said on this screen reads the text offered, not the reader opened again; "yes" or "no"
+     * heard as no command (no longer waited for) answer the offer too.
+     */
     override fun onVoiceCommand(command: VoiceCommand): Boolean {
-        if (command != VoiceCommand.ReadText) return false
-        main.removeCallbacks(giveUp)
-        if (!readOffer()) services.speaker.say(ReaderPolicy.nothingFound(lang))
+        val yes = when (command) {
+            VoiceCommand.ReadText -> true
+            // "Again": the last text read, in full (elsewhere it says the last sentence again).
+            VoiceCommand.Repeat -> {
+                if (reading.isEmpty()) return false
+                services.speaker.stop()
+                readLines(reading, 0)
+                return true
+            }
+            is VoiceCommand.Unknown -> {
+                if (ReaderPolicy.wantsAnother(command.text)) {
+                    another()
+                    return true
+                }
+                ReaderPolicy.answer(command.text) ?: return false
+            }
+            else -> return false
+        }
+        answered(yes)
         return true
     }
 
     private fun onCameraError(error: Throwable) {
         Log.i("Nungil", "Reader camera error", error)
         if (_binding != null) services.speaker.say(getString(R.string.search_camera_error))
-    }
-
-    private companion object {
-        /** How long an offer waits for "read". */
-        const val ANSWER_MS = 15_000L
     }
 }
