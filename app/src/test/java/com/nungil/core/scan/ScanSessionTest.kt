@@ -159,4 +159,16 @@ class ScanSessionTest {
         s.frame(800L, 0f, bottle, other)
         assertEquals(2, s.frame(1_000L, 0f, bottle, other).inView.single().count)
     }
+
+    @Test fun liveSaysSlowDownAtMostEveryTwentySeconds() {
+        val s = ScanSession(ScanMode.LIVE, 0L, Lang.EN)
+        var said = 0
+        var heading = 0f
+        // Turning fast for a minute: 90 degrees a second.
+        for (t in 0L..60_000L step 200L) {
+            heading = (heading + 18f) % 360f
+            if (s.frame(t, heading).phrases.any { it.contains("Slow") }) said++
+        }
+        assertEquals(3, said)
+    }
 }

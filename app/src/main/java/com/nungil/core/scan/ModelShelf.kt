@@ -38,9 +38,20 @@ class ModelShelf(private val clock: () -> Long, private val keepMs: Long = KEEP_
 
     private val slots = mutableListOf<Slot>()
 
-    /** The model of [kind] and [key]: the loaded one, else [build] (called outside the shelf's lock). */
-    @Suppress("UNCHECKED_CAST")
+    /** One lock per kind and key while it is built: a second screen waits for the first build instead of building. */
+    private val building = HashMap<String, Any>()
+
+    /**
+     * The model of [kind] and [key]: the loaded one, else [build] (outside the shelf's lock; a second taker of the
+     * same model waits for that build and gets it: the detector warmed up at start and Live opened at once).
+     */
     fun <M : Closeable> take(kind: String, key: String, build: () -> M): Lease<M> {
+        val lock = synchronized(this) { building.getOrPut("$kind|$key") { Any() } }
+        return synchronized(lock) { takeNow(kind, key, build) }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun <M : Closeable> takeNow(kind: String, key: String, build: () -> M): Lease<M> {
         val stale: List<Slot>
         synchronized(this) {
             slots.firstOrNull { it.kind == kind && it.key == key }?.let { slot ->

@@ -88,7 +88,7 @@ class ItemFragment : Fragment(), VoiceHandler {
 
     override fun onVoiceCommand(command: VoiceCommand): Boolean = when (command) {
         VoiceCommand.Delete -> {
-            if (confirm.press(SystemClock.elapsedRealtime())) delete() else services.speaker.say(getString(R.string.item_delete_again))
+            if (confirm.press(SystemClock.elapsedRealtime(), ConfirmWindow.VOICE_WINDOW_MS)) delete() else services.speaker.say(getString(R.string.item_delete_again))
             true
         }
         VoiceCommand.Start -> {

@@ -20,6 +20,12 @@ class ConfirmWindowTest {
         assertTrue(c.press(6_000))
     }
 
+    @Test fun byVoiceTheSecondDeleteMayComeLater() {
+        // The logs, 2026-10-13: "Delete" said three times, 7-8 s apart, on an item's screen, and each only armed it.
+        assertFalse(c.press(0, ConfirmWindow.VOICE_WINDOW_MS))
+        assertTrue(c.press(8_000, ConfirmWindow.VOICE_WINDOW_MS))
+    }
+
     @Test fun confirmingDisarms() {
         c.press(0)
         c.press(100)
