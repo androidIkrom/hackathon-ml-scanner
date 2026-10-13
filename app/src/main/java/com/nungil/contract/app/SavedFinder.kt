@@ -22,4 +22,6 @@ data class Found(
     /** The detector box that is this thing, if there is one. */
     val detectionIndex: Int?,
     val score: Float,
+    /** [box] is the thing's own outline, cut out for this find. */
+    val outlined: Boolean = false,
 )

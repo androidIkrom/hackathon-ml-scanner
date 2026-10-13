@@ -38,4 +38,12 @@ class SpeechStopTest {
         assertFalse(SpeechStop.talkingOnly(msSinceLastTalkStop = SpeechStop.AGAIN_MS - 1))
         assertTrue(SpeechStop.talkingOnly(msSinceLastTalkStop = SpeechStop.AGAIN_MS))
     }
+
+    @Test fun aStopSaidThreeTimesAtOnceStopsTheScreen() {
+        // A live scan talks all the time: "Stop stop stop stop" silenced it only, and the scan went on (the logs).
+        assertEquals(List(3) { true }, listOf("stop stop stop", "Stop stop stop stop", "그만 그만 그만").map { SpeechStop.insistent(it) })
+        assertEquals(List(3) { false }, listOf("stop", "stop stop", "stop navigation").map { SpeechStop.insistent(it) })
+    }
+
+    @Test fun theSecondStopMayComeTwentySecondsLater() = assertEquals(20_000L, SpeechStop.AGAIN_MS)
 }

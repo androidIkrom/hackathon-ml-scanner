@@ -31,6 +31,14 @@ class SearchPhrasesTest {
         assertEquals("잘 모르겠어요. 다르게 말해 주세요.", SearchPhrases.unknown(Lang.KO))
     }
 
+    @Test fun anItemLearnedTheOldWayIsNotSearched() {
+        assertEquals(
+            "My glass was learned the old way. Add it again under the same name.",
+            SearchPhrases.learnAgain("My glass", Lang.EN),
+        )
+        assertEquals("컵은 예전 방식으로 배웠어요. 같은 이름으로 다시 추가해 주세요.", SearchPhrases.learnAgain("컵", Lang.KO))
+    }
+
     @Test fun findDirectionsInWordsAndHours() {
         assertEquals("Cup slightly left.", SearchPhrases.where("Cup", Zone.LEFT, DirectionStyle.WORDS, Lang.EN))
         assertEquals("Cup on your left.", SearchPhrases.where("Cup", Zone.FAR_LEFT, DirectionStyle.WORDS, Lang.EN))

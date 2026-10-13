@@ -14,6 +14,9 @@ object ScanPhrases {
         ScanMode.LIVE -> pick(lang, "Point the phone around. I will say what I find.", "휴대폰을 천천히 움직여 보세요. 찾는 대로 알려 드릴게요.")
     }
 
+    /** "Live scan" said while Live runs: Live goes on, it does not open again (live-quality plan, Task 7). */
+    fun liveAlreadyOn(lang: Lang) = pick(lang, "Live scan is already on.", "실시간 안내가 이미 켜져 있어요.")
+
     fun slowDown(lang: Lang) = pick(lang, "Slow down.", "천천히 돌아 주세요.")
 
     fun noCompass(lang: Lang) = pick(lang, "Compass not available. Switching to live scan.", "나침반을 쓸 수 없어서 실시간 안내로 바꿀게요.")

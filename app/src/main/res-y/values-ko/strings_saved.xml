@@ -14,6 +14,7 @@
     <string name="saved_empty_objects">아직 저장한 물건이 없어요. 가방이나 열쇠를 추가하면 찾아 드릴게요.</string>
     <string name="saved_person_subtitle">사람</string>
     <string name="saved_row_description">%1$s, %2$s</string>
+    <string name="saved_item_old">예전 방식으로 배움: 다시 추가해 주세요</string>
 
     <string name="person_find">이 사람 찾기</string>
     <string name="person_rename">이름 바꾸기</string>

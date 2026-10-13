@@ -26,8 +26,20 @@ object SpeechStop {
         return words.isNotEmpty() && (words.joinToString(" ") in EN || words.joinToString("") in KO)
     }
 
-    /** A bare stop within this long of the last one that silenced the talking stops the screen as well. */
-    const val AGAIN_MS = 8_000L
+    /**
+     * A bare stop within this long of the last one that silenced the talking stops the screen as well. At 8 s a
+     * second "stop" 11 s later was taken as "be quiet" again while a live scan kept talking (the logs).
+     */
+    const val AGAIN_MS = 20_000L
+
+    /** A stop said this many times in one breath is meant: it stops the screen at once. */
+    const val INSISTENT_TIMES = 3
+
+    /** "Stop stop stop": the screen stops, not only the talking ("stop stop" is still said once, as before). */
+    fun insistent(text: String): Boolean {
+        val words = text.lowercase().split(Regex("[^\\p{L}\\p{N}]+")).filter { it.isNotEmpty() }
+        return words.count { it == "stop" || it in KO } >= INSISTENT_TIMES
+    }
 
     /**
      * Whether a bare stop said while the app talks stops the talking only. Said again soon after, it means the

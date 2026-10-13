@@ -9,6 +9,17 @@ import org.junit.Test
 class RecognizerPolicyTest {
     private val policy = RecognizerPolicy()
 
+    @Test fun aHoldEndsWhenNoNewWordsCome() {
+        // Live decided "My new white bottle" and said it 4.7 s later: a voice in the room ("Stop alarm") held all
+        // app sound until the recognizer gave up 8 s on (the logs, 2026-10-07).
+        val words = 10_000L
+        assertFalse("words still coming", RecognizerPolicy.holdEnds(words + 1_000, words, talkUntil = 0))
+        assertTrue("quiet for 1.5 s", RecognizerPolicy.holdEnds(words + RecognizerPolicy.QUIET_WORDS_MS, words, talkUntil = 0))
+        // After a microphone button the user may take a moment to start.
+        assertFalse("button window", RecognizerPolicy.holdEnds(words + 2_000, words, talkUntil = words + 6_000))
+        assertTrue("window over", RecognizerPolicy.holdEnds(words + 6_000, words, talkUntil = words + 6_000))
+    }
+
     @Test fun listensAgainAlmostAtOnce() {
         assertEquals(400L, RecognizerPolicy.DELAY_AFTER_ENABLE_MS)
         assertEquals(250L, policy.afterResult())

@@ -7,4 +7,6 @@
     <string name="reader_nothing">Nothing read yet.</string>
     <string name="reader_pause">Pause reading</string>
     <string name="reader_resume">Start reading</string>
+    <string name="reader_read">Read it</string>
+    <string name="reader_skip">Skip</string>
 </resources>

@@ -97,9 +97,21 @@ abstract class ItemDao {
     @Query("SELECT * FROM item_embeddings")
     abstract suspend fun allEmbeddings(): List<ItemEmbeddingEntity>
 
+    /** How many vectors each item has (ItemEnrollmentGuide.oldStyle tells the items learned the old way). */
+    @Query("SELECT itemId, COUNT(*) AS vectors FROM item_embeddings GROUP BY itemId")
+    abstract suspend fun vectorCounts(): List<ItemVectorCount>
+
+    @Query("SELECT itemId, COUNT(*) AS vectors FROM item_embeddings GROUP BY itemId")
+    abstract fun observeVectorCounts(): Flow<List<ItemVectorCount>>
+
     @Query("UPDATE items SET name = :name WHERE id = :id")
     abstract suspend fun rename(id: Long, name: String)
 
     @Query("DELETE FROM items WHERE id = :id")
     abstract suspend fun deleteItem(id: Long)
 }
+
+/** One item's number of saved vectors (ItemDao.vectorCounts). */
+data class ItemVectorCount(val itemId: Long, val vectors: Int)
+
+fun List<ItemVectorCount>.byItem(): Map<Long, Int> = associate { it.itemId to it.vectors }

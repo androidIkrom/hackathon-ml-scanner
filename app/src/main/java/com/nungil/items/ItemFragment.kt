@@ -19,11 +19,14 @@ import com.nungil.contract.app.AppScope
 import com.nungil.contract.app.AppServices
 import com.nungil.contract.app.VoiceHandler
 import com.nungil.contract.app.services
+import com.nungil.core.items.ItemEnrollmentGuide
 import com.nungil.core.lang.LabelNames
 import com.nungil.core.people.ConfirmWindow
+import com.nungil.core.search.SearchPhrases
 import com.nungil.core.search.TargetType
 import com.nungil.data.AppDatabase
 import com.nungil.data.ItemEntity
+import com.nungil.data.byItem
 import com.nungil.databinding.ItemFragmentBinding
 import com.nungil.design.announce
 import com.nungil.design.isTalkBackOn
@@ -40,6 +43,9 @@ class ItemFragment : Fragment(), VoiceHandler {
     private val args by navArgs<ItemFragmentArgs>()
     private lateinit var services: AppServices
     private var item: ItemEntity? = null
+
+    /** Learned the old way (ItemEnrollmentGuide.oldStyle): it finds nothing until added again. */
+    private var old = false
     private val confirm = ConfirmWindow()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -56,7 +62,9 @@ class ItemFragment : Fragment(), VoiceHandler {
         val dao = AppDatabase.get(requireContext()).items()
         val lang = services.lang
         viewLifecycleOwner.lifecycleScope.launch {
-            val loaded = withContext(Dispatchers.IO) { dao.getItem(args.itemId) }
+            val (loaded, vectors) = withContext(Dispatchers.IO) {
+                dao.getItem(args.itemId) to dao.vectorCounts().byItem()
+            }
             if (loaded == null) {
                 services.speaker.say(getString(R.string.item_not_found))
                 services.navigator.back()
@@ -64,10 +72,12 @@ class ItemFragment : Fragment(), VoiceHandler {
             }
             item = loaded
             binding.itemName.text = loaded.name
-            binding.itemLabel.text = LabelNames.name(loaded.label, lang)
+            old = args.itemId in ItemEnrollmentGuide.oldStyle(vectors)
+            binding.itemLabel.text = if (old) getString(R.string.saved_item_old) else LabelNames.name(loaded.label, lang)
             binding.itemPhoto.contentDescription = getString(R.string.item_photo, loaded.name)
             val photo = withContext(Dispatchers.IO) { PhotoFiles.load(loaded.photoPath) }
             _binding?.itemPhoto?.setImageBitmap(photo)
+            if (old) sayLearnAgain()
         }
     }
 
@@ -90,6 +100,10 @@ class ItemFragment : Fragment(), VoiceHandler {
 
     private fun find() {
         val i = item ?: return
+        if (old) {
+            sayLearnAgain()
+            return
+        }
         val args = SearchCameraFragmentArgs(
             targetType = TargetType.ITEM.name,
             targetId = i.id,
@@ -143,6 +157,14 @@ class ItemFragment : Fragment(), VoiceHandler {
         // With TalkBack on, TalkBack already speaks; our own voice on top would say it twice.
         val again = getString(R.string.item_delete_tap_again)
         if (requireContext().isTalkBackOn()) button.announce(again) else services.speaker.say(again)
+    }
+
+    private fun sayLearnAgain() {
+        val i = item ?: return
+        val text = SearchPhrases.learnAgain(i.name, services.lang)
+        // With TalkBack on, TalkBack already speaks; our own voice on top would say it twice.
+        val b = _binding ?: return
+        if (requireContext().isTalkBackOn()) b.itemName.announce(text) else services.speaker.say(text)
     }
 
     private fun delete() {

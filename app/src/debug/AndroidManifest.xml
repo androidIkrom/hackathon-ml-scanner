@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: screens that keep the app in front while an on-device test or benchmark runs. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
-        <!-- Debug builds only: keeps the on-phone benchmark in the foreground (see DeviceBench). -->
+        <!-- A blank screen for the replay tests (ReplayHostActivity). -->
+        <activity
+            android:name="com.nungil.debug.ReplayHostActivity"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+        <!-- Keeps the on-phone benchmark in the foreground (see DeviceBench). -->
         <activity
             android:name="com.nungil.bench.BenchActivity"
             android:exported="false"

@@ -41,6 +41,8 @@ import com.nungil.core.voice.WakeWord
  *   still being said (VoiceBargeIn.answerIn), not at the end of the phrase.
  * @param onGuesses every guess for the phrase, just before [onHeard] gets the chosen one.
  * @param bias words the recognizer should lean towards right now (place names while a place is expected).
+ * @param bargesIn whether words still being said may stop the app's sound: while a text is read aloud only a
+ *   command does, so people talking nearby do not keep cutting it (a lecture in class, 2026-10-13).
  */
 class VoiceInput(
     private val context: Context,
@@ -53,6 +55,7 @@ class VoiceInput(
     private val answersNow: (String) -> Boolean,
     private val onGuesses: (List<String>) -> Unit,
     private val bias: () -> List<String>,
+    private val bargesIn: (String) -> Boolean,
     private val onHeard: (String) -> Unit,
     private val onProblem: (Phrase) -> Unit,
 ) : RecognitionListener {
@@ -74,9 +77,23 @@ class VoiceInput(
     private val listenNow = Runnable { listen() }
     private val holdSafety = Runnable { endHold() }
 
+    /** When the words heard last changed; held app sound comes back once they stop (RecognizerPolicy.holdEnds). */
+    private var lastWordsAt = 0L
+    private val quietWords = object : Runnable {
+        override fun run() {
+            if (!holding) return
+            if (RecognizerPolicy.holdEnds(SystemClock.elapsedRealtime(), lastWordsAt, talkUntil)) {
+                Log.i(TAG, "App sound back: no new words for ${RecognizerPolicy.QUIET_WORDS_MS} ms after \"$lastPartial\"")
+                endHold(force = true)
+            } else {
+                main.postDelayed(this, QUIET_CHECK_MS)
+            }
+        }
+    }
+
     /** One word the app is not saying has stood alone: it was the user's, not the app's own misheard. */
     private val unsureWord = Runnable {
-        if (!holding && isAwake() && VoiceBargeIn.onPartial(lastPartial, appSaying()) != BargeIn.KEEP_TALKING) beginHold()
+        if (!holding && isAwake() && VoiceBargeIn.onPartial(lastPartial, appSaying()) != BargeIn.KEEP_TALKING && bargesIn(lastPartial)) beginHold()
     }
     private var earlyPending = false
 
@@ -239,6 +256,7 @@ class VoiceInput(
     override fun onPartialResults(partialResults: Bundle?) {
         val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
         if (text.isNullOrEmpty()) return
+        if (text != lastPartial) lastWordsAt = SystemClock.elapsedRealtime()
         lastPartial = text
         // The answer is waited for from its first appearance, not from the last change of the words: in a room
         // with other sound the words kept coming ("Yes", "Yes yes") and the wait began again each time.
@@ -257,7 +275,7 @@ class VoiceInput(
             return
         }
         when (VoiceBargeIn.onPartial(text, appSaying())) {
-            BargeIn.STOP_ALL_SOUND -> beginHold()
+            BargeIn.STOP_ALL_SOUND -> if (bargesIn(text)) beginHold()
             BargeIn.UNSURE -> main.postDelayed(unsureWord, RecognizerPolicy.UNSURE_WORD_MS)
             BargeIn.KEEP_TALKING -> Unit
         }
@@ -341,6 +359,9 @@ class VoiceInput(
         holdSound()
         main.removeCallbacks(holdSafety)
         main.postDelayed(holdSafety, RecognizerPolicy.HOLD_SAFETY_MS)
+        if (lastWordsAt == 0L) lastWordsAt = SystemClock.elapsedRealtime()
+        main.removeCallbacks(quietWords)
+        main.postDelayed(quietWords, QUIET_CHECK_MS)
     }
 
     private fun holdForTalk() {
@@ -360,6 +381,7 @@ class VoiceInput(
         talkUntil = 0
         holding = false
         main.removeCallbacks(holdSafety)
+        main.removeCallbacks(quietWords)
         releaseSound()
     }
 
@@ -372,3 +394,6 @@ class VoiceInput(
 }
 
 private const val TAG = "Nungil"
+
+/** How often a hold looks whether the words have stopped. */
+private const val QUIET_CHECK_MS = 250L

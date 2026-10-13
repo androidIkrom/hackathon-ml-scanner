@@ -14,6 +14,7 @@
     <string name="saved_empty_objects">No objects saved yet. Add your bag or keys and I will find them.</string>
     <string name="saved_person_subtitle">Person</string>
     <string name="saved_row_description">%1$s, %2$s</string>
+    <string name="saved_item_old">Learned the old way: add it again</string>
 
     <string name="person_find">Find this person</string>
     <string name="person_rename">Rename</string>

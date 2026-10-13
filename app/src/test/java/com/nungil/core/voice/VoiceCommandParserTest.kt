@@ -1,9 +1,12 @@
 package com.nungil.core.voice
 
+import com.nungil.contract.Compute
 import com.nungil.contract.Dest
 import com.nungil.contract.Facing
 import com.nungil.contract.ItemKind
 import com.nungil.contract.Lang
+import com.nungil.contract.ModelChoice
+import com.nungil.contract.SettingChange
 import com.nungil.contract.SavedTab
 import com.nungil.contract.ScanMode
 import com.nungil.contract.VoiceCommand
@@ -22,6 +25,23 @@ class VoiceCommandParserTest {
     @Test fun koStopListening() = assertEquals(VoiceCommand.StopListening, p("듣기 중지"))
     @Test fun koMicOffWithoutSpaces() = assertEquals(VoiceCommand.StopListening, p("마이크꺼"))
     @Test fun koVoiceOff() = assertEquals(VoiceCommand.StopListening, p("음성 명령 꺼 줘"))
+
+    // ---- people talking nearby ----------------------------------------------------------------------
+    // A lecture heard in class went to commands by one word in a long sentence (2026-10-13).
+    @Test fun aLongSentenceIsNoCommand() {
+        assertEquals(VoiceCommand.Unknown("Play function is supposed to produce some type of"), p("Play function is supposed to produce some type of"))
+        assertEquals(
+            VoiceCommand.Unknown("Number of item present on the inside the valid to provided as"),
+            p("Number of item present on the inside the valid to provided as"),
+        )
+        assertEquals(
+            VoiceCommand.Unknown("So where is the function that you just wrote in the file"),
+            p("So where is the function that you just wrote in the file"),
+        )
+    }
+
+    @Test fun aCommandOfEightWordsStillWorks() =
+        assertEquals(Go(Dest.Search("my new white bottle")), p("where did I put my new white bottle"))
 
     // ---- stop and back beat the screen they name --------------------------------------------------
     @Test fun stopScanStops() = assertEquals(VoiceCommand.Stop, p("stop scan"))
@@ -208,4 +228,26 @@ class VoiceCommandParserTest {
         assertEquals(VoiceCommand.ClockDirections(true), p("시계 방향 켜 줘"))
         assertEquals(VoiceCommand.ClockDirections(false), p("시계 방향 꺼"))
     }
+
+    // ---- Settings by voice ----------------------------------------------------------------------------------
+    private fun setting(text: String) = (p(text) as? VoiceCommand.ChangeSetting)?.change
+
+    @Test fun modelByVoice() {
+        // "Model accurate" was not understood, four times (the logs).
+        assertEquals(SettingChange.Model(ModelChoice.ACCURATE), setting("Model accurate"))
+        assertEquals(SettingChange.Model(ModelChoice.FAST), setting("fast model"))
+        assertEquals(SettingChange.Model(ModelChoice.LIGHT), setting("Light model"))
+        assertEquals(SettingChange.Model(ModelChoice.ACCURATE), setting("정확한 모델"))
+    }
+
+    @Test fun switchesByVoice() {
+        assertEquals(SettingChange.Speech(false), setting("speak results off"))
+        assertEquals(SettingChange.Colors(false), setting("colours off"))
+        assertEquals(SettingChange.Colors(true), setting("say colors"))
+        assertEquals(SettingChange.HighContrast(true), setting("high contrast on"))
+        assertEquals(SettingChange.VoiceGuide(false), setting("read what I touch off"))
+        assertEquals(SettingChange.Compute(Compute.CPU), setting("processor CPU"))
+    }
+
+    @Test fun readTextIsStillReadText() = assertEquals(VoiceCommand.ReadText, p("read this"))
 }

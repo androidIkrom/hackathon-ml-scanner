@@ -87,4 +87,13 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="@dimen/ng_gap_large"
         android:text="@string/item_enroll_start" />
+
+    <!-- Shown while the screen asks "Is this it?": the same as saying "no". -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/item_enroll_no"
+        style="@style/Widget.Nungil.Button.Tonal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/ng_gap"
+        android:text="@string/item_enroll_no" />
 </LinearLayout>

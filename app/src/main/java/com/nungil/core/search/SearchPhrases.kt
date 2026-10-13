@@ -46,6 +46,12 @@ object SearchPhrases {
         Lang.KO -> "잘 모르겠어요. 다르게 말해 주세요."
     }
 
+    /** An item learned the old way (ItemEnrollmentGuide.oldStyle) is not searched: Add object under its name replaces it. */
+    fun learnAgain(name: String, lang: Lang): String = when (lang) {
+        Lang.EN -> "$name was learned the old way. Add it again under the same name."
+        Lang.KO -> "${Josa.eunNeun(name)} 예전 방식으로 배웠어요. 같은 이름으로 다시 추가해 주세요."
+    }
+
     fun askWhat(lang: Lang): String = when (lang) {
         Lang.EN -> "What should I find?"
         Lang.KO -> "무엇을 찾을까요?"

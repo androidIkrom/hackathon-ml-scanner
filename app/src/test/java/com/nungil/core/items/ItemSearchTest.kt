@@ -3,10 +3,12 @@ package com.nungil.core.items
 import com.nungil.contract.Box
 import com.nungil.contract.Detection
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 class ItemSearchTest {
     private val cup = 1L
@@ -273,6 +275,79 @@ class ItemSearchTest {
         val hits = search(finder(), cupAt(0.4f), only = null, cut = { cuts++; thing }).hits
         assertTrue(hits.isEmpty())
         assertEquals(0, cuts)
+    }
+
+    @Test fun liveAlternatesTheSquareSizes() {
+        val s = finder(all)
+        val sizes = mutableListOf<Set<Int>>()
+        repeat(4) {
+            val widths = mutableSetOf<Int>()
+            search(s, Scene { widths += (it.width * W).roundToInt(); ItemMatcher.Match(other, 0.2f) }, only = null)
+            sizes += widths
+        }
+        // Calls 1 and 3 search the frame (every other call), one square size each, a different one each time.
+        assertEquals(1, sizes[0].size)
+        assertEquals(1, sizes[2].size)
+        assertTrue(sizes[0] != sizes[2])
+    }
+
+    @Test fun liveCutsABorderlineItem() {
+        val thing = CutThing(Box(0.45f, 0.4f, 0.55f, 0.6f), place, ItemMatcher.Match(cup, 0.9f))
+        var cuts = 0
+        val borderline = search(finder(), cupAt(0.5f), only = null, cut = { cuts++; thing }).hits
+        assertEquals(ItemMatcher.Seen.BY_ITEM_ALONE, borderline.single().seen)
+        assertEquals(1, cuts)
+    }
+
+    /** The cup's own outline in the middle of its place, and a search that knows the cup was learned alone. */
+    private val cupOutline = Box(0.45f, 0.4f, 0.55f, 0.6f)
+    private fun learnedCup() = ItemSearch(names, setOf(cup), Reach.WHOLE_FRAME)
+
+    @Test fun liveDrawsTheOutlineOfAnItemFoundBySquares() {
+        var cuts = 0
+        val thing = CutThing(cupOutline, place, ItemMatcher.Match(cup, 0.7f))
+        val hit = search(learnedCup(), cupAt(0.6f), only = null, cut = { cuts++; thing }).hits.single()
+        assertEquals(1, cuts)
+        assertEquals(ItemMatcher.Seen.BY_SQUARES, hit.seen)
+        assertTrue(hit.outlined)
+        assertEquals(cupOutline, hit.box)
+    }
+
+    @Test fun liveCutsAFoundItemOutAgainEveryThirdFind() {
+        val s = learnedCup()
+        val scene = cupAt(0.6f)
+        val thing = CutThing(cupOutline, place, ItemMatcher.Match(cup, 0.7f))
+        val cuts = (1..5).map {
+            var n = 0
+            val hit = search(s, scene, only = null, cut = { n++; thing }).hits.single()
+            assertEquals(n == 1, hit.outlined)
+            n
+        }
+        assertEquals(listOf(1, 0, 0, 1, 0), cuts)
+    }
+
+    @Test fun aCutThatWasNotTheItemIsTriedAgainOnTheNextFind() {
+        // On the phone 6 of 10 cuts were the table or another thing (alone 0.00 to 0.34): waiting three finds
+        // left half the places without a frame.
+        val s = learnedCup()
+        val scene = cupAt(0.6f)
+        val table = CutThing(Box(0.0f, 0.5f, 1.0f, 1.0f), place, ItemMatcher.Match(cup, 0.3f))
+        val thing = CutThing(cupOutline, place, ItemMatcher.Match(cup, 0.7f))
+        val answers = listOf(table, table, thing, thing, thing)
+        val cuts = answers.map { answer ->
+            var n = 0
+            search(s, scene, only = null, cut = { n++; answer })
+            n
+        }
+        assertEquals(listOf(1, 1, 1, 0, 0), cuts)
+    }
+
+    @Test fun anOutlineThatIsNotTheItemIsNotDrawn() {
+        // The segmenter cut out the table under the cup: alone it does not look like the cup.
+        val thing = CutThing(Box(0.0f, 0.5f, 1.0f, 1.0f), place, ItemMatcher.Match(cup, 0.3f))
+        val hit = search(learnedCup(), cupAt(0.6f), only = null, cut = { thing }).hits.single()
+        assertFalse(hit.outlined)
+        assertFalse(hit.box == thing.outline)
     }
 
     private companion object {

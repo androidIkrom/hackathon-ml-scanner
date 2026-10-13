@@ -55,16 +55,29 @@ object SearchResolver {
     }
 
     /**
-     * [resolve], and when [text] means nothing, the first of the recognizer's other [guesses] for the same
+     * [resolve], and when [text] names nothing, the first of the recognizer's other [guesses] for the same
      * phrase that names something saved: "Find Dopey" was heard as "Find Dorothy", with "Find Dopey" as the
      * second guess (the logs). Guesses that do not have [text] in them are for some other phrase and are not used.
+     * A real name in another guess beats a name of filler words in [text]: "Delete my charger test on" chose the
+     * person "My" over "My charger test one", the second guess (the logs).
      */
     fun resolve(text: String, guesses: List<String>, saved: List<SavedName>, lang: Lang): SearchTarget? {
-        resolve(text, saved, lang)?.let { return it }
+        val cleaned = QueryCleaner.clean(text)
+        if (cleaned.raw.isEmpty()) return null
+        matchSaved(cleaned, saved, fillerNames = false)?.let { return it.target() }
+        matchLabel(cleaned)?.let { return SearchTarget(TargetType.LABEL, -1L, it, LabelNames.name(it, lang)) }
         val heard = QueryCleaner.normalize(text)
-        if (heard.isEmpty() || guesses.none { QueryCleaner.normalize(it).contains(heard) }) return null
-        return guesses.firstNotNullOfOrNull { guess -> resolve(guess, saved, lang)?.takeIf { it.type != TargetType.LABEL } }
+        val others = if (heard.isNotEmpty() && guesses.any { QueryCleaner.normalize(it).contains(heard) }) {
+            guesses.map { QueryCleaner.clean(it) }.filter { it.raw.isNotEmpty() }
+        } else {
+            emptyList()
+        }
+        others.firstNotNullOfOrNull { matchSaved(it, saved, fillerNames = false) }?.let { return it.target() }
+        matchSaved(cleaned, saved, fillerNames = true)?.let { return it.target() }
+        return others.firstNotNullOfOrNull { matchSaved(it, saved, fillerNames = true) }?.target()
     }
+
+    private fun SavedName.target() = SearchTarget(type, id, label, name)
 
     /** COCO label for one word or phrase, or null. Also used for suggestion chips. */
     fun labelFor(term: String): String? {

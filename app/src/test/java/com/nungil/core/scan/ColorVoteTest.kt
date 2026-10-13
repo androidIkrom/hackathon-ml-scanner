@@ -34,6 +34,26 @@ class ColorVoteTest {
 
     @Test fun emptyGivesNull() = assertNull(ColorVote.vote(IntArray(0), neutral, frameIsDark = false))
 
+    @Test fun theVotesAreShownForTheLog() {
+        val px = pixels(rgb(200, 200, 205) to 6, rgb(20, 20, 20) to 2)
+        assertEquals("white 75%, black 25%", ColorVote.shares(ColorVote.counts(px, neutral)))
+        assertEquals("nothing", ColorVote.shares(IntArray(ColorName.entries.size)))
+    }
+
+    @Test fun aPixelWithoutColourKeepsNoColourAfterWhiteBalance() {
+        // The white bottle on the desk (device log 2026-10-07 20:05:36): raw gray 51%, after balance blue 61%,
+        // gains 0.90 0.96 1.17. Raising blue must not paint a gray or white pixel blue.
+        val gains = floatArrayOf(0.90f, 0.96f, 1.17f)
+        val px = pixels(rgb(140, 140, 150) to 6, rgb(200, 200, 205) to 2)
+        assertEquals("gray 75%, white 25%", ColorVote.shares(ColorVote.counts(px, gains)))
+        assertEquals(ColorName.GRAY, ColorVote.vote(px, gains, frameIsDark = false))
+    }
+
+    @Test fun aColourfulPixelKeepsItsColourAfterWhiteBalance() {
+        val gains = floatArrayOf(0.90f, 0.96f, 1.17f)
+        assertEquals(ColorName.BLUE, ColorVote.vote(pixels(blue to 30, gray to 70), gains, frameIsDark = false))
+    }
+
     @Test fun warmLampIsCorrected() {
         // A gray chair under a warm lamp looks orange; the frame is orange-tinted everywhere.
         val warmGray = rgb(170, 130, 90)

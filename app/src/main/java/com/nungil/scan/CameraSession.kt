@@ -36,6 +36,7 @@ import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
 import com.nungil.core.scan.FrameMath
 import com.nungil.core.scan.InferenceStats
+import com.nungil.core.scan.ModelLock
 import com.nungil.data.SettingsStore
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -179,7 +180,7 @@ class CameraSession(
         // Close the detector on its own thread: the GPU delegate must be used and closed on one thread.
         ex.execute {
             try {
-                detector?.detector?.close()
+                detector?.detector?.let { d -> ModelLock.shared.load { d.close() } }
             } catch (t: Throwable) {
                 Log.i(TAG, "Closing the detector threw: ${t.message}")
             }
@@ -281,7 +282,7 @@ class CameraSession(
             main.post { onError(t) }
             return emptyList()
         }
-        val result = built.detector.detect(BitmapImageBuilder(bitmap).build())
+        val result = ModelLock.shared.run { built.detector.detect(BitmapImageBuilder(bitmap).build()) }
         val raw = result.detections().mapNotNull { d ->
             val category = d.categories().firstOrNull() ?: return@mapNotNull null
             val r = d.boundingBox()

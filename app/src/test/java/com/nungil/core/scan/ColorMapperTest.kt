@@ -70,4 +70,10 @@ class ColorMapperTest {
         assertFalse(ColorPolicy.hasColor("person"))
         assertTrue(ColorPolicy.hasColor("chair"))
     }
+
+    @Test fun thingsWithAScreenGetNoColour() {
+        // A black laptop was "a blue laptop", a phone "a blue cell phone": the colour came from the lit screen (the logs).
+        for (label in listOf("laptop", "tv", "cell phone")) assertFalse(label, ColorPolicy.hasColor(label))
+        assertTrue(ColorPolicy.hasColor("keyboard"))
+    }
 }

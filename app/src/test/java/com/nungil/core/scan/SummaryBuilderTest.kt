@@ -13,17 +13,17 @@ class SummaryBuilderTest {
     private val ali = ObjectSummary("Ali", 1, null, 0f, isName = true, wasPerson = true)
 
     @Test fun canonicalEnglishSummary() = assertEquals(
-        "Around you: 3 blue chairs ahead; a black laptop on your right.",
+        "Around you: 3 blue chairs ahead; a laptop on your right.",
         SummaryBuilder.fullSummary(listOf(blueChairs, blackLaptop), 100, Lang.EN, DirectionStyle.WORDS),
     )
 
     @Test fun canonicalKoreanSummary() = assertEquals(
-        "앞에 파란 의자 세 개, 오른쪽에 검은 노트북 한 대가 있어요.",
+        "앞에 파란 의자 세 개, 오른쪽에 노트북 한 대가 있어요.",
         SummaryBuilder.fullSummary(listOf(blueChairs, blackLaptop), 100, Lang.KO, DirectionStyle.WORDS),
     )
 
     @Test fun directionsAreAlwaysFrontRightBehindLeft() = assertEquals(
-        "Around you: 3 blue chairs ahead; a black laptop on your right.",
+        "Around you: 3 blue chairs ahead; a laptop on your right.",
         SummaryBuilder.fullSummary(listOf(blackLaptop, blueChairs), 100, Lang.EN, DirectionStyle.WORDS),
     )
 
@@ -139,7 +139,7 @@ class SummaryBuilderTest {
         assertEquals("3 chairs at 9 o'clock", SummaryBuilder.livePhrase(chairsLeft, Lang.EN, DirectionStyle.CLOCK))
         assertEquals("9시 방향에 의자 세 개", SummaryBuilder.livePhrase(chairsLeft, Lang.KO, DirectionStyle.CLOCK))
         assertEquals(
-            "Around you: 3 blue chairs at 12 o'clock; a black laptop at 3 o'clock.",
+            "Around you: 3 blue chairs at 12 o'clock; a laptop at 3 o'clock.",
             SummaryBuilder.fullSummary(listOf(blueChairs, blackLaptop), 100, Lang.EN, DirectionStyle.CLOCK),
         )
     }

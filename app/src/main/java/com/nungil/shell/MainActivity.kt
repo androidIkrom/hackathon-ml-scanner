@@ -38,6 +38,8 @@ import com.nungil.contract.Buzz
 import com.nungil.contract.Dest
 import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
+import com.nungil.contract.ScanMode
+import com.nungil.contract.SettingChange
 import com.nungil.contract.VoiceCommand
 import com.nungil.contract.app.AppNavigator
 import com.nungil.contract.app.AppServices
@@ -57,6 +59,7 @@ import com.nungil.core.ui.PermissionOutcome
 import com.nungil.core.ui.Phrase
 import com.nungil.core.ui.RecognizerPolicy
 import com.nungil.core.ui.Route
+import com.nungil.core.ui.SettingPhrases
 import com.nungil.core.ui.ScreenHelp
 import com.nungil.core.ui.VoiceBargeIn
 import com.nungil.core.ui.ShellPhrases
@@ -65,6 +68,7 @@ import com.nungil.core.ui.TapHelpOffer
 import com.nungil.core.ui.VoiceChoice
 import com.nungil.core.voice.QuickAsk
 import com.nungil.core.weather.Clock
+import com.nungil.scan.ScanFragment
 import java.util.Calendar
 import com.nungil.core.voice.VoiceCommandParser
 import com.nungil.core.voice.WakeResult
@@ -73,6 +77,7 @@ import com.nungil.core.walk.GoQuestion
 import com.nungil.core.walk.WalkCommand
 import com.nungil.core.walk.WalkCommands
 import com.nungil.walk.WalkFragment
+import com.nungil.data.SettingsStore
 import com.nungil.databinding.ActivityMainBinding
 import com.nungil.design.isTalkBackOn
 import com.nungil.design.openAppSettings
@@ -271,6 +276,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
                 if (guesses.size > 1) Log.i(TAG, "Guesses: " + guesses.joinToString(" | "))
             },
             bias = { (currentScreen() as? WalkFragment)?.placeWords().orEmpty() },
+            bargesIn = { words -> !tts.reading || isCommand(words) },
             onHeard = ::onHeard,
             onProblem = ::onVoiceProblem,
         )
@@ -368,7 +374,12 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         when (dest) {
             Dest.Home -> navController.popBackStack(R.id.home, false)
             Dest.ScanHub -> go(R.id.scan_hub)
-            is Dest.Scan -> go(R.id.scan, ScanFragmentArgs(dest.mode).toBundle())
+            is Dest.Scan -> {
+                // Opening Live again while it is open closed and loaded every model at once (live-quality plan, Task 7).
+                val open = currentScreen() as? ScanFragment
+                if (dest.mode == ScanMode.LIVE && open?.mode == ScanMode.LIVE) open.liveAgain()
+                else go(R.id.scan, ScanFragmentArgs(dest.mode).toBundle())
+            }
             Dest.Walk -> go(R.id.walk)
             is Dest.Search -> go(R.id.search, SearchFragmentArgs(dest.query).toBundle())
             is Dest.Saved -> go(R.id.saved, SavedFragmentArgs(dest.tab?.ordinal ?: -1).toBundle())
@@ -480,7 +491,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
         // "Stop" alone while the app talks stops the talking only: Go mode keeps guiding, a scan keeps scanning.
         // Said while the app is quiet, or with more to it ("stop navigation"), it stops the screen as before.
         val talking = tts.recentSpeech() != null || SystemClock.elapsedRealtime() - speechCutAt < SPEECH_CUT_MS
-        if (SpeechStop.isBare(text) && talking) {
+        if (SpeechStop.isBare(text) && talking && !SpeechStop.insistent(text)) {
             val now = SystemClock.elapsedRealtime()
             if (SpeechStop.talkingOnly(now - talkStopAt)) {
                 talkStopAt = now
@@ -499,6 +510,11 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             dictationAccepts = null
             dictationEarly = false
             claim(command.text)
+            return
+        }
+        // A long sentence is people talking nearby (a lecture in class, 2026-10-13): no "I did not understand".
+        if (command is VoiceCommand.Unknown && command.text.split(' ').size > VoiceCommandParser.MAX_COMMAND_WORDS) {
+            Log.i(TAG, "Not for the app: \"${command.text.take(60)}\"")
             return
         }
         // A screen that takes free words (Go: the place to search) gets them before "I did not understand".
@@ -523,6 +539,8 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     /** Runs one parsed command: global ones here, the rest on the current screen first. Main thread. */
     fun handleCommand(command: VoiceCommand) {
+        // "Again" is global (the last sentence said), but a screen may have more to say again: the reader, a text.
+        if (command == VoiceCommand.Repeat && (currentScreen() as? VoiceHandler)?.onVoiceCommand(command) == true) return
         if (!CommandRouter.isGlobal(command)) {
             // Camera commands are taken the same way on every camera screen, before the screen's own handler.
             (currentScreen() as? CameraScreen)?.let { cam ->
@@ -594,6 +612,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             Route.RepeatLast -> if (!tts.repeatLast()) say(Phrase.NOTHING_TO_REPEAT)
             is Route.SpeakHelp -> tts.sayNow(helpText(route.topic))
             is Route.SetLearner -> setLearner(route.on)
+            is Route.ChangeSetting -> changeSetting(route.change)
             is Route.SetClockDirections -> {
                 prefs.clockDirections = route.on
                 say(if (route.on) Phrase.CLOCK_DIRECTIONS_ON else Phrase.CLOCK_DIRECTIONS_OFF)
@@ -706,6 +725,30 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
     }
 
     val highContrast: Boolean get() = prefs.highContrast
+
+    /**
+     * A Settings switch changed by voice, said back. A camera screen that is open takes the model and the processor
+     * at its next scan; an open Settings screen is shown again with the new value.
+     */
+    private fun changeSetting(change: SettingChange) {
+        val store = SettingsStore(this)
+        val s = store.load()
+        when (change) {
+            is SettingChange.Model -> store.save(s.copy(model = change.choice))
+            is SettingChange.Compute -> store.save(s.copy(compute = change.compute))
+            is SettingChange.Speech -> store.save(s.copy(speechOn = change.on))
+            is SettingChange.Colors -> store.save(s.copy(colorsOn = change.on))
+            is SettingChange.VoiceGuide -> prefs.voiceGuideOn = change.on
+            is SettingChange.HighContrast -> Unit
+        }
+        val nextTime = currentScreen() is CameraScreen && (change is SettingChange.Model || change is SettingChange.Compute)
+        tts.say(SettingPhrases.done(change, lang, nextTime))
+        Log.i(TAG, "Setting by voice: $change")
+        when {
+            change is SettingChange.HighContrast -> setHighContrast(change.on)
+            navController.currentDestination?.id == R.id.settings -> go(R.id.settings)
+        }
+    }
 
     fun setHighContrast(on: Boolean) {
         if (prefs.highContrast == on) return

@@ -5,6 +5,7 @@ import com.nungil.contract.Box
 import com.nungil.core.scan.ColorName
 import com.nungil.core.scan.ColorVote
 import com.nungil.core.scan.WhiteBalance
+import java.util.Locale
 
 /** Reads the pixels ColorVote needs from an upright frame bitmap. Call on a worker thread. */
 object ColorSampler {
@@ -22,6 +23,20 @@ object ColorSampler {
         val pixels = read(bitmap, ColorVote.sampleRegion(box), ColorVote.SAMPLE_GRID)
         return ColorVote.vote(pixels, light.gains, light.isDark)
     }
+
+    /**
+     * For the log: the votes in [box] before and after white balance, and the frame's gains (Task 2 of the
+     * live-quality plan: why a white bottle was "blue").
+     */
+    fun explain(bitmap: Bitmap, box: Box, light: FrameLight): String {
+        val pixels = read(bitmap, ColorVote.sampleRegion(box), ColorVote.SAMPLE_GRID)
+        val g = light.gains
+        return "raw " + ColorVote.shares(ColorVote.counts(pixels, NEUTRAL)) +
+            "; balanced " + ColorVote.shares(ColorVote.counts(pixels, g)) +
+            String.format(Locale.US, "; gains %.2f %.2f %.2f", g[0], g[1], g[2])
+    }
+
+    private val NEUTRAL = floatArrayOf(1f, 1f, 1f)
 
     private fun read(bitmap: Bitmap, region: Box, grid: Int): IntArray {
         val points = ColorVote.gridPoints(region, bitmap.width, bitmap.height, grid)

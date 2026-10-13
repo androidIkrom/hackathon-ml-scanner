@@ -48,6 +48,12 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
             return if (alone.isNotEmpty() && all.size == SAVED_BEFORE) all + alone.last() else all
         }
 
+    /**
+     * Whether any sample has the thing alone. Without one the item would be saved as squares only, the old way
+     * that matched things on the same desk, and its count would not tell it ([learnedAlone]): it is not saved.
+     */
+    val hasAlone: Boolean get() = kept.any { it.alone != null }
+
     /** The step being collected; null when done. */
     val step: ItemStep? get() = ItemStep.entries.getOrNull(stepIndex)
     val isDone: Boolean get() = step == null
@@ -164,6 +170,13 @@ class ItemEnrollmentGuide(val samplesPerStep: Int = SAMPLES_PER_STEP) {
          * ([samples]).
          */
         fun learnedAlone(vectors: Int): Boolean = vectors > 0 && vectors != SAVED_BEFORE
+
+        /**
+         * The items, of [vectors] counts by id, that were learned the old way (squares only). They matched things
+         * on the same desk (a cable as "My glass", a whole desk as everything), so they are not used to find
+         * anything any more and must be learned again.
+         */
+        fun oldStyle(vectors: Map<Long, Int>): Set<Long> = vectors.filterValues { !learnedAlone(it) }.keys
 
         /** The thing's area, as a part of what it was while held still, that is still the same thing. */
         const val SIZE_MIN = 0.4f
