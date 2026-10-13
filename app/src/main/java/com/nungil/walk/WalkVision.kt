@@ -9,15 +9,14 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import com.google.android.gms.tasks.Tasks
-import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.nungil.BuildConfig
 import com.nungil.contract.Box
-import com.nungil.contract.Compute
 import com.nungil.contract.Detection
+import com.nungil.contract.Compute
 import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
@@ -419,19 +418,13 @@ class WalkVision(
     private fun detect(bitmap: Bitmap): List<Detection> {
         val started = SystemClock.elapsedRealtime()
         // Not inside ModelLock.run: the detector's own thread takes it (SharedDetector).
-        val result = detector().detect(BitmapImageBuilder(bitmap).build())
+        val found = detector().detect(bitmap)
         inferenceTotalMs += SystemClock.elapsedRealtime() - started
         if (++loggedFrames % LOG_EVERY == 0) {
             Log.i(TAG, "Walk inference ${inferenceTotalMs / LOG_EVERY} ms average")
             inferenceTotalMs = 0
         }
-        val w = bitmap.width.toFloat()
-        val h = bitmap.height.toFloat()
-        return result.detections().mapNotNull { det ->
-            val c = det.categories().firstOrNull() ?: return@mapNotNull null
-            val r = det.boundingBox()
-            Detection(c.categoryName(), c.score(), Box(r.left / w, r.top / h, r.right / w, r.bottom / h))
-        }
+        return found
     }
 
     private fun detector(): SharedDetector =

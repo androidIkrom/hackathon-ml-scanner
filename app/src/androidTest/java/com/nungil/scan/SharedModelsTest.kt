@@ -8,7 +8,6 @@ import android.util.Log
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.nungil.contract.Compute
 import com.nungil.contract.ModelChoice
 import com.nungil.core.scan.DetectorPlan
@@ -42,7 +41,7 @@ class SharedModelsTest {
         val segmenter = SharedModels.itemSegmenter(context)
         try {
             repeat(frames) {
-                detector.model.detect(BitmapImageBuilder(frame).build())
+                detector.model.detect(frame)
                 classifier.model.nameCenter(frame)
                 embedder.model.embed(frame)
                 segmenter.model.at(frame, 0.5f, 0.5f)

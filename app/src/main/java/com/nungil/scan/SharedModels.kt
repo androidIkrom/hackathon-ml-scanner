@@ -4,7 +4,10 @@ import android.content.Context
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
+import android.util.Log
 import com.nungil.contract.Compute
+import com.nungil.contract.ModelChoice
+import com.nungil.core.scan.DetectorPlan
 import com.nungil.core.scan.ModelShelf
 import com.nungil.items.ItemEmbedder
 import com.nungil.items.ItemSegmenter
@@ -37,8 +40,22 @@ object SharedModels {
     /** How often models kept for the next screen are looked at; one is closed 30-35 s after its last screen left. */
     private const val SWEEP_EVERY_MS = 5_000L
 
-    fun detector(context: Context, modelFile: String, compute: Compute) =
-        take("detector", "$modelFile $compute") { SharedDetector.create(context.applicationContext, modelFile, compute) }
+    /**
+     * The detector of [modelFile]; YOLO26 is exported here (tools/yolo26/export.py), not downloaded, so a build without
+     * it uses EfficientDet-Lite2 instead.
+     */
+    fun detector(context: Context, modelFile: String, compute: Compute): ModelShelf.Lease<SharedDetector> {
+        val file = if (DetectorPlanFiles.isYolo(modelFile) && !hasAsset(context, modelFile)) {
+            Log.i("Nungil", "$modelFile is not in this build: EfficientDet-Lite2 instead (tools/yolo26/export.py)")
+            DetectorPlan.modelFile(ModelChoice.ACCURATE)
+        } else {
+            modelFile
+        }
+        return take("detector", "$file $compute") { SharedDetector.create(context.applicationContext, file, compute) }
+    }
+
+    private fun hasAsset(context: Context, file: String): Boolean =
+        runCatching { context.assets.openFd(file).close() }.isSuccess
 
     fun classifier(context: Context) = take("classifier", "") { SceneClassifier(context.applicationContext) }
 

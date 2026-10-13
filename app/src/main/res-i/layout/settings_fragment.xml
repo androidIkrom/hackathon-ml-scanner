@@ -139,6 +139,14 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/settings_model_accurate" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/settings_model_yolo"
+                        style="@style/Widget.Nungil.Toggle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/settings_model_yolo" />
                 </com.google.android.material.button.MaterialButtonToggleGroup>
 
                 <LinearLayout

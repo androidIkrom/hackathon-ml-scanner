@@ -13,6 +13,7 @@ class SettingPhrasesTest {
         assertEquals("Colours off.", SettingPhrases.done(SettingChange.Colors(false), Lang.EN))
         assertEquals("Processor: CPU.", SettingPhrases.done(SettingChange.Compute(Compute.CPU), Lang.EN))
         assertEquals("모델: 정확.", SettingPhrases.done(SettingChange.Model(ModelChoice.ACCURATE), Lang.KO))
+        assertEquals("Model: YOLO26.", SettingPhrases.done(SettingChange.Model(ModelChoice.YOLO), Lang.EN))
     }
 
     @Test fun surenessSaidBack() {

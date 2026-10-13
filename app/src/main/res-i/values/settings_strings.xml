@@ -13,6 +13,7 @@
     <string name="settings_model_light">Light</string>
     <string name="settings_model_fast">Fast</string>
     <string name="settings_model_accurate">Accurate</string>
+    <string name="settings_model_yolo">YOLO26</string>
     <string name="settings_score">How sure before speaking</string>
     <string name="settings_score_hint">Higher means fewer mistakes but fewer things found.</string>
     <string name="settings_speech">Speak results</string>

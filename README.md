@@ -115,7 +115,12 @@ debug build); a pre-commit hook (`git config core.hooksPath .githooks`) refuses 
 
 ## Credits and licences
 
+Nungil is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0). It became AGPL-3.0
+when the YOLO26 detector was added (2026-10-13), because Ultralytics licenses YOLO26 under AGPL-3.0. Anyone who gets
+the app may get its source code, here.
+
 - Detection, classification and embedding models: [MediaPipe](https://ai.google.dev/edge/mediapipe) (Apache-2.0).
+- [Ultralytics YOLO26](https://github.com/ultralytics/ultralytics) object detector (AGPL-3.0).
 - FaceNet-512 from [shubham0204/FaceRecognition_With_FaceNet_Android](https://github.com/shubham0204/FaceRecognition_With_FaceNet_Android) (Apache-2.0).
 - [Pretendard](https://github.com/orioncactus/pretendard) font (SIL Open Font License 1.1).
 - Routing by [openrouteservice](https://openrouteservice.org); map data © OpenStreetMap contributors.

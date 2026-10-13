@@ -7,9 +7,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.google.mediapipe.framework.image.BitmapImageBuilder
-import com.nungil.contract.Compute
 import com.nungil.contract.Detection
+import com.nungil.contract.Compute
 import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Facing
 import com.nungil.contract.Lang
@@ -17,7 +16,6 @@ import com.nungil.contract.ModelChoice
 import com.nungil.contract.ScanMode
 import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
-import com.nungil.core.scan.FrameMath
 import com.nungil.core.scan.ScanSession
 import com.nungil.contract.ScanSettings
 import com.nungil.debug.ReplayHostActivity
@@ -47,11 +45,7 @@ class DetectorPhotosTest {
         try {
             for (name in names) {
                 val bitmap = assets.open("desks/$name").use { BitmapFactory.decodeStream(it) } ?: continue
-                val raw = lease.model.detect(BitmapImageBuilder(bitmap).build()).detections().mapNotNull { d ->
-                    val c = d.categories().firstOrNull() ?: return@mapNotNull null
-                    val r = d.boundingBox()
-                    Detection(c.categoryName(), c.score(), FrameMath.normalizeBox(r.left, r.top, r.right, r.bottom, bitmap.width, bitmap.height))
-                }
+                val raw = lease.model.detect(bitmap)
                 val kept = DetectionFilter.keep(raw, ScanSettings.DEFAULT_MIN_SCORE)
                 kept.forEach { said[it.label] = (said[it.label] ?: 0) + 1 }
                 Log.i(TAG, "$name: " + raw.joinToString(", ") { d ->
@@ -76,11 +70,7 @@ class DetectorPhotosTest {
         val bitmap = assets.open("desks/$name").use { BitmapFactory.decodeStream(it) }
         val lease = SharedModels.detector(context, DetectorPlan.modelFile(ModelChoice.ACCURATE), Compute.CPU)
         val seen = try {
-            lease.model.detect(BitmapImageBuilder(bitmap).build()).detections().mapNotNull { d ->
-                val c = d.categories().firstOrNull() ?: return@mapNotNull null
-                val r = d.boundingBox()
-                Detection(c.categoryName(), c.score(), FrameMath.normalizeBox(r.left, r.top, r.right, r.bottom, bitmap.width, bitmap.height))
-            }
+            lease.model.detect(bitmap)
         } finally {
             lease.close()
         }
@@ -94,6 +84,42 @@ class DetectorPhotosTest {
         }
         Log.i(TAG, "bottles: detector ${kept.map { it.label }}, Live says $said")
         assertTrue("Live says $said", said.any { it.startsWith("3 bottles") })
+    }
+
+    /**
+     * YOLO26n next to EfficientDet-Lite2 on the same desk frames (CPU on the emulator): what each would have Live say,
+     * and how long a frame takes. Measured, not asserted; the times are the emulator's, not the phone's.
+     */
+    @Test fun yoloNextToLite2() {
+        val assets = InstrumentationRegistry.getInstrumentation().context.assets
+        val names = assets.list("desks").orEmpty().sorted()
+        if (names.isEmpty()) return
+        val models = listOf(ModelChoice.ACCURATE, ModelChoice.YOLO)
+        val leases = models.map { SharedModels.detector(context, DetectorPlan.modelFile(it), Compute.CPU) }
+        val said = models.associateWith { HashMap<String, Int>() }
+        val ms = models.associateWith { mutableListOf<Long>() }
+        try {
+            for (name in names) {
+                val bitmap = assets.open("desks/$name").use { BitmapFactory.decodeStream(it) } ?: continue
+                val line = StringBuilder(name)
+                models.forEachIndexed { i, model ->
+                    val started = android.os.SystemClock.elapsedRealtime()
+                    val kept = DetectionFilter.keep(leases[i].model.detect(bitmap), ScanSettings.DEFAULT_MIN_SCORE)
+                    ms.getValue(model) += android.os.SystemClock.elapsedRealtime() - started
+                    kept.forEach { said.getValue(model)[it.label] = (said.getValue(model)[it.label] ?: 0) + 1 }
+                    line.append(" | ${leases[i].model.modelFile}: ").append(kept.joinToString { String.format(Locale.US, "%s %.2f", it.label, it.score) })
+                }
+                Log.i(TAG, line.toString())
+                bitmap.recycle()
+            }
+        } finally {
+            leases.forEach { it.close() }
+        }
+        for ((i, model) in models.withIndex()) {
+            val t = ms.getValue(model).sorted()
+            Log.i(TAG, "${leases[i].model.modelFile}: median ${t[t.size / 2]} ms; would say " +
+                said.getValue(model).entries.sortedByDescending { it.value }.joinToString { "${it.key} ${it.value}" })
+        }
     }
 
     private companion object {

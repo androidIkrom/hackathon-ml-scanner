@@ -50,6 +50,7 @@ class SettingsFragment : Fragment() {
                 ModelChoice.LIGHT -> R.id.settings_model_light
                 ModelChoice.FAST -> R.id.settings_model_fast
                 ModelChoice.ACCURATE -> R.id.settings_model_accurate
+                ModelChoice.YOLO -> R.id.settings_model_yolo
             },
         )
         val slider = SettingsMath.scoreToSlider(settings.minScore)
@@ -84,6 +85,7 @@ class SettingsFragment : Fragment() {
             val model = when (id) {
                 R.id.settings_model_light -> ModelChoice.LIGHT
                 R.id.settings_model_fast -> ModelChoice.FAST
+                R.id.settings_model_yolo -> ModelChoice.YOLO
                 else -> ModelChoice.ACCURATE
             }
             update { copy(model = model) }

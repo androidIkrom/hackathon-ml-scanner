@@ -238,6 +238,8 @@ class VoiceCommandParserTest {
         assertEquals(SettingChange.Model(ModelChoice.FAST), setting("fast model"))
         assertEquals(SettingChange.Model(ModelChoice.LIGHT), setting("Light model"))
         assertEquals(SettingChange.Model(ModelChoice.ACCURATE), setting("정확한 모델"))
+        assertEquals(SettingChange.Model(ModelChoice.YOLO), setting("model YOLO"))
+        assertEquals(SettingChange.Model(ModelChoice.YOLO), setting("욜로 모델"))
     }
 
     @Test fun switchesByVoice() {
