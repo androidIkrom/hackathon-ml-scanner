@@ -3,6 +3,7 @@ package com.nungil.reader
 import com.nungil.contract.Lang
 import com.nungil.core.search.SearchResolver
 import com.nungil.core.walk.RoutePhrases
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -30,8 +31,12 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
     class RawLine(val text: String, val confidence: Float, val xs: FloatArray, val ys: FloatArray, val block: Int = -1)
     /** Text found in view, its lines top to bottom. */
     class Offer(val lines: List<SeenLine>) {
-        /** Each line as one thing to say, so the reading can stop and go on line by line. */
-        val sentences: List<String> get() = lines.map { sentence(listOf(it.text.trim())) }
+        /**
+         * Each line as one thing to say, so the reading can stop and go on line by line. Pieces of one line (ML Kit
+         * cut "Prices start at" from "dollars for a cup of tea" round a big word) are one sentence, with no full stop
+         * and no pause between them.
+         */
+        val sentences: List<String> get() = rows(lines).map { row -> sentence(listOf(joinPieces(row.map { it.text.trim() }))) }
         val text: String get() = sentences.joinToString(" ")
 
         /** What to say when it is found: its title (lines much bigger than the rest), else its first words. */
@@ -262,22 +267,66 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
 
         /**
          * One text from two readings of it, [older] then [newer], in [newer]'s order: a line only one of them has
-         * goes after the line it followed. Of one line read twice the surer reading is kept. Small print in a noisy
-         * frame was read in one frame and not the next, and was left out (replay, 2026-10-13).
+         * goes after the line it followed. Small print in a noisy frame was read in one frame and not the next, and
+         * was left out (replay, 2026-10-13). Of one line read twice, the reading with more of it is kept (a big word
+         * among small ones came in some frames only: "FIVE dollars for a cup of tea" / "dollars for a cup of tea"),
+         * else the surer one; a piece of a line that another reading has whole goes.
          */
         fun merge(older: List<SeenLine>, newer: List<SeenLine>): List<SeenLine> {
             val out = newer.toMutableList()
             var after = -1
             for (line in older) {
-                val i = out.indexOfFirst { sameLine(it.text, line.text) }
+                val i = out.indexOfFirst { sameLine(it.text, line.text) || covers(it, line) || covers(line, it) }
                 if (i >= 0) {
-                    if (line.confidence > out[i].confidence) out[i] = line
+                    out[i] = fuller(out[i], line)
                     after = i
                 } else {
                     out.add(++after, line)
                 }
             }
-            return out
+            return out.filterNot { piece -> out.any { it !== piece && covers(it, piece) } }
+        }
+
+        private fun letters(text: String): String = text.lowercase().filter { it.isLetterOrDigit() }
+
+        /** [whole] has all of [piece] and more, on the same row: one line read whole and in part. */
+        private fun covers(whole: SeenLine, piece: SeenLine): Boolean {
+            val w = letters(whole.text)
+            val p = letters(piece.text)
+            return p.length >= MIN_LINE_CHARS && w.length > p.length && w.contains(p) &&
+                abs(whole.centerY - piece.centerY) < maxOf(whole.height, piece.height) / 2
+        }
+
+        private fun fuller(a: SeenLine, b: SeenLine): SeenLine = when {
+            covers(a, b) -> a
+            covers(b, a) -> b
+            b.confidence > a.confidence -> b
+            else -> a
+        }
+
+        /** Lines in reading order, the pieces of one line together: each next piece to the right, at the same height. */
+        fun rows(lines: List<SeenLine>): List<List<SeenLine>> {
+            val rows = mutableListOf<MutableList<SeenLine>>()
+            for (line in lines) {
+                val last = rows.lastOrNull()?.last()
+                val sameRow = last != null && line.centerX > last.centerX &&
+                    abs(line.centerY - last.centerY) < minOf(line.height, last.height) / 2
+                if (sameRow) rows.last() += line else rows += mutableListOf(line)
+            }
+            return rows
+        }
+
+        /**
+         * The pieces of one line as one: a word at the end of a piece that begins the next one again (one word read
+         * twice, "Prices start at FVE" + "FIVE dollars", replay 2026-10-13) is said once, as the next piece has it.
+         */
+        fun joinPieces(pieces: List<String>): String = pieces.reduce { text, next ->
+            val last = text.substringAfterLast(' ')
+            val first = next.substringBefore(' ')
+            val a = letters(last)
+            val b = letters(first)
+            val twice = a.length >= MIN_LINE_CHARS && b.length >= MIN_LINE_CHARS && SearchResolver.distance(a, b) <= 1
+            if (twice) text.dropLast(last.length).trimEnd().let { if (it.isEmpty()) next else "$it $next" } else "$text $next"
         }
 
         /** Two readings of one text: at least half the lines of the shorter one are in the other ([sameLine]). */

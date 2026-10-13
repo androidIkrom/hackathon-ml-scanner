@@ -159,6 +159,11 @@ waits until the old one has closed its tasks.
   - small print in a noisy frame: `MIN_CONFIDENCE` 0.5, and a waiting offer gathers the lines of each reading
     (`merge`); the replay says "read" 2.4 s after the offer, as a user does.
   - Device: `ReaderReplayTest` 12/12 and `SpeakLinesTest` 2/2; unit tests 974.
+  - Sizes changing inside a line (scene "paragraph, sizes inside the lines", straight and tilted 6°): ML Kit cuts a
+    line round a big word, and reads that word in some frames only ("FIVE." / "FIVE dollars…" / "Prices start at
+    FVE"). Pieces of one line are one sentence (`Offer.sentences`, `rows`, `joinPieces`: no full stop between them,
+    a word read in both pieces said once); of one line read twice the fuller reading is kept (`merge`). A lone
+    big "5" among small words never came from ML Kit in any frame: not fixable here. Device 14/14, unit 978.
   - Also seen: the offer said "beginning with 'Tuzatishe'" but the reading began higher up ("Saved Messages"): the
     waiting offer takes the fuller reading of the same text. Open.
 

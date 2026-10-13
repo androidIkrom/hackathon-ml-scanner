@@ -171,12 +171,24 @@ class ReaderReplayTest {
         assertEquals("order in \"$heard\"", at.sorted(), at)
     }
 
+    /**
+     * Sizes that change inside a line, in the middle and at the end, line after line of one paragraph. ML Kit leaves
+     * out a lone big "5" among small words (never in any frame, 2026-10-13); a big word it reads.
+     */
+    @Test fun sizesChangingInsideTheLines() =
+        mixedFonts("paragraph, sizes inside the lines", INLINE, "Opening Hours") { styled(INLINE, shiftPx = it % 3) }
+
+    @Test fun sizesChangingInsideTheLinesTilted() =
+        mixedFonts("paragraph, sizes inside the lines, tilted 6°", INLINE, "Opening Hours") { tilt(styled(INLINE, shiftPx = it % 3), 6f) }
+
     private fun mixedFonts(scene: String, page: List<List<Run>> = MIXED, title: String = "Weekly Notes", frame: (Int) -> Bitmap) {
         val reads = replay(scene, List(10) { frame(it) })
         assertTrue("titled ${reads.firstNotNullOfOrNull { it.offer }}", reads.firstNotNullOfOrNull { it.offer }?.contains("'$title'") == true)
         val offer = reads.firstOrNull { it.offer != null }
         assertNotNull("never offered", offer)
         val heard = reads.firstNotNullOf { it.full }
+        assertTrue("a full stop inside a line: \"$heard\"", !heard.contains("at. ") && !heard.contains("start at."))
+        if (page === INLINE) assertTrue("a big word lost: \"$heard\"", heard.contains("start at FIVE dollars", ignoreCase = true))
         val lines = page.map { line -> line.joinToString("") { it.text } }
         val at = lines.map { found(heard, it) }
         assertTrue("not read: ${lines.filterIndexed { i, _ -> at[i] < 0 }} in \"$heard\"", at.all { it >= 0 })
@@ -346,6 +358,16 @@ class ReaderReplayTest {
             listOf(Run("Thursday: pay the water bill", 18f, SANS_BOLD)),
             listOf(Run("Friday: the ", 20f, SERIF), Run("big", 20f, SERIF_BOLD), Run(" match starts at six", 20f, SERIF)),
             listOf(Run("Small print: offer ends on Sunday", 14f, SERIF)),
+        )
+
+        private val INLINE = listOf(
+            listOf(Run("Opening Hours", 40f, SANS_BOLD)),
+            listOf(Run("The shop opens at ", 18f, SANS), Run("NINE", 32f, SANS_BOLD), Run(" every morning", 18f, SANS)),
+            listOf(Run("and closes at ", 18f, SERIF), Run("six in the evening", 26f, SERIF_BOLD)),
+            listOf(Run("On ", 18f, SANS), Run("Sunday", 24f, ITALIC), Run(" it is ", 18f, SANS), Run("closed", 30f, SANS_BOLD), Run(" all day.", 14f, SANS)),
+            listOf(Run("Call ", 16f, MONO), Run("010 5555 1234", 22f, SANS_BOLD), Run(" to book a table", 16f, MONO)),
+            listOf(Run("Prices start at ", 18f, SERIF), Run("FIVE", 40f, SERIF_BOLD), Run(" dollars", 14f, SERIF), Run(" for a cup of tea.", 18f, SERIF)),
+            listOf(Run("Thank you for coming", 18f, ITALIC)),
         )
 
         private val MORE = listOf(

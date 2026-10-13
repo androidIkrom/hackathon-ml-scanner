@@ -184,6 +184,39 @@ class ReaderPolicyTest {
         )
     }
 
+    @Test fun piecesOfOneLineAreOneSentence() {
+        // Replay, 2026-10-13: "Prices start at. dollars for a cup of tea." (a big word between them, cut in two).
+        val lines = listOf(
+            SeenLine("Prices start at", 0.9f, 0.03f, 0.16f, 0.51f, width = 0.25f, block = 3),
+            SeenLine("dollars for a cup of tea.", 0.9f, 0.03f, 0.56f, 0.51f, width = 0.39f, block = 4),
+            SeenLine("Thank you for coming", 0.9f, 0.027f, 0.23f, 0.59f, width = 0.39f, block = 5),
+        )
+        assertEquals(listOf("Prices start at dollars for a cup of tea.", "Thank you for coming."), ReaderPolicy.Offer(lines).sentences)
+    }
+
+    @Test fun ofOneLineReadTwiceTheFullerReadingIsKept() {
+        // Replay, 2026-10-13, tilted: a big "FIVE" among small words came in some frames only, and the shorter,
+        // surer reading was kept: "Prices start at dollars for a cup of tea".
+        fun l(text: String, x: Float, c: Float = 0.9f, h: Float = 0.03f) = SeenLine(text, c, h, x, 0.51f, block = 1)
+        val older = listOf(l("Prices start at", 0.16f, 0.91f), l("FIVE.", 0.42f, 0.72f, 0.058f), l("dollars for a cup of tea.", 0.69f, 0.87f))
+        val newer = listOf(l("Prices start at", 0.16f, 0.91f), l("FIVE dollars for a cup of tea.", 0.6f, 0.78f, 0.04f))
+        assertEquals(listOf("Prices start at", "FIVE dollars for a cup of tea."), ReaderPolicy.merge(older, newer).map { it.text })
+        assertEquals(listOf("Prices start at", "FIVE dollars for a cup of tea."), ReaderPolicy.merge(newer, older).map { it.text })
+    }
+
+    @Test fun aWordReadInTwoPiecesIsSaidOnce() {
+        assertEquals("Prices start at FIVE dollars", ReaderPolicy.joinPieces(listOf("Prices start at FVE", "FIVE dollars")))
+        assertEquals("Prices start at FIVE dollars", ReaderPolicy.joinPieces(listOf("Prices start at", "FIVE dollars")))
+        assertEquals("on the bus to the station", ReaderPolicy.joinPieces(listOf("on the bus", "to the station")))
+    }
+
+    @Test fun aShortLineOnARowOfItsOwnStays() {
+        // "EXIT" is in "Fire exit route" below it, but is a line of its own.
+        val exit = SeenLine("EXIT", 0.9f, 0.06f, 0.5f, 0.3f)
+        val route = SeenLine("Fire exit route", 0.9f, 0.03f, 0.5f, 0.45f)
+        assertEquals(listOf("EXIT", "Fire exit route"), ReaderPolicy.merge(listOf(exit, route), listOf(exit, route)).map { it.text })
+    }
+
     @Test fun aTableRowIsReadAcross() {
         // Label and value in blocks of their own, row by row: each row is read label, value.
         fun l(text: String, x: Float, y: Float, block: Int) = SeenLine(text, 0.9f, 0.03f, x, y, width = 0.3f, block = block)
