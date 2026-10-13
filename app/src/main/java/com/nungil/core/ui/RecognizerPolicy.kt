@@ -57,6 +57,17 @@ class RecognizerPolicy {
         /** App sound held for the user's speech is released after this even if the recognizer never answers. */
         const val HOLD_SAFETY_MS = 10_000L
 
+        /**
+         * App sound held for words heard comes back once no new word has come for this long: someone who talks to
+         * the app keeps adding words. A voice in the room held Live's sound until the recognizer gave up 8 s later,
+         * and what Live found was said 4.7 s late (the logs, 2026-10-07).
+         */
+        const val QUIET_WORDS_MS = 1_500L
+
+        /** Whether held app sound comes back at [nowMs]: no new word since [lastNewWordsAt], past a button's [talkUntil]. */
+        fun holdEnds(nowMs: Long, lastNewWordsAt: Long, talkUntil: Long): Boolean =
+            nowMs >= talkUntil && nowMs - lastNewWordsAt >= QUIET_WORDS_MS
+
         /** The recognizer's own start/stop tones are muted from its start until this long after it is ready. */
         const val MUTE_TAIL_MS = 300L
 

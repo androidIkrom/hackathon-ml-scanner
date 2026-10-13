@@ -77,6 +77,20 @@ class VoiceInput(
     private val listenNow = Runnable { listen() }
     private val holdSafety = Runnable { endHold() }
 
+    /** When the words heard last changed; held app sound comes back once they stop (RecognizerPolicy.holdEnds). */
+    private var lastWordsAt = 0L
+    private val quietWords = object : Runnable {
+        override fun run() {
+            if (!holding) return
+            if (RecognizerPolicy.holdEnds(SystemClock.elapsedRealtime(), lastWordsAt, talkUntil)) {
+                Log.i(TAG, "App sound back: no new words for ${RecognizerPolicy.QUIET_WORDS_MS} ms after \"$lastPartial\"")
+                endHold(force = true)
+            } else {
+                main.postDelayed(this, QUIET_CHECK_MS)
+            }
+        }
+    }
+
     /** One word the app is not saying has stood alone: it was the user's, not the app's own misheard. */
     private val unsureWord = Runnable {
         if (!holding && isAwake() && VoiceBargeIn.onPartial(lastPartial, appSaying()) != BargeIn.KEEP_TALKING && bargesIn(lastPartial)) beginHold()
@@ -242,6 +256,7 @@ class VoiceInput(
     override fun onPartialResults(partialResults: Bundle?) {
         val text = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim()
         if (text.isNullOrEmpty()) return
+        if (text != lastPartial) lastWordsAt = SystemClock.elapsedRealtime()
         lastPartial = text
         // The answer is waited for from its first appearance, not from the last change of the words: in a room
         // with other sound the words kept coming ("Yes", "Yes yes") and the wait began again each time.
@@ -344,6 +359,9 @@ class VoiceInput(
         holdSound()
         main.removeCallbacks(holdSafety)
         main.postDelayed(holdSafety, RecognizerPolicy.HOLD_SAFETY_MS)
+        if (lastWordsAt == 0L) lastWordsAt = SystemClock.elapsedRealtime()
+        main.removeCallbacks(quietWords)
+        main.postDelayed(quietWords, QUIET_CHECK_MS)
     }
 
     private fun holdForTalk() {
@@ -363,6 +381,7 @@ class VoiceInput(
         talkUntil = 0
         holding = false
         main.removeCallbacks(holdSafety)
+        main.removeCallbacks(quietWords)
         releaseSound()
     }
 
@@ -375,3 +394,6 @@ class VoiceInput(
 }
 
 private const val TAG = "Nungil"
+
+/** How often a hold looks whether the words have stopped. */
+private const val QUIET_CHECK_MS = 250L

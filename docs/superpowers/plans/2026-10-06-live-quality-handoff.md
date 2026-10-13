@@ -70,6 +70,10 @@ always yields `learnedAlone == true`.
 After Tasks 1–3 (or before, as its own PR): push `speed-laptop`, open the PR with the device numbers above, merge.
 
 ### Task 5 — Live says "bed" where there is none (user, 2026-10-06)
+2026-10-13 (user: save the frame first): TEMP `scan/BedDiagnostics.kt`, called from `ScanFragment.logSeen`, saves a
+frame with every box drawn when the detector sees `bed` (at most 30, `adb pull
+/sdcard/Android/data/com.nungil/files/beds`). Not committed. Next: the user points Live at that desk; pick the rule
+from the frames; remove the diagnostics.
 Device log `log-task1.txt` (scratchpad of session 736533c0), 22:09:59: "Live sees: bed 0.72", then 0.70, spoken as
 "a gray bed at 12 o'clock" on a desk scene (laptop, charger, bottle nearby). The detector (lite2, ACCURATE) gives
 `bed` at 0.70–0.72, above the 0.7 min score. First find what was in view (ask the user, or save a frame when `bed`
@@ -87,6 +91,11 @@ talks keeps producing partials); keep `HOLD_SAFETY_MS` as the outer limit. Tests
 function (time since last new partial, final result or not).
 Smaller delays seen: a place found by look needs two finds (~1.5–2.5 s from view to speech); a detector `bottle`
 was said ("a blue bottle") 2 s before its saved name came.
+Done 2026-10-13 (not yet tried on the phone): held app sound comes back once no new word has come for 1.5 s
+(`RecognizerPolicy.holdEnds`, `QUIET_WORDS_MS`; `VoiceInput.quietWords`, log "App sound back: no new words …"); a
+button's 6 s talk window still holds; new words hold again. While a text is read aloud only a command holds at all
+(reader, b8fe7f9). Live check: Live with a voice in the room (radio, video, people) and see that what it finds is
+said within a second or two.
 
 ### Task 7 — Crash when Live is opened again by voice (user, 2026-10-07)
 Native crash in MediaPipe, `Fatal signal 7 (SIGBUS), code 2 (BUS_ADRERR)` in `libmediapipe_tasks_jni.so`, on a
