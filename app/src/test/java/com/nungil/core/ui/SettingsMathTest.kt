@@ -1,6 +1,7 @@
 package com.nungil.core.ui
 
 import com.nungil.contract.Lang
+import com.nungil.contract.SettingChange
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -14,6 +15,16 @@ class SettingsMathTest {
     @Test fun sliderStaysInsideThirtyToSeventy() {
         assertEquals(30f, SettingsMath.scoreToSlider(0.1f))
         assertEquals(70f, SettingsMath.scoreToSlider(0.95f))
+    }
+
+    @Test fun surenessByVoiceGoesInTensInsideThirtyToSeventy() {
+        assertEquals(0.6f, SettingsMath.sureness(0.7f, SettingChange.Sureness(by = -10)), 1e-6f)
+        assertEquals(0.7f, SettingsMath.sureness(0.7f, SettingChange.Sureness(by = 10)), 1e-6f)
+        assertEquals(0.3f, SettingsMath.sureness(0.3f, SettingChange.Sureness(by = -10)), 1e-6f)
+        assertEquals(0.5f, SettingsMath.sureness(0.7f, SettingChange.Sureness(to = 50)), 1e-6f)
+        assertEquals(0.7f, SettingsMath.sureness(0.5f, SettingChange.Sureness(to = 90)), 1e-6f)
+        // From the slider's 65: one step up is 70, one down 55.
+        assertEquals(0.55f, SettingsMath.sureness(0.65f, SettingChange.Sureness(by = -10)), 1e-6f)
     }
 
     @Test fun sliderValueBecomesAScore() = assertEquals(0.55f, SettingsMath.sliderToScore(55f), 1e-6f)

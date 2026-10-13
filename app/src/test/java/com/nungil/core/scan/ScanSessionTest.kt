@@ -149,4 +149,14 @@ class ScanSessionTest {
         assertEquals("a chair on your left", turned.text)
         assertTrue(s.frame(1_000L, 30f).inView.isEmpty())
     }
+
+    @Test fun liveObjectCarriesItsCount() {
+        val s = ScanSession(ScanMode.LIVE, 0L, Lang.EN)
+        val bottle = ScanSession.Seen("bottle", 0.5f, null)
+        val other = ScanSession.Seen("bottle", 0.55f, null)
+        repeat(3) { s.frame(it * 200L, 0f, bottle) }
+        assertEquals(1, s.frame(600L, 0f, bottle).inView.single().count)
+        s.frame(800L, 0f, bottle, other)
+        assertEquals(2, s.frame(1_000L, 0f, bottle, other).inView.single().count)
+    }
 }

@@ -36,7 +36,7 @@ import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
 import com.nungil.core.scan.FrameMath
 import com.nungil.core.scan.InferenceStats
-import com.nungil.core.scan.ModelLock
+import com.nungil.core.scan.ModelShelf
 import com.nungil.data.SettingsStore
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -62,6 +62,8 @@ class CameraSession(
         val keepBitmap: Boolean = false,
         /** Fixed detector score floor; null = per-label DetectionFilter with the saved settings. */
         val minScore: Float? = null,
+        /** The analysis frame asked of the camera (landscape, 4:3); the camera gives the nearest it has. */
+        val analysisSize: Size = Size(ANALYSIS_WIDTH, ANALYSIS_HEIGHT),
     )
 
     override var facing: Facing = options.facing
@@ -117,10 +119,13 @@ class CameraSession(
     private var preview: Preview? = null
     private var analysis: ImageAnalysis? = null
     private var heading: HeadingProvider? = null
+    @Volatile
     private var settings = ScanSettings()
+    private var stopListening: (() -> Unit)? = null
 
     // Touched only on the analysis thread.
-    private var detector: DetectorFactory.Built? = null
+    /** The shared detector (SharedModels): kept loaded for the next screen when this one stops. */
+    private var detector: ModelShelf.Lease<SharedDetector>? = null
     private var detectorFailed = false
     private val stats = InferenceStats()
 
@@ -129,7 +134,10 @@ class CameraSession(
         if (running) return
         val context = fragment.requireContext().applicationContext
         appContext = context
-        settings = SettingsStore(context).load()
+        val store = SettingsStore(context)
+        settings = store.load()
+        // "More sure" / "less sure" said while the camera runs: taken at the next frame.
+        stopListening = store.onMinScore { score -> settings = settings.copy(minScore = score) }
         executor = Executors.newSingleThreadExecutor()
         heading = HeadingProvider(context).also { it.start() }
         fov = FovReader.read(context, facing)
@@ -161,6 +169,8 @@ class CameraSession(
     /** Call from onDestroyView. Waits at most 2 s for the analysis thread. */
     fun stop() {
         running = false
+        stopListening?.invoke()
+        stopListening = null
         heading?.stop()
         heading = null
         val p = provider
@@ -177,13 +187,9 @@ class CameraSession(
         provider = null
         val ex = executor ?: return
         executor = null
-        // Close the detector on its own thread: the GPU delegate must be used and closed on one thread.
+        // The detector goes back to SharedModels after the last frame (it is closed there, on its own thread, later).
         ex.execute {
-            try {
-                detector?.detector?.let { d -> ModelLock.shared.load { d.close() } }
-            } catch (t: Throwable) {
-                Log.i(TAG, "Closing the detector threw: ${t.message}")
-            }
+            detector?.close()
             detector = null
         }
         ex.shutdown()
@@ -208,7 +214,7 @@ class CameraSession(
         val analysisSelector = ResolutionSelector.Builder()
             .setAspectRatioStrategy(fourByThree)
             .setResolutionStrategy(
-                ResolutionStrategy(Size(ANALYSIS_WIDTH, ANALYSIS_HEIGHT), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
+                ResolutionStrategy(options.analysisSize, ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
             )
             .build()
         val analysisBuilder = ImageAnalysis.Builder()
@@ -239,7 +245,7 @@ class CameraSession(
             val inferenceMs = SystemClock.uptimeMillis() - started
             if (options.detect) {
                 stats.add(inferenceMs)?.let { average ->
-                    val built = detector
+                    val built = detector?.model?.built
                     Log.i(TAG, "Inference $average ms average on ${built?.compute} (${built?.modelFile})")
                 }
             }
@@ -274,15 +280,16 @@ class CameraSession(
 
     private fun detect(bitmap: Bitmap): List<Detection> {
         if (detectorFailed) return emptyList()
-        val built = detector ?: try {
+        val shared = detector?.model ?: try {
             val context = appContext ?: return emptyList()
-            DetectorFactory(context).create(DetectorPlan.modelFile(settings.model), settings.compute).also { detector = it }
+            SharedModels.detector(context, DetectorPlan.modelFile(settings.model), settings.compute).also { detector = it }.model
         } catch (t: Throwable) {
             detectorFailed = true
             main.post { onError(t) }
             return emptyList()
         }
-        val result = ModelLock.shared.run { built.detector.detect(BitmapImageBuilder(bitmap).build()) }
+        // Not inside ModelLock.run: the detector's own thread takes it (SharedDetector).
+        val result = shared.detect(BitmapImageBuilder(bitmap).build())
         val raw = result.detections().mapNotNull { d ->
             val category = d.categories().firstOrNull() ?: return@mapNotNull null
             val r = d.boundingBox()
@@ -298,8 +305,8 @@ class CameraSession(
 
     companion object {
         const val DEFAULT_HFOV_DEG = 65f
-        private const val ANALYSIS_WIDTH = 640
-        private const val ANALYSIS_HEIGHT = 480
+        const val ANALYSIS_WIDTH = 640
+        const val ANALYSIS_HEIGHT = 480
 
         /** A focus distance older than this is no longer where the lens is. */
         private const val FOCUS_FRESH_MS = 1_500L

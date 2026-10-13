@@ -45,6 +45,8 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
+import com.nungil.core.scan.ModelShelf
+import com.nungil.scan.SharedModels
 
 /**
  * One-sweep face enrolment: 3 samples looking straight, then one each for one side, the other side, up and down
@@ -76,7 +78,8 @@ class EnrollFragment : Fragment(), CameraScreen {
 
     // Extras thread only.
     private var finder: FaceFinder? = null
-    private var embedder: FaceEmbedder? = null
+    private var embedderLease: ModelShelf.Lease<FaceEmbedder>? = null
+    private val embedder: FaceEmbedder? get() = embedderLease?.model
     private val guide = EnrollmentGuide()
     private val samples = mutableListOf<FloatArray>()
     private var photo: Bitmap? = null
@@ -109,7 +112,7 @@ class EnrollFragment : Fragment(), CameraScreen {
         extras = executor
         executor.execute {
             try {
-                embedder = FaceEmbedder(appContext)
+                embedderLease = SharedModels.faceEmbedder(appContext)
                 finder = FaceFinder()
             } catch (e: Exception) {
                 Log.i(TAG, "Face enrolment unavailable", e)
@@ -133,7 +136,7 @@ class EnrollFragment : Fragment(), CameraScreen {
         extras?.let { executor ->
             executor.execute {
                 finder?.close()
-                embedder?.close()
+                embedderLease?.close()
             }
             // No waiting here: blocking the main thread froze the screen while leaving. The close task above
             // still runs last on the extras thread, and shutdown() lets nothing new in.

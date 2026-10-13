@@ -16,6 +16,7 @@ import java.io.Closeable
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import kotlin.math.hypot
+import com.nungil.core.scan.ModelShelf
 
 /**
  * "What is this" and "who is this" from a camera screen's last frame, on any camera screen, without leaving it:
@@ -29,7 +30,7 @@ class FrameAnswers(
 ) : Closeable {
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
-    private var classifier: SceneClassifier? = null
+    private var classifier: ModelShelf.Lease<SceneClassifier>? = null
     private var faces: FaceIdentifier? = null
 
     /** The detection nearest the middle, else the classifier's name for the middle of the picture. */
@@ -41,7 +42,7 @@ class FrameAnswers(
         val bitmap = frame.bitmap ?: return answer(ScanPhrases.unknownThing(lang))
         work {
             val guess = try {
-                (classifier ?: SceneClassifier(context).also { classifier = it }).nameCenter(bitmap)
+                (classifier ?: SharedModels.classifier(context).also { classifier = it }).model.nameCenter(bitmap)
             } catch (t: Throwable) {
                 Log.i(TAG, "Scene classifier failed: ${t.message}")
                 null

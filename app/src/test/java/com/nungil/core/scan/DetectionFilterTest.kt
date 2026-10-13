@@ -42,4 +42,16 @@ class DetectionFilterTest {
         )
         assertEquals(listOf("backpack"), kept.map { it.label })
     }
+
+    @Test fun bigFurnitureFillingTheViewNeedsMore() {
+        // A plain wall was "refrigerator 0.72" filling 59 % of the frame (desk photo), and Live said "a gray bed" at
+        // a desk at 0.70-0.72 (Task 5): a big thing filling the view needs a tenth more.
+        val wall = Detection("refrigerator", 0.72f, Box(0.0f, 0.12f, 0.67f, 1.0f))
+        val bed = Detection("bed", 0.82f, Box(0.0f, 0.1f, 1.0f, 0.9f))
+        val smallBed = Detection("bed", 0.72f, Box(0.2f, 0.4f, 0.6f, 0.7f))
+        val laptop = Detection("laptop", 0.72f, Box(0.0f, 0.1f, 1.0f, 0.9f))
+        assertEquals(listOf(bed, smallBed, laptop), DetectionFilter.keep(listOf(wall, bed, smallBed, laptop), 0.7f))
+        assertEquals(0.8f, DetectionFilter.minScoreFor(wall, 0.7f), 0.0001f)
+        assertEquals(0.7f, DetectionFilter.minScoreFor(smallBed, 0.7f), 0.0001f)
+    }
 }

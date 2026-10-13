@@ -177,9 +177,44 @@ waits until the old one has closed its tasks.
     waiting offer takes the fuller reading of the same text. Open.
 
 ### Later
-- "Find my charging" said "Looking for My.": the first guess matched the saved *person* "My" (a filler-word name)
-  before the second guess "Find my charger" was tried. `SearchResolver.resolve(text, guesses, …)` should try the
-  other guesses for a non-filler name before falling back to a filler-word name.
-- Stage 4 (frame source: one camera pipeline, one model instance per kind) — spec not written yet.
-- "Delete <name>" by voice on the Saved list (said "That does not work on this screen").
-- "How sure before speaking" by voice (min score; default 0.7 hides detections at 0.5–0.69).
+- Done: "Find my charging" (1226347), "Delete <name>" / "Open <name>" by voice (1226347), Task 4 (PR #62 merged
+  2026-10-13; main merged in through PR #63; the ruleset now takes changes to `speed-laptop` only by PR).
+- "How sure before speaking" by voice (2026-10-13, branch `live-quality-2`): "more sure" / "less sure" / "say more"
+  move it by 10, "sureness 50" / "confidence sixty" set it, inside the slider's 30-70 %; Korean "더 확실하게",
+  "덜 확실하게", "확신 50". Said back ("Sureness 60 percent: more things, some may be wrong."; at the end: "Already
+  the most sure: 70 percent."). An open camera takes it at the next frame (`SettingsStore.onMinScore`, listened to
+  by `CameraSession`). Unit tests 982; androidTest `SettingsStoreTest` on the phone. Not yet said live.
+- Stage 4: spec `docs/superpowers/specs/2026-10-13-shared-models-design.md`. 4a built 2026-10-13 (shared models,
+  kept 30 s; `SharedModelsTest` on the phone: no crash in ten hand-overs, a screen 2.1 s cold and 0.55 s warm). Live
+  check left. 4b after the numbers.
+- Reader on a laptop screen (2026-10-13, c6b4875): only the big model name was read. The reader now asks the camera
+  for 1440 x 1920 (screen text was 2-4 px at 640 x 480) and drops text under 8 px instead of a share of the frame.
+  Replay "laptop screen": 0 of 10 lines before, 10 of 10 after. Live check left.
+- Live, a second thing beside the first (2026-10-13): a blue bottle next to the white one joined its cluster
+  (same label within 20°) and was never said. Now the announcer's key holds the cluster's steady count (seen in 2
+  frames), so "2 bottles at 12 o'clock" is said when it grows; with more than one no colour is said (one vote for
+  both), and a colour that is the thing's name is not said ("2 orange oranges"). Unit-tested; live check left.
+
+- Reader on real photos, on the emulator (user, 2026-10-13: "not on the phone, on the emulator, real images from
+  online"). `tools/reader-photos/make_frames.py` fetches free photos from Wikimedia Commons (a laptop with English
+  Wikipedia, code on a screen, a drive-thru menu board, a 1969 newspaper held at a slant, a museum plaque), cuts what
+  a phone in portrait sees (1440 x 1920, a little hand shake) and writes the phrases that must be read; frames and
+  photos stay out of git. `ReaderReplayTest.realPhotos` (`-e scene <name>`, `-e lines all`) reads them. Found and
+  fixed: a read could time out (2 s, now 6 s; the emulator needs `ReaderEngine(timeoutS = 120)`); a plaque line was
+  never read because its ornaments came as "O", "6", "9" in turn (sameLine leaves out a lone character at either
+  end, and O among digits is 0); two readings of one line on top of each other were joined as pieces of a line.
+  Emulator: `Pixel_8_2`, headless, `-memory 1536`; Play Store, Google app and other heavy apps disabled on it
+  (`pm disable-user`) or the test process was killed for memory.
+
+- Task 5 on real desk photos, on the emulator (2026-10-13): `tools/desk-photos/make_frames.py` (14 Commons desk
+  photos, three portrait views each, 480 x 640) and androidTest `DetectorPhotosTest` (Lite2 on CPU). No "bed" in 42
+  frames, but a plain wall was "refrigerator 0.72" over 59 % of a frame. Rule (user: yes): bed, couch, refrigerator,
+  dining table and oven filling half the view or more need a tenth more (0.8 at the default)
+  (`DetectionFilter.minScoreFor(Detection, …)`). After it: the wall goes, the rest as before. The phone's
+  BedDiagnostics frames, when the user takes Live to that desk again, will show whether the "gray bed" was one.
+
+### After the plan: YOLO26 (user, 2026-10-13)
+When this plan is done, add Ultralytics YOLO26 to the project as a detector. To look at first: its licence (Ultralytics
+models are AGPL-3.0 unless an Enterprise licence is bought; the app's licence and distribution), the export to
+TFLite / LiteRT that MediaPipe's ObjectDetector or a plain Interpreter can run, its classes (COCO 80, as now), speed
+and memory on the Infinix next to EfficientDet-Lite2, and where it fits (`DetectorPlan`, `SharedModels` key by file).

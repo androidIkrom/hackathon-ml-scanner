@@ -10,10 +10,6 @@ import android.os.SystemClock
 import android.util.Log
 import com.google.android.gms.tasks.Tasks
 import com.google.mediapipe.framework.image.BitmapImageBuilder
-import com.google.mediapipe.tasks.core.BaseOptions
-import com.google.mediapipe.tasks.vision.core.RunningMode
-import com.google.mediapipe.tasks.vision.imageclassifier.ImageClassifier
-import com.google.mediapipe.tasks.vision.objectdetector.ObjectDetector
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -28,7 +24,7 @@ import com.nungil.contract.Lang
 import com.nungil.contract.app.NameTagger
 import com.nungil.contract.app.VisionFrame
 import com.nungil.core.scan.DetectorPlan
-import com.nungil.core.scan.ModelLock
+import com.nungil.core.scan.ModelShelf
 import com.nungil.core.walk.Alert
 import com.nungil.core.walk.CameraHeight
 import com.nungil.core.walk.ApproachSpeed
@@ -53,7 +49,9 @@ import com.nungil.core.walk.WalkPhrases
 import com.nungil.core.walk.Zone
 import com.nungil.core.walk.ZoneReading
 import com.nungil.people.createNameTaggers
-import com.nungil.scan.DetectorFactory
+import com.nungil.scan.SceneClassifier
+import com.nungil.scan.SharedDetector
+import com.nungil.scan.SharedModels
 import java.io.Closeable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -85,8 +83,9 @@ class WalkVision(
     private val main = Handler(Looper.getMainLooper())
 
     // Worker thread only.
-    private var detector: ObjectDetector? = null
-    private var classifier: ImageClassifier? = null
+    // Shared models (SharedModels): given back on close, kept loaded for the next screen.
+    private var detector: ModelShelf.Lease<SharedDetector>? = null
+    private var classifier: ModelShelf.Lease<SceneClassifier>? = null
     private var taggers: List<NameTagger> = emptyList()
     private val textRecognizer by lazy { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
     private val barcodes by lazy { BarcodeScanning.getClient() }
@@ -419,8 +418,8 @@ class WalkVision(
 
     private fun detect(bitmap: Bitmap): List<Detection> {
         val started = SystemClock.elapsedRealtime()
-        val d = detector()
-        val result = ModelLock.shared.run { d.detect(BitmapImageBuilder(bitmap).build()) }
+        // Not inside ModelLock.run: the detector's own thread takes it (SharedDetector).
+        val result = detector().detect(BitmapImageBuilder(bitmap).build())
         inferenceTotalMs += SystemClock.elapsedRealtime() - started
         if (++loggedFrames % LOG_EVERY == 0) {
             Log.i(TAG, "Walk inference ${inferenceTotalMs / LOG_EVERY} ms average")
@@ -435,11 +434,11 @@ class WalkVision(
         }
     }
 
-    private fun detector(): ObjectDetector =
-        detector ?: DetectorFactory(context).create(DetectorPlan.WALK_MODEL_FILE, Compute.CPU).detector.also {
+    private fun detector(): SharedDetector =
+        (detector ?: SharedModels.detector(context, DetectorPlan.WALK_MODEL_FILE, Compute.CPU).also {
             detector = it
             Log.i(TAG, "Walk detector ${DetectorPlan.WALK_MODEL_FILE} on CPU")
-        }
+        }).model
 
     private fun savedTags(bitmap: Bitmap, detections: List<Detection>): List<Pair<String, Zone>> {
         if (taggers.isEmpty()) taggers = runCatching { createNameTaggers(context) }.getOrDefault(emptyList())
@@ -460,22 +459,12 @@ class WalkVision(
     }.getOrNull()
 
     private fun nameObstacle(bitmap: Bitmap): Pair<String, String>? = runCatching {
-        val c = classifier ?: ModelLock.shared.load {
-            ImageClassifier.createFromOptions(
-                context,
-                ImageClassifier.ImageClassifierOptions.builder()
-                    .setBaseOptions(BaseOptions.builder().setModelAssetPath(CLASSIFIER_FILE).build())
-                    .setRunningMode(RunningMode.IMAGE)
-                    .setMaxResults(1)
-                    .build(),
-            )
-        }.also { classifier = it }
+        val c = (classifier ?: SharedModels.classifier(context).also { classifier = it }).model
         val cx = bitmap.width / 4
         val cy = bitmap.height / 4
         val crop = Bitmap.createBitmap(bitmap, cx, cy, bitmap.width / 2, bitmap.height / 2)
-        val top = ModelLock.shared.run { c.classify(BitmapImageBuilder(crop).build()) }.classificationResult().classifications()
-            .firstOrNull()?.categories()?.firstOrNull() ?: return null
-        ObstacleName.of(top.displayName().ifBlank { top.categoryName() }, top.score())
+        val (name, score) = c.top(crop) ?: return null
+        ObstacleName.of(name, score)
     }.getOrNull()
 
     // ---- pixels ----------------------------------------------------------------------------------
@@ -507,8 +496,8 @@ class WalkVision(
     override fun close() {
         closed = true
         executor.execute {
-            runCatching { detector?.let { d -> ModelLock.shared.load { d.close() } } }
-            runCatching { classifier?.let { c -> ModelLock.shared.load { c.close() } } }
+            runCatching { detector?.close() }
+            runCatching { classifier?.close() }
             taggers.forEach { runCatching { it.close() } }
             runCatching { textRecognizer.close() }
             runCatching { barcodes.close() }
@@ -535,7 +524,6 @@ class WalkVision(
         const val SHUTDOWN_WAIT_S = 2L
         const val LOG_EVERY = 30
         const val HFOV_DEG = 65f
-        const val CLASSIFIER_FILE = "efficientnet-lite0.tflite"
         const val WARM_UP_PX = 64
         const val PROFILE_LOG_EVERY_MS = 1_000L
     }

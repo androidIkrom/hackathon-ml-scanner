@@ -2,6 +2,7 @@ package com.nungil.core.ui
 
 import com.nungil.contract.Lang
 import com.nungil.contract.ScanSettings
+import com.nungil.contract.SettingChange
 import kotlin.math.roundToInt
 
 /**
@@ -19,6 +20,12 @@ object SettingsMath {
     }
 
     fun sliderToScore(value: Float): Float = value / 100f
+
+    /** The score after "more sure", "less sure" or "sureness 50" from [current], inside the slider's 30-70 %. */
+    fun sureness(current: Float, change: SettingChange.Sureness): Float {
+        val percent = change.to ?: ((current * 100f).roundToInt() + change.by)
+        return percent.coerceIn(SLIDER_FROM.roundToInt(), SLIDER_TO.roundToInt()) / 100f
+    }
 }
 
 /** One line under each history entry: the mode, and the coverage of a full scan. */

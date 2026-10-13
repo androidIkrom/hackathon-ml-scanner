@@ -65,6 +65,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
+import com.nungil.core.scan.ModelShelf
 
 /**
  * Full and live scan. Nav argument `mode: ScanMode`.
@@ -100,7 +101,8 @@ class ScanFragment : Fragment(), CameraScreen {
     @Volatile private var extras: ExecutorService? = null
     private val extrasBusy = AtomicBoolean(false)
     @Volatile private var taggers: List<NameTagger> = emptyList()
-    @Volatile private var classifier: SceneClassifier? = null
+    /** The shared classifier (SharedModels), taken when first needed. */
+    @Volatile private var classifier: ModelShelf.Lease<SceneClassifier>? = null
     private val pendingTags = ConcurrentLinkedQueue<PendingTag>()
 
     /** One item search's finds by look; [Look.complete]: it searched the frame, so items it did not find are gone. */
@@ -395,7 +397,7 @@ class ScanFragment : Fragment(), CameraScreen {
                 try {
                     if (check != null) {
                         val label = try {
-                            val guesses = (classifier ?: SceneClassifier(app).also { classifier = it }).guesses(bitmap, check)
+                            val guesses = (classifier ?: SharedModels.classifier(app).also { classifier = it }).model.guesses(bitmap, check)
                             LaptopCheck.label(guesses).also { Log.i(TAG, "Keyboard check: $guesses -> $it") }
                         } catch (t: Throwable) {
                             Log.i(TAG, "Keyboard check failed: ${t.message}")
@@ -444,7 +446,7 @@ class ScanFragment : Fragment(), CameraScreen {
         try {
             ex.execute {
                 val guess = try {
-                    (classifier ?: SceneClassifier(app).also { classifier = it }).nameCenter(bitmap)
+                    (classifier ?: SharedModels.classifier(app).also { classifier = it }).model.nameCenter(bitmap)
                 } catch (t: Throwable) {
                     Log.i(TAG, "Scene classifier failed: ${t.message}")
                     null
@@ -515,7 +517,8 @@ class ScanFragment : Fragment(), CameraScreen {
      * frame. Queued, findings were said seconds after they were true (the logs).
      */
     private fun announceInView(inView: List<ScanSession.LiveObject>) {
-        val notices = inView.map { Notice("obj:${it.key}", it.text, 0, ahead = abs(it.bearing) <= Bearings.AHEAD_DEG) }
+        // The count is in the key: one more of a thing in view is news ("2 bottles at 12 o'clock").
+        val notices = inView.map { Notice("obj:${it.key}:${it.count}", it.text, 0, ahead = abs(it.bearing) <= Bearings.AHEAD_DEG) }
         val chosen = announcer.choose(SystemClock.elapsedRealtime(), notices) ?: return
         log.add(chosen.text)
         Log.i(TAG, "Live: \"${chosen.text}\"")

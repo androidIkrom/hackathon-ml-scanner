@@ -19,6 +19,8 @@ data class SeenLine(
     val width: Float = 0f,
     /** ML Kit's block (a paragraph, a piece of a column) the line is in; -1 when not known. */
     val block: Int = -1,
+    /** The frame's height in pixels, for the line's height in pixels. */
+    val frameHeight: Int = 640,
 )
 
 /**
@@ -133,14 +135,25 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
         /**
          * Whether [a] and [b] are one line read twice: OCR never gave a line twice letter for letter
          * ("SeenLine(Line.text" / "SeenLine (lLine.text"), so nothing was ever spoken (the logs, 2026-10-11).
-         * Case and spaces do not count. Lines with other numbers are other lines ("Step 1" / "Step 2" of a list).
+         * Case and spaces do not count. Lines with other numbers are other lines ("Step 1: …" / "Step 2: …" of a list).
+         * A lone character at either end is left out, and an O among digits is a 0: the ornaments beside "FIELD
+         * MUSEUM" on a plaque came as "O", "6" or "9" in turn, and "100000" as "10000O", so the line was never
+         * read in two frames alike and never read (real photo, 2026-10-13).
          */
         fun sameLine(a: String, b: String): Boolean {
-            val x = a.lowercase().filterNot { it.isWhitespace() }
-            val y = b.lowercase().filterNot { it.isWhitespace() }
+            val x = core(a)
+            val y = core(b)
             val longest = maxOf(x.length, y.length)
             if (longest == 0 || x.filter { it.isDigit() } != y.filter { it.isDigit() }) return false
             return SearchResolver.distance(x, y) <= longest * (1 - SAME_LINE_SHARE)
+        }
+
+        /** [text] as sameLine compares it: lower case, no spaces, no lone character at either end, O among digits 0. */
+        private fun core(text: String): String {
+            var words = text.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            if (words.size > 1 && words.first().length == 1) words = words.drop(1)
+            if (words.size > 1 && words.last().length == 1) words = words.dropLast(1)
+            return words.joinToString("") { w -> if (w.any { it.isDigit() }) w.replace('o', '0') else w }
         }
 
         fun truncateCode(text: String): String = if (text.length > MAX_CHARS) text.take(MAX_CHARS) else text
@@ -155,16 +168,16 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
         const val MIN_LETTER_SHARE = 0.6f
 
         /**
-         * Text lower than this share of the frame height is too small to read well. It was 0.03: lines of a page
-         * at reading distance are 0.028-0.033 high, so they were read one moment and dropped the next (replay
-         * test, 2026-10-12). Small print next to big text is left out by [RELATIVE_MIN_HEIGHT] instead.
+         * Text lower than this many pixels is too small to read well. It was a share of the frame (0.03, then
+         * 0.015 of 640 px): lines of a page at reading distance are 18-21 px, and in the bigger frame the reader
+         * now asks for, the text of a laptop screen is 8-12 px (replay, 2026-10-12 and 2026-10-13).
          */
-        const val MIN_HEIGHT = 0.015f
+        const val MIN_HEIGHT_PX = 8f
 
         /** Whether one line is worth reading at all. */
         fun readable(line: SeenLine): Boolean {
             val text = line.text.trim()
-            if (text.length < MIN_LINE_CHARS || line.confidence < MIN_CONFIDENCE || line.height < MIN_HEIGHT) return false
+            if (text.length < MIN_LINE_CHARS || line.confidence < MIN_CONFIDENCE || line.height * line.frameHeight < MIN_HEIGHT_PX) return false
             val chars = text.filterNot { it.isWhitespace() }
             return chars.count { it.isLetterOrDigit() } >= chars.length * MIN_LETTER_SHARE
         }
@@ -212,7 +225,7 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
                 val dy = l.ys.average().toFloat() - height / 2
                 SeenLine(
                     l.text, l.confidence, tall / height, (width / 2 + dx * c - dy * s) / width, (height / 2 + dx * s + dy * c) / height,
-                    wide / width, l.block,
+                    wide / width, l.block, height.toInt(),
                 )
             }
         }
@@ -309,7 +322,11 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
             val rows = mutableListOf<MutableList<SeenLine>>()
             for (line in lines) {
                 val last = rows.lastOrNull()?.last()
-                val sameRow = last != null && line.centerX > last.centerX &&
+                // Not two readings of one line on top of each other ("100000 DOLLARS" / "10000O DOLLARS"): pieces
+                // overlap by less than half the narrower one.
+                val apart = last == null || line.width == 0f || last.width == 0f ||
+                    (last.centerX + last.width / 2) - (line.centerX - line.width / 2) < minOf(line.width, last.width) / 2
+                val sameRow = last != null && line.centerX > last.centerX && apart &&
                     abs(line.centerY - last.centerY) < minOf(line.height, last.height) / 2
                 if (sameRow) rows.last() += line else rows += mutableListOf(line)
             }

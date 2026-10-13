@@ -31,6 +31,18 @@ class SettingsStore(context: Context) {
             .apply()
     }
 
+    /**
+     * Calls [onChange] with the new score each time the saved score changes, until the returned function is called.
+     * The listener is held here: SharedPreferences keeps only a weak reference.
+     */
+    fun onMinScore(onChange: (Float) -> Unit): () -> Unit {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == KEY_MIN_SCORE) onChange(load().minScore)
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        return { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     private inline fun <reified E : Enum<E>> enumOr(name: String?, fallback: E): E =
         enumValues<E>().firstOrNull { it.name == name } ?: fallback
 

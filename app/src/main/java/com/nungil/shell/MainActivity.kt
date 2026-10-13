@@ -59,6 +59,7 @@ import com.nungil.core.ui.PermissionOutcome
 import com.nungil.core.ui.Phrase
 import com.nungil.core.ui.RecognizerPolicy
 import com.nungil.core.ui.Route
+import com.nungil.core.ui.SettingsMath
 import com.nungil.core.ui.SettingPhrases
 import com.nungil.core.ui.ScreenHelp
 import com.nungil.core.ui.VoiceBargeIn
@@ -70,6 +71,7 @@ import com.nungil.core.voice.QuickAsk
 import com.nungil.core.weather.Clock
 import com.nungil.scan.ScanFragment
 import java.util.Calendar
+import kotlin.math.roundToInt
 import com.nungil.core.voice.VoiceCommandParser
 import com.nungil.core.voice.WakeResult
 import com.nungil.core.voice.WakeWord
@@ -740,6 +742,15 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             is SettingChange.Colors -> store.save(s.copy(colorsOn = change.on))
             is SettingChange.VoiceGuide -> prefs.voiceGuideOn = change.on
             is SettingChange.HighContrast -> Unit
+            is SettingChange.Sureness -> {
+                // An open camera screen takes it at once (CameraSession listens to the saved settings).
+                val to = SettingsMath.sureness(s.minScore, change)
+                store.save(s.copy(minScore = to))
+                tts.say(SettingPhrases.sureness((s.minScore * 100).roundToInt(), (to * 100).roundToInt(), lang))
+                Log.i(TAG, "Setting by voice: $change, ${s.minScore} -> $to")
+                if (navController.currentDestination?.id == R.id.settings) go(R.id.settings)
+                return
+            }
         }
         val nextTime = currentScreen() is CameraScreen && (change is SettingChange.Model || change is SettingChange.Compute)
         tts.say(SettingPhrases.done(change, lang, nextTime))

@@ -40,6 +40,7 @@ class ItemSegmenter(context: Context) : Closeable {
      * The thing at ([x], [y]) (0..1) of [frame], or null when the segmenter fails. The first confidence mask
      * is taken; whether it counts the thing high or low, ItemMask reads it by the point asked for.
      */
+    @Synchronized
     fun at(frame: Bitmap, x: Float, y: Float): Answer? = try {
         // The point is given in pixels: with 0.5, 0.5 the mask came out at the top-left corner (the logs).
         val point = InteractiveSegmenterLegacy.RegionOfInterest.create(NormalizedKeypoint.create(x * frame.width, y * frame.height))

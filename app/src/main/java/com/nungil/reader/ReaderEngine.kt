@@ -13,9 +13,10 @@ import java.util.concurrent.TimeUnit
 /**
  * One read of one frame: a code when there is one (said at once), else text in view, offered first and read in full
  * on the user's word ([ReaderPolicy]). The reader screen and the replay test (androidTest ReaderReplayTest) read the
- * same way. One read at a time, on a worker thread; [accept] and [decline] from any thread.
+ * same way. One read at a time, on a worker thread; [accept] and [decline] from any thread. [timeoutS]: how long one
+ * read may take (the emulator, with no GPU, is many times slower than the phone).
  */
-class ReaderEngine : Closeable {
+class ReaderEngine(private val timeoutS: Long = TIMEOUT_S) : Closeable {
     /**
      * [spoken]: a code to say now, or null; [offer]: text found, to offer ("Text found, …"); [lines]: what OCR saw;
      * [code]: a QR or barcode's value.
@@ -26,18 +27,18 @@ class ReaderEngine : Closeable {
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val policy = ReaderPolicy()
 
-    /** Throws when ML Kit fails or takes over [TIMEOUT_S] seconds. [nowMs]: the time of the frame. */
+    /** Throws when ML Kit fails or takes over [timeoutS] seconds. [nowMs]: the time of the frame. */
     fun read(bitmap: Bitmap, nowMs: Long, lang: Lang): Read {
         val image = InputImage.fromBitmap(bitmap, 0)
         val started = System.nanoTime()
-        val code = Tasks.await(scanner.process(image), TIMEOUT_S, TimeUnit.SECONDS)
+        val code = Tasks.await(scanner.process(image), timeoutS, TimeUnit.SECONDS)
             .firstNotNullOfOrNull { it.rawValue?.takeIf { v -> v.isNotBlank() } }
         if (code != null) {
             // A code is exact: it is read at once.
             val spoken = ReaderPolicy.codePhrase(code, lang).takeIf { synchronized(policy) { policy.shouldSpeak(it, nowMs) } }
             return Read(spoken, null, emptyList(), code, (System.nanoTime() - started) / 1_000_000)
         }
-        val text = Tasks.await(recognizer.process(image), TIMEOUT_S, TimeUnit.SECONDS)
+        val text = Tasks.await(recognizer.process(image), timeoutS, TimeUnit.SECONDS)
         val ms = (System.nanoTime() - started) / 1_000_000
         val w = bitmap.width.toFloat()
         val h = bitmap.height.toFloat()
@@ -70,7 +71,18 @@ class ReaderEngine : Closeable {
         recognizer.close()
     }
 
-    private companion object {
-        const val TIMEOUT_S = 2L
+    companion object {
+        /**
+         * A read may take this long. It was 2 s: a full laptop screen in the 1440 x 1920 frame took longer on the
+         * phone, and the read timed out twice before one came through (the logs, 2026-10-13).
+         */
+        const val TIMEOUT_S = 6L
+
+        /**
+         * The upright frame the reader asks the camera for. At 480 x 640 the text of a laptop screen was 2-4 px high
+         * and none of it was read (replay "laptop screen", 2026-10-13).
+         */
+        const val FRAME_WIDTH = 1440
+        const val FRAME_HEIGHT = 1920
     }
 }

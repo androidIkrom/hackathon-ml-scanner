@@ -15,7 +15,7 @@ import java.io.Closeable
 
 /**
  * MobileNetV3-Small image embeddings (about 4 MB, L2-normalised) through MediaPipe's ImageEmbedder.
- * One worker thread only. Throws from the constructor when the model is missing.
+ * Shared by the screens (SharedModels), one call at a time. Throws from the constructor when the model is missing.
  */
 class ItemEmbedder(context: Context) : Closeable {
     private val embedder: ImageEmbedder = ModelLock.shared.load {
@@ -54,6 +54,7 @@ class ItemEmbedder(context: Context) : Closeable {
         return Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888)
     }
 
+    @Synchronized
     fun embed(image: Bitmap): FloatArray? = try {
         ModelLock.shared.run { embedder.embed(BitmapImageBuilder(image).build()) }
             .embeddingResult()
