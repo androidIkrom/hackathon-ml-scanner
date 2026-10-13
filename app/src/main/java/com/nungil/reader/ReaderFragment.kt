@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Size
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -135,7 +136,12 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
 
     private fun startCamera() {
         if (camera != null || _binding == null) return
-        val options = CameraSession.Options(facing = Facing.BACK, detect = false, keepBitmap = true)
+        // Text on a laptop screen was 2-4 px high in the 640 x 480 frame every other screen uses, and nothing of it
+        // was read (the user, 2026-10-13): the reader asks for a bigger frame.
+        val options = CameraSession.Options(
+            facing = Facing.BACK, detect = false, keepBitmap = true,
+            analysisSize = Size(ReaderEngine.FRAME_HEIGHT, ReaderEngine.FRAME_WIDTH),
+        )
         camera = CameraSession(this, binding.readerPreview, options, ::onFrame, ::onCameraError).also { it.start() }
     }
 

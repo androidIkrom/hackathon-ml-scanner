@@ -181,6 +181,39 @@ class ReaderReplayTest {
     @Test fun sizesChangingInsideTheLinesTilted() =
         mixedFonts("paragraph, sizes inside the lines, tilted 6°", INLINE, "Opening Hours") { tilt(styled(INLINE, shiftPx = it % 3), 6f) }
 
+    /**
+     * A laptop screen held in view (the user, 2026-10-13: the model name on the laptop was read, the text on its
+     * screen was not): a 1920 x 1080 screen of chat and code lines, 16 px text, filling 85 % of the frame's width, a
+     * little soft. Read at the frame size the reader asks the camera for.
+     */
+    @Test fun aLaptopScreen() {
+        val (w, h) = ReaderEngine.FRAME_WIDTH to ReaderEngine.FRAME_HEIGHT
+        val reads = replay("laptop screen, ${w}x$h", List(10) { laptop(w, h, shift = it % 3) })
+        val heard = reads.firstNotNullOfOrNull { it.full }.orEmpty()
+        val read = SCREEN.count { found(heard, it) >= 0 }
+        Log.i(TAG, "laptop screen: $read of ${SCREEN.size} lines read")
+        assertTrue("$read of ${SCREEN.size} lines read: \"$heard\"", read >= SCREEN.size * 8 / 10)
+    }
+
+    private fun laptop(w: Int, h: Int, shift: Int): Bitmap {
+        val screen = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
+        val c = Canvas(screen)
+        c.drawColor(Color.rgb(30, 30, 36))
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(225, 225, 225); textSize = 16f; typeface = Typeface.SANS_SERIF }
+        SCREEN.forEachIndexed { i, line -> c.drawText(line, 120f, 120f + i * 30f, paint) }
+        val frame = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val f = Canvas(frame)
+        f.drawColor(Color.rgb(70, 60, 50))
+        val sw = w * 0.85f
+        val sh = sw * 1080f / 1920f
+        val left = (w - sw) / 2 + shift * w / 480f
+        val top = (h - sh) / 2
+        f.drawBitmap(screen, null, android.graphics.RectF(left, top, left + sw, top + sh), Paint(Paint.FILTER_BITMAP_FLAG))
+        // A camera a little soft: down by a third and back.
+        val soft = Bitmap.createScaledBitmap(frame, w * 2 / 3, h * 2 / 3, true)
+        return Bitmap.createScaledBitmap(soft, w, h, true)
+    }
+
     private fun mixedFonts(scene: String, page: List<List<Run>> = MIXED, title: String = "Weekly Notes", frame: (Int) -> Bitmap) {
         val reads = replay(scene, List(10) { frame(it) })
         assertTrue("titled ${reads.firstNotNullOfOrNull { it.offer }}", reads.firstNotNullOfOrNull { it.offer }?.contains("'$title'") == true)
@@ -358,6 +391,19 @@ class ReaderReplayTest {
             listOf(Run("Thursday: pay the water bill", 18f, SANS_BOLD)),
             listOf(Run("Friday: the ", 20f, SERIF), Run("big", 20f, SERIF_BOLD), Run(" match starts at six", 20f, SERIF)),
             listOf(Run("Small print: offer ends on Sunday", 14f, SERIF)),
+        )
+
+        private val SCREEN = listOf(
+            "Reader offers one line from the laptop screen",
+            "The camera frame is small for screen text",
+            "Each line here is sixteen pixels high",
+            "Point the phone at the middle of the screen",
+            "Saved Messages and the chat list on the left",
+            "The text should be read from the top down",
+            "Live scan found a laptop and a white bottle",
+            "Say read to hear the whole screen",
+            "Nothing is sent anywhere: it all runs here",
+            "This is the last line of the laptop screen",
         )
 
         private val INLINE = listOf(

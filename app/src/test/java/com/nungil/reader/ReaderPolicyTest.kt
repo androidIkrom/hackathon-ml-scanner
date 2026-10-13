@@ -26,6 +26,9 @@ class ReaderPolicyTest {
         // Small print in a noisy camera frame came at 0.57 and was left out (replay, 2026-10-13).
         assertTrue(ReaderPolicy.readable(line("Small print: offer ends on Sunday", confidence = 0.57f)))
         assertFalse(ReaderPolicy.readable(line("fine print", height = 0.01f)))
+        // A laptop screen line, 10 px high in the reader's 1920 px frame (2026-10-13).
+        assertTrue(ReaderPolicy.readable(SeenLine("Saved Messages", 0.9f, 10f / 1920, 0.5f, 0.5f, frameHeight = 1920)))
+        assertFalse(ReaderPolicy.readable(SeenLine("Saved Messages", 0.9f, 6f / 1920, 0.5f, 0.5f, frameHeight = 1920)))
         assertTrue(ReaderPolicy.readable(line("A page at reading distance", height = 0.028f)))
         assertFalse(ReaderPolicy.readable(line("|||~~ .")))                // not letters
         assertTrue(ReaderPolicy.readable(line("출구 EXIT")))

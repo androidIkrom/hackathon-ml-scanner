@@ -62,6 +62,8 @@ class CameraSession(
         val keepBitmap: Boolean = false,
         /** Fixed detector score floor; null = per-label DetectionFilter with the saved settings. */
         val minScore: Float? = null,
+        /** The analysis frame asked of the camera (landscape, 4:3); the camera gives the nearest it has. */
+        val analysisSize: Size = Size(ANALYSIS_WIDTH, ANALYSIS_HEIGHT),
     )
 
     override var facing: Facing = options.facing
@@ -212,7 +214,7 @@ class CameraSession(
         val analysisSelector = ResolutionSelector.Builder()
             .setAspectRatioStrategy(fourByThree)
             .setResolutionStrategy(
-                ResolutionStrategy(Size(ANALYSIS_WIDTH, ANALYSIS_HEIGHT), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
+                ResolutionStrategy(options.analysisSize, ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER),
             )
             .build()
         val analysisBuilder = ImageAnalysis.Builder()
@@ -303,8 +305,8 @@ class CameraSession(
 
     companion object {
         const val DEFAULT_HFOV_DEG = 65f
-        private const val ANALYSIS_WIDTH = 640
-        private const val ANALYSIS_HEIGHT = 480
+        const val ANALYSIS_WIDTH = 640
+        const val ANALYSIS_HEIGHT = 480
 
         /** A focus distance older than this is no longer where the lens is. */
         private const val FOCUS_FRESH_MS = 1_500L

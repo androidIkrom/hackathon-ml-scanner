@@ -19,6 +19,8 @@ data class SeenLine(
     val width: Float = 0f,
     /** ML Kit's block (a paragraph, a piece of a column) the line is in; -1 when not known. */
     val block: Int = -1,
+    /** The frame's height in pixels, for the line's height in pixels. */
+    val frameHeight: Int = 640,
 )
 
 /**
@@ -155,16 +157,16 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
         const val MIN_LETTER_SHARE = 0.6f
 
         /**
-         * Text lower than this share of the frame height is too small to read well. It was 0.03: lines of a page
-         * at reading distance are 0.028-0.033 high, so they were read one moment and dropped the next (replay
-         * test, 2026-10-12). Small print next to big text is left out by [RELATIVE_MIN_HEIGHT] instead.
+         * Text lower than this many pixels is too small to read well. It was a share of the frame (0.03, then
+         * 0.015 of 640 px): lines of a page at reading distance are 18-21 px, and in the bigger frame the reader
+         * now asks for, the text of a laptop screen is 8-12 px (replay, 2026-10-12 and 2026-10-13).
          */
-        const val MIN_HEIGHT = 0.015f
+        const val MIN_HEIGHT_PX = 8f
 
         /** Whether one line is worth reading at all. */
         fun readable(line: SeenLine): Boolean {
             val text = line.text.trim()
-            if (text.length < MIN_LINE_CHARS || line.confidence < MIN_CONFIDENCE || line.height < MIN_HEIGHT) return false
+            if (text.length < MIN_LINE_CHARS || line.confidence < MIN_CONFIDENCE || line.height * line.frameHeight < MIN_HEIGHT_PX) return false
             val chars = text.filterNot { it.isWhitespace() }
             return chars.count { it.isLetterOrDigit() } >= chars.length * MIN_LETTER_SHARE
         }
@@ -212,7 +214,7 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
                 val dy = l.ys.average().toFloat() - height / 2
                 SeenLine(
                     l.text, l.confidence, tall / height, (width / 2 + dx * c - dy * s) / width, (height / 2 + dx * s + dy * c) / height,
-                    wide / width, l.block,
+                    wide / width, l.block, height.toInt(),
                 )
             }
         }

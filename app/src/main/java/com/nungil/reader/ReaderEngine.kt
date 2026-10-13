@@ -70,7 +70,14 @@ class ReaderEngine : Closeable {
         recognizer.close()
     }
 
-    private companion object {
-        const val TIMEOUT_S = 2L
+    companion object {
+        private const val TIMEOUT_S = 2L
+
+        /**
+         * The upright frame the reader asks the camera for. At 480 x 640 the text of a laptop screen was 2-4 px high
+         * and none of it was read (replay "laptop screen", 2026-10-13).
+         */
+        const val FRAME_WIDTH = 1440
+        const val FRAME_HEIGHT = 1920
     }
 }
