@@ -13,6 +13,7 @@
     <string name="settings_model_light">가벼움</string>
     <string name="settings_model_fast">빠름</string>
     <string name="settings_model_accurate">정확함</string>
+    <string name="settings_model_yolo">YOLO26</string>
     <string name="settings_score">얼마나 확실할 때 말할까요</string>
     <string name="settings_score_hint">높을수록 실수는 줄지만 찾는 물건도 줄어요.</string>
     <string name="settings_speech">결과 말하기</string>

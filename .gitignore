@@ -14,3 +14,5 @@ tools/reader-photos/cache/
 app/src/androidTest/assets/photos/
 tools/desk-photos/cache/
 app/src/androidTest/assets/desks/
+tools/yolo26/.venv/
+tools/yolo26/out/

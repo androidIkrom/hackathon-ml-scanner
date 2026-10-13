@@ -11,7 +11,7 @@ object SettingPhrases {
     fun done(change: SettingChange, lang: Lang, nextTime: Boolean = false): String {
         val ko = lang == Lang.KO
         val text = when (change) {
-            is SettingChange.Model -> if (ko) "모델: ${modelKo(change.choice)}." else "Model: ${change.choice.name.lowercase()}."
+            is SettingChange.Model -> if (ko) "모델: ${modelKo(change.choice)}." else "Model: ${if (change.choice == ModelChoice.YOLO) "YOLO26" else change.choice.name.lowercase()}."
             is SettingChange.Compute -> if (ko) "프로세서: ${computeName(change.compute)}." else "Processor: ${computeName(change.compute)}."
             is SettingChange.Speech -> onOff(change.on, ko, "Speaking results", "결과 말하기")
             is SettingChange.Colors -> onOff(change.on, ko, "Colours", "색 말하기")
@@ -45,6 +45,7 @@ object SettingPhrases {
         ModelChoice.LIGHT -> "가벼움"
         ModelChoice.FAST -> "빠름"
         ModelChoice.ACCURATE -> "정확"
+        ModelChoice.YOLO -> "욜로"
     }
 
     private fun computeName(c: Compute) = c.name

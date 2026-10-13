@@ -2,8 +2,8 @@ package com.nungil.contract
 
 enum class Compute { CPU, GPU }
 
-/** LIGHT = SSD MobileNet V2, FAST = EfficientDet-Lite0, ACCURATE = EfficientDet-Lite2. */
-enum class ModelChoice { LIGHT, FAST, ACCURATE }
+/** LIGHT = SSD MobileNet V2, FAST = EfficientDet-Lite0, ACCURATE = EfficientDet-Lite2, YOLO = Ultralytics YOLO26n. */
+enum class ModelChoice { LIGHT, FAST, ACCURATE, YOLO }
 
 /** Scan settings. Persisted by com.nungil.data.SettingsStore (A); edited by the Settings screen (I). */
 data class ScanSettings(

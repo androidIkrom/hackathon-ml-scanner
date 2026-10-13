@@ -20,7 +20,11 @@ object DetectorPlan {
         ModelChoice.LIGHT -> "ssd-mobilenet-v2.tflite"
         ModelChoice.FAST -> "efficientdet-lite0.tflite"
         ModelChoice.ACCURATE -> "efficientdet-lite2.tflite"
+        ModelChoice.YOLO -> YOLO_MODEL_FILE
     }
+
+    /** Ultralytics YOLO26n, made by tools/yolo26/export.py (not downloaded with the others: it is exported here). */
+    const val YOLO_MODEL_FILE = "yolo26n.tflite"
 
     /** GPU is always followed by CPU as the fallback; int8 models never touch the GPU. */
     fun delegateOrder(compute: Compute, modelFile: String): List<Compute> = when {

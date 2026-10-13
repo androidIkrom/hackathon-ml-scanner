@@ -213,8 +213,23 @@ waits until the old one has closed its tasks.
   (`DetectionFilter.minScoreFor(Detection, …)`). After it: the wall goes, the rest as before. The phone's
   BedDiagnostics frames, when the user takes Live to that desk again, will show whether the "gray bed" was one.
 
-### After the plan: YOLO26 (user, 2026-10-13)
-When this plan is done, add Ultralytics YOLO26 to the project as a detector. To look at first: its licence (Ultralytics
-models are AGPL-3.0 unless an Enterprise licence is bought; the app's licence and distribution), the export to
-TFLite / LiteRT that MediaPipe's ObjectDetector or a plain Interpreter can run, its classes (COCO 80, as now), speed
-and memory on the Infinix next to EfficientDet-Lite2, and where it fits (`DetectorPlan`, `SharedModels` key by file).
+### YOLO26 (user, 2026-10-13; branch `yolo26`)
+- Licence: Nungil is AGPL-3.0 from now (user's choice; `LICENSE`, README "Credits and licences"), as YOLO26 is.
+- Export: `tools/yolo26/export.py` in WSL (`run-export.sh`, `setup-litert.sh`): LiteRT export runs on Linux or macOS
+  only, needs `nms=False` for the end-to-end head ([1, 300, 6]: x1, y1, x2, y2 in input pixels, score, class), and
+  `litert-torch` with the CPU torch (its default pulls CUDA wheels that fill WSL's /tmp). Input [1, 3, 640, 640].
+  The model (9.5 MB) goes to `app/src/main/assets/yolo26n.tflite`, not in git and not downloaded by the build:
+  without it, the YOLO choice falls back to EfficientDet-Lite2.
+- App: `core/scan/YoloOutput` (letterbox fit, rows to detections, COCO names; unit-tested), `scan/YoloDetector`
+  (TFLite interpreter, CPU, 4 threads), `SharedDetector` gives detections for both kinds, `ModelChoice.YOLO`
+  (Settings "YOLO26", voice "model YOLO" / "욜로 모델").
+- Emulator, 42 desk frames (`DetectorPhotosTest.yoloNextToLite2`): YOLO26n is surer (laptops 0.91-0.98 against
+  0.77-0.86) and finds what Lite2 missed (hands, a phone and a laptop seen from above; a bottle on a shelf; two
+  laptops), misses one laptop at the edge Lite2 had at 0.70; 118 ms a frame against 101 ms (emulator CPU).
+- Phone (user: "phoneda boshlayvering"), the same 42 frames: on the CPU YOLO26 took 379 ms a frame against Lite2's
+  234 ms on the GPU. Now exported 640 high and 480 wide (Live's frame as it is: no bars, a quarter less work) and on
+  the TFLite GPU delegate (`tensorflow-lite-gpu` 2.17, a first frame proves it, else the CPU): 155 ms against
+  Lite2's 135 ms on the GPU in the same run; YOLO26 would say laptop 20, bottle 7, cup 5, phone 4 against Lite2's
+  18, 4, 7, 2.
+- Left: a live check with "YOLO26" chosen in Settings; then whether it becomes the default; hosting the exported
+  model (e.g. a GitHub release) so a build elsewhere gets it.

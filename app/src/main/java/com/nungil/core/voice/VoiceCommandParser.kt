@@ -283,6 +283,7 @@ object VoiceCommandParser {
     private fun setting(s: Said): VoiceCommand? {
         val off = s.has("off", "disable", "stop", "no") || s.ko("꺼", "끄", "끄기", "중지")
         val change = when {
+            (s.has("model") || s.ko("모델")) && (s.has("yolo", "yellow", "yolov26") || s.ko("욜로")) -> SettingChange.Model(ModelChoice.YOLO)
             (s.has("model") || s.ko("모델")) && (s.has("accurate", "precise", "best") || s.ko("정확")) -> SettingChange.Model(ModelChoice.ACCURATE)
             (s.has("model") || s.ko("모델")) && (s.has("fast", "quick") || s.ko("빠른", "빠르")) -> SettingChange.Model(ModelChoice.FAST)
             (s.has("model") || s.ko("모델")) && (s.has("light", "small") || s.ko("가벼운", "가볍")) -> SettingChange.Model(ModelChoice.LIGHT)

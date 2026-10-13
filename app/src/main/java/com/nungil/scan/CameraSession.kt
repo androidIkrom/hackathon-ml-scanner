@@ -26,7 +26,6 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
-import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.nungil.contract.Detection
 import com.nungil.contract.Facing
 import com.nungil.contract.ScanSettings
@@ -34,7 +33,6 @@ import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.VisionFrame
 import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
-import com.nungil.core.scan.FrameMath
 import com.nungil.core.scan.InferenceStats
 import com.nungil.core.scan.ModelShelf
 import com.nungil.data.SettingsStore
@@ -245,8 +243,8 @@ class CameraSession(
             val inferenceMs = SystemClock.uptimeMillis() - started
             if (options.detect) {
                 stats.add(inferenceMs)?.let { average ->
-                    val built = detector?.model?.built
-                    Log.i(TAG, "Inference $average ms average on ${built?.compute} (${built?.modelFile})")
+                    val shared = detector?.model
+                    Log.i(TAG, "Inference $average ms average on ${shared?.compute} (${shared?.modelFile})")
                 }
             }
             val frame = VisionFrame(
@@ -289,16 +287,7 @@ class CameraSession(
             return emptyList()
         }
         // Not inside ModelLock.run: the detector's own thread takes it (SharedDetector).
-        val result = shared.detect(BitmapImageBuilder(bitmap).build())
-        val raw = result.detections().mapNotNull { d ->
-            val category = d.categories().firstOrNull() ?: return@mapNotNull null
-            val r = d.boundingBox()
-            Detection(
-                category.categoryName(),
-                category.score(),
-                FrameMath.normalizeBox(r.left, r.top, r.right, r.bottom, bitmap.width, bitmap.height),
-            )
-        }
+        val raw = shared.detect(bitmap)
         val floor = options.minScore
         return if (floor != null) DetectionFilter.keepAtLeast(raw, floor) else DetectionFilter.keep(raw, settings.minScore)
     }
