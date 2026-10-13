@@ -28,6 +28,9 @@ import java.nio.channels.FileChannel
  */
 class YoloDetector(context: Context, modelFile: String, wantGpu: Boolean) : Closeable {
     private var gpu: GpuDelegate? = null
+    /** The GPU's compiled model is kept here between starts (3 s a start without it on the phone). */
+    private val gpuCache = java.io.File(context.codeCacheDir, "gpu-" + modelFile.substringBeforeLast('.')).apply { mkdirs() }
+    private val gpuToken = modelFile.substringBeforeLast('.') + "-" + modelFileSize(context, modelFile)
     private val interpreter: Interpreter = open(map(context, modelFile), wantGpu)
 
     /** The model runs on the GPU. */
@@ -61,7 +64,7 @@ class YoloDetector(context: Context, modelFile: String, wantGpu: Boolean) : Clos
             try {
                 val list = CompatibilityList()
                 if (list.isDelegateSupportedOnThisDevice) {
-                    val delegate = GpuDelegate(list.bestOptionsForThisDevice)
+                    val delegate = GpuDelegate(list.bestOptionsForThisDevice.setSerializationParams(gpuCache.path, gpuToken))
                     val onGpu = Interpreter(model, Interpreter.Options().addDelegate(delegate))
                     try {
                         // A first frame proves it: some GPUs take the model and fail on it.
@@ -133,6 +136,8 @@ class YoloDetector(context: Context, modelFile: String, wantGpu: Boolean) : Clos
         /** Ultralytics pads with this grey. */
         const val PAD = 114
         const val NORMALIZED_MAX = 1.5f
+
+        fun modelFileSize(context: Context, file: String): Long = context.assets.openFd(file).use { it.declaredLength }
 
         fun map(context: Context, file: String): MappedByteBuffer =
             context.assets.openFd(file).use { fd ->

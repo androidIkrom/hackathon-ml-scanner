@@ -9,7 +9,11 @@ enum class ModelChoice { LIGHT, FAST, ACCURATE, YOLO }
 data class ScanSettings(
     val facing: Facing = Facing.BACK,
     val compute: Compute = Compute.GPU,
-    val model: ModelChoice = ModelChoice.ACCURATE,
+    /**
+     * YOLO26 by default (the user, 2026-10-13): on 42 desk frames it was surer than EfficientDet-Lite2 (0.93 against
+     * 0.83 for the same things) and found more, at 155 ms a frame on the phone's GPU against 135 ms.
+     */
+    val model: ModelChoice = ModelChoice.YOLO,
     val minScore: Float = DEFAULT_MIN_SCORE,
     val speechOn: Boolean = true,
     val colorsOn: Boolean = true,

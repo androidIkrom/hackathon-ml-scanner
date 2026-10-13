@@ -1,13 +1,20 @@
 package com.nungil.data
 
 import android.content.Context
+import com.nungil.contract.ModelChoice
 import com.nungil.contract.ScanSettings
+
+/** Which saved model moves to YOLO26 the one time it becomes the default: Accurate (the old default) or none saved. */
+object SettingsDefaults {
+    fun movesToYolo(savedModel: String?): Boolean = savedModel == null || savedModel == ModelChoice.ACCURATE.name
+}
 
 /** Remembers the last scan settings in SharedPreferences "scan_settings". */
 class SettingsStore(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("scan_settings", Context.MODE_PRIVATE)
 
     fun load(): ScanSettings {
+        movedToYolo()
         val d = ScanSettings()
         return ScanSettings(
             facing = enumOr(prefs.getString(KEY_FACING, null), d.facing),
@@ -43,6 +50,17 @@ class SettingsStore(context: Context) {
         return { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
+    /**
+     * Once: a model saved as Accurate, the default until YOLO26 (2026-10-13), becomes YOLO26, as the user asked. A
+     * model chosen after that stays as chosen.
+     */
+    private fun movedToYolo() {
+        if (prefs.getBoolean(KEY_MOVED_TO_YOLO, false)) return
+        val edit = prefs.edit().putBoolean(KEY_MOVED_TO_YOLO, true)
+        if (SettingsDefaults.movesToYolo(prefs.getString(KEY_MODEL, null))) edit.putString(KEY_MODEL, ModelChoice.YOLO.name)
+        edit.apply()
+    }
+
     private inline fun <reified E : Enum<E>> enumOr(name: String?, fallback: E): E =
         enumValues<E>().firstOrNull { it.name == name } ?: fallback
 
@@ -53,5 +71,6 @@ class SettingsStore(context: Context) {
         const val KEY_MIN_SCORE = "min_score"
         const val KEY_SPEECH = "speech_on"
         const val KEY_COLORS = "colors_on"
+        const val KEY_MOVED_TO_YOLO = "moved_to_yolo"
     }
 }
