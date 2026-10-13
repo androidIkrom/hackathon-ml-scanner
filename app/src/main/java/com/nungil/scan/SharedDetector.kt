@@ -27,7 +27,7 @@ class SharedDetector private constructor(
     val modelFile: String,
 ) : Closeable {
     /** What the detector runs on, for the log. */
-    val compute: Compute get() = built?.compute ?: Compute.CPU
+    val compute: Compute get() = built?.compute ?: if (yolo?.onGpu == true) Compute.GPU else Compute.CPU
 
     /** Every thing found in [frame], at the detector's own threshold. */
     fun detect(frame: Bitmap): List<Detection> = onThread(thread) {
@@ -54,7 +54,7 @@ class SharedDetector private constructor(
             try {
                 return onThread(thread) {
                     if (DetectorPlanFiles.isYolo(modelFile)) {
-                        SharedDetector(thread, null, ModelLock.shared.load { YoloDetector(context, modelFile) }, modelFile)
+                        SharedDetector(thread, null, ModelLock.shared.load { YoloDetector(context, modelFile, compute == Compute.GPU) }, modelFile)
                     } else {
                         SharedDetector(thread, DetectorFactory(context).create(modelFile, compute), null, modelFile)
                     }

@@ -11,6 +11,8 @@ import com.nungil.contract.Detection
 import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.YoloOutput
 import org.tensorflow.lite.Interpreter
+import org.tensorflow.lite.gpu.CompatibilityList
+import org.tensorflow.lite.gpu.GpuDelegate
 import java.io.Closeable
 import java.io.FileInputStream
 import java.nio.ByteBuffer
@@ -19,12 +21,17 @@ import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
 /**
- * Ultralytics YOLO26n (AGPL-3.0) on the TFLite interpreter, CPU (tools/yolo26/export.py makes the model). The frame
- * is fitted into the square input with grey bars (YoloOutput.fit); the model gives one row per thing with no
- * overlaps (YOLO26 needs no NMS). One call at a time: SharedDetector runs it on its own thread.
+ * Ultralytics YOLO26n (AGPL-3.0) on the TFLite interpreter (tools/yolo26/export.py makes the model), on the GPU when
+ * [wantGpu] and the phone takes it, else on the CPU. The frame is fitted into the input with grey bars where the
+ * shapes differ (YoloOutput.fit); the model gives one row per thing with no overlaps (YOLO26 needs no NMS). Built,
+ * used and closed on one thread, one call at a time: SharedDetector's.
  */
-class YoloDetector(context: Context, modelFile: String) : Closeable {
-    private val interpreter = Interpreter(map(context, modelFile), Interpreter.Options().setNumThreads(THREADS))
+class YoloDetector(context: Context, modelFile: String, wantGpu: Boolean) : Closeable {
+    private var gpu: GpuDelegate? = null
+    private val interpreter: Interpreter = open(map(context, modelFile), wantGpu)
+
+    /** The model runs on the GPU. */
+    val onGpu: Boolean get() = gpu != null
     private val inShape = interpreter.getInputTensor(0).shape()
 
     /** The LiteRT export takes [1, 3, h, w] (colour planes first); [1, h, w, 3] is read too. */
@@ -45,7 +52,39 @@ class YoloDetector(context: Context, modelFile: String) : Closeable {
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
 
     init {
-        Log.i("Nungil", "YOLO $modelFile: input ${inShape.contentToString()}, output ${outShape.contentToString()}")
+        Log.i("Nungil", "YOLO $modelFile on ${if (onGpu) "GPU" else "CPU"}: input ${inShape.contentToString()}, output ${outShape.contentToString()}")
+    }
+
+    /** The GPU when asked for and it runs a first frame; else the CPU. */
+    private fun open(model: MappedByteBuffer, wantGpu: Boolean): Interpreter {
+        if (wantGpu) {
+            try {
+                val list = CompatibilityList()
+                if (list.isDelegateSupportedOnThisDevice) {
+                    val delegate = GpuDelegate(list.bestOptionsForThisDevice)
+                    val onGpu = Interpreter(model, Interpreter.Options().addDelegate(delegate))
+                    try {
+                        // A first frame proves it: some GPUs take the model and fail on it.
+                        val inp = onGpu.getInputTensor(0)
+                        val out = onGpu.getOutputTensor(0)
+                        onGpu.run(
+                            ByteBuffer.allocateDirect(inp.numBytes()).order(ByteOrder.nativeOrder()),
+                            ByteBuffer.allocateDirect(out.numBytes()).order(ByteOrder.nativeOrder()),
+                        )
+                        gpu = delegate
+                        return onGpu
+                    } catch (t: Throwable) {
+                        onGpu.close()
+                        delegate.close()
+                        throw t
+                    }
+                }
+                Log.i("Nungil", "YOLO: this phone's GPU is not supported, CPU instead")
+            } catch (t: Throwable) {
+                Log.i("Nungil", "YOLO could not run on the GPU (${t.message}), CPU instead")
+            }
+        }
+        return Interpreter(model, Interpreter.Options().setNumThreads(THREADS))
     }
 
     /** Things in [frame] scoring DetectionFilter.DETECTOR_THRESHOLD or more, boxes as shares of the frame. */
@@ -83,7 +122,10 @@ class YoloDetector(context: Context, modelFile: String) : Closeable {
         )
     }
 
-    override fun close() = interpreter.close()
+    override fun close() {
+        interpreter.close()
+        gpu?.close()
+    }
 
     private companion object {
         const val THREADS = 4

@@ -95,7 +95,9 @@ class DetectorPhotosTest {
         val names = assets.list("desks").orEmpty().sorted()
         if (names.isEmpty()) return
         val models = listOf(ModelChoice.ACCURATE, ModelChoice.YOLO)
-        val leases = models.map { SharedModels.detector(context, DetectorPlan.modelFile(it), Compute.CPU) }
+        // -e compute gpu: both on the GPU, as Live runs them on the phone (each falls back to the CPU if it cannot).
+        val compute = if (InstrumentationRegistry.getArguments().getString("compute") == "gpu") Compute.GPU else Compute.CPU
+        val leases = models.map { SharedModels.detector(context, DetectorPlan.modelFile(it), compute) }
         val said = models.associateWith { HashMap<String, Int>() }
         val ms = models.associateWith { mutableListOf<Long>() }
         try {
@@ -117,7 +119,7 @@ class DetectorPhotosTest {
         }
         for ((i, model) in models.withIndex()) {
             val t = ms.getValue(model).sorted()
-            Log.i(TAG, "${leases[i].model.modelFile}: median ${t[t.size / 2]} ms; would say " +
+            Log.i(TAG, "${leases[i].model.modelFile} on ${leases[i].model.compute}: median ${t[t.size / 2]} ms; would say " +
                 said.getValue(model).entries.sortedByDescending { it.value }.joinToString { "${it.key} ${it.value}" })
         }
     }

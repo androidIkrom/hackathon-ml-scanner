@@ -226,5 +226,10 @@ waits until the old one has closed its tasks.
 - Emulator, 42 desk frames (`DetectorPhotosTest.yoloNextToLite2`): YOLO26n is surer (laptops 0.91-0.98 against
   0.77-0.86) and finds what Lite2 missed (hands, a phone and a laptop seen from above; a bottle on a shelf; two
   laptops), misses one laptop at the edge Lite2 had at 0.70; 118 ms a frame against 101 ms (emulator CPU).
-- Left: speed on the phone (CPU; the GPU delegate if it is slow), then whether YOLO becomes the default; hosting
-  the exported model (e.g. a GitHub release) so a build elsewhere gets it.
+- Phone (user: "phoneda boshlayvering"), the same 42 frames: on the CPU YOLO26 took 379 ms a frame against Lite2's
+  234 ms on the GPU. Now exported 640 high and 480 wide (Live's frame as it is: no bars, a quarter less work) and on
+  the TFLite GPU delegate (`tensorflow-lite-gpu` 2.17, a first frame proves it, else the CPU): 155 ms against
+  Lite2's 135 ms on the GPU in the same run; YOLO26 would say laptop 20, bottle 7, cup 5, phone 4 against Lite2's
+  18, 4, 7, 2.
+- Left: a live check with "YOLO26" chosen in Settings; then whether it becomes the default; hosting the exported
+  model (e.g. a GitHub release) so a build elsewhere gets it.

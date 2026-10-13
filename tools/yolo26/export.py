@@ -1,6 +1,6 @@
 """Export Ultralytics YOLO26n to TFLite (LiteRT) for the app (AGPL-3.0, like the app since 2026-10-13).
 
-Makes app/src/main/assets/yolo26n.tflite (not in git, like the other models) and prints the model's input and output
+Makes app/src/main/assets/yolo26n.tflite (not in git, like the other models), input 640 high and 480 wide and prints the model's input and output
 shapes and its first rows on a test picture, so the app's reading of them (core/scan/YoloOutput) can be checked.
 
 The LiteRT export runs on Linux or macOS only; on Windows, in WSL:
@@ -27,7 +27,8 @@ def main():
     os.chdir(WORK)
     model = YOLO("yolo26n.pt")
     # nms=False keeps the end-to-end head: one row per thing, no NMS in the app (left out, the raw 84 x 8400 comes out).
-    path = str(model.export(format="litert", imgsz=640, nms=False))
+    # 640 high, 480 wide: Live's upright frame as it is, no grey bars and a quarter less work than 640 x 640.
+    path = str(model.export(format="litert", imgsz=[640, 480], nms=False))
     print("exported:", path)
     tflite = path if path.endswith(".tflite") else sorted(glob.glob(os.path.join(path, "*.tflite")))[0]
     shutil.copyfile(tflite, ASSET)
