@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.core.graphics.ColorUtils
 import androidx.core.view.ViewCompat
+import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
@@ -158,6 +159,8 @@ class ItemEnrollFragment : Fragment(), VoiceHandler, CameraScreen {
                 else -> resumeLearning()
             }
         }
+        // "No, not this": the same as saying "no" to "Is this it?"; there only while the screen looks for the thing.
+        binding.itemEnrollNo.setOnClickListener { notThat() }
         gate.attach(binding.itemEnrollPermission)
         val primary = requireContext().resolveColorAttr(R.attr.ngPrimary)
         maskFill = ColorUtils.setAlphaComponent(primary, MASK_FILL_ALPHA)
@@ -269,6 +272,7 @@ class ItemEnrollFragment : Fragment(), VoiceHandler, CameraScreen {
         if (phase != Phase.LOOKING || _binding == null) return
         (activity as? MainActivity)?.dropWords()
         phase = Phase.LEARNING
+        binding.itemEnrollNo.isVisible = false
         running = true
         asked = false
         waitUntilMs = SystemClock.elapsedRealtime() + PROMPT_WAIT_MS
@@ -283,6 +287,8 @@ class ItemEnrollFragment : Fragment(), VoiceHandler, CameraScreen {
     /** Main thread: the thing in view is not the item. Looking starts again. */
     private fun notThat() {
         if (phase != Phase.LOOKING) return
+        // Answered by the button: the microphone no longer waits for "no".
+        (activity as? MainActivity)?.dropWords()
         asked = false
         waitUntilMs = SystemClock.elapsedRealtime() + PROMPT_WAIT_MS
         lastHintMs = waitUntilMs
