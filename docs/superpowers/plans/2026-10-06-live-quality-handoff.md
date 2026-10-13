@@ -206,6 +206,13 @@ waits until the old one has closed its tasks.
   Emulator: `Pixel_8_2`, headless, `-memory 1536`; Play Store, Google app and other heavy apps disabled on it
   (`pm disable-user`) or the test process was killed for memory.
 
+- Task 5 on real desk photos, on the emulator (2026-10-13): `tools/desk-photos/make_frames.py` (14 Commons desk
+  photos, three portrait views each, 480 x 640) and androidTest `DetectorPhotosTest` (Lite2 on CPU). No "bed" in 42
+  frames, but a plain wall was "refrigerator 0.72" over 59 % of a frame. Rule (user: yes): bed, couch, refrigerator,
+  dining table and oven filling half the view or more need a tenth more (0.8 at the default)
+  (`DetectionFilter.minScoreFor(Detection, …)`). After it: the wall goes, the rest as before. The phone's
+  BedDiagnostics frames, when the user takes Live to that desk again, will show whether the "gray bed" was one.
+
 ### After the plan: YOLO26 (user, 2026-10-13)
 When this plan is done, add Ultralytics YOLO26 to the project as a detector. To look at first: its licence (Ultralytics
 models are AGPL-3.0 unless an Enterprise licence is bought; the app's licence and distribution), the export to

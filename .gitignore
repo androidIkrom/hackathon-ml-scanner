@@ -12,3 +12,5 @@ app/src/main/assets/*.task
 *.log
 tools/reader-photos/cache/
 app/src/androidTest/assets/photos/
+tools/desk-photos/cache/
+app/src/androidTest/assets/desks/
