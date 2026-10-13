@@ -117,7 +117,9 @@ class CameraSession(
     private var preview: Preview? = null
     private var analysis: ImageAnalysis? = null
     private var heading: HeadingProvider? = null
+    @Volatile
     private var settings = ScanSettings()
+    private var stopListening: (() -> Unit)? = null
 
     // Touched only on the analysis thread.
     private var detector: DetectorFactory.Built? = null
@@ -129,7 +131,10 @@ class CameraSession(
         if (running) return
         val context = fragment.requireContext().applicationContext
         appContext = context
-        settings = SettingsStore(context).load()
+        val store = SettingsStore(context)
+        settings = store.load()
+        // "More sure" / "less sure" said while the camera runs: taken at the next frame.
+        stopListening = store.onMinScore { score -> settings = settings.copy(minScore = score) }
         executor = Executors.newSingleThreadExecutor()
         heading = HeadingProvider(context).also { it.start() }
         fov = FovReader.read(context, facing)
@@ -161,6 +166,8 @@ class CameraSession(
     /** Call from onDestroyView. Waits at most 2 s for the analysis thread. */
     fun stop() {
         running = false
+        stopListening?.invoke()
+        stopListening = null
         heading?.stop()
         heading = null
         val p = provider

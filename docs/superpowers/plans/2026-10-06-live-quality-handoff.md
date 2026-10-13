@@ -177,9 +177,12 @@ waits until the old one has closed its tasks.
     waiting offer takes the fuller reading of the same text. Open.
 
 ### Later
-- "Find my charging" said "Looking for My.": the first guess matched the saved *person* "My" (a filler-word name)
-  before the second guess "Find my charger" was tried. `SearchResolver.resolve(text, guesses, …)` should try the
-  other guesses for a non-filler name before falling back to a filler-word name.
-- Stage 4 (frame source: one camera pipeline, one model instance per kind) — spec not written yet.
-- "Delete <name>" by voice on the Saved list (said "That does not work on this screen").
-- "How sure before speaking" by voice (min score; default 0.7 hides detections at 0.5–0.69).
+- Done: "Find my charging" (1226347), "Delete <name>" / "Open <name>" by voice (1226347), Task 4 (PR #62 merged
+  2026-10-13; main merged in through PR #63; the ruleset now takes changes to `speed-laptop` only by PR).
+- "How sure before speaking" by voice (2026-10-13, branch `live-quality-2`): "more sure" / "less sure" / "say more"
+  move it by 10, "sureness 50" / "confidence sixty" set it, inside the slider's 30-70 %; Korean "더 확실하게",
+  "덜 확실하게", "확신 50". Said back ("Sureness 60 percent: more things, some may be wrong."; at the end: "Already
+  the most sure: 70 percent."). An open camera takes it at the next frame (`SettingsStore.onMinScore`, listened to
+  by `CameraSession`). Unit tests 982; androidTest `SettingsStoreTest` on the phone. Not yet said live.
+- Stage 4: spec draft `docs/superpowers/specs/2026-10-13-shared-models-design.md` (4a one instance per model kind,
+  4b one camera pipeline later); waiting for the user's answers.

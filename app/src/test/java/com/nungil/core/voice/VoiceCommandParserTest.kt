@@ -249,5 +249,20 @@ class VoiceCommandParserTest {
         assertEquals(SettingChange.Compute(Compute.CPU), setting("processor CPU"))
     }
 
+    @Test fun surenessByVoice() {
+        // "How sure before speaking": the slider only, 70 % hid things the detector gave at 0.5-0.69 (plan, Later).
+        assertEquals(SettingChange.Sureness(by = 10), setting("more sure"))
+        assertEquals(SettingChange.Sureness(by = 10), setting("be more certain"))
+        assertEquals(SettingChange.Sureness(by = -10), setting("less sure"))
+        assertEquals(SettingChange.Sureness(by = -10), setting("say more"))
+        assertEquals(SettingChange.Sureness(to = 50), setting("sureness 50"))
+        assertEquals(SettingChange.Sureness(to = 60), setting("confidence sixty percent"))
+        assertEquals(SettingChange.Sureness(by = 10), setting("더 확실하게"))
+        assertEquals(SettingChange.Sureness(by = -10), setting("덜 확실하게"))
+        assertEquals(SettingChange.Sureness(to = 50), setting("확신 50"))
+        // Not a setting: no "more", "less" or number.
+        assertEquals(null, setting("are you sure"))
+    }
+
     @Test fun readTextIsStillReadText() = assertEquals(VoiceCommand.ReadText, p("read this"))
 }

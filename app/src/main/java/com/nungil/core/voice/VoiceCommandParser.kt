@@ -292,9 +292,29 @@ object VoiceCommandParser {
             s.seq("read", "what", "i", "touch") || s.seq("voice", "guide") || s.ko("터치하면읽") -> SettingChange.VoiceGuide(!off)
             s.has("colours", "colors", "colour", "color") || s.ko("색말하기", "색깔") -> SettingChange.Colors(!off)
             s.seq("speak", "results") || s.seq("speech", "on") || s.seq("speech", "off") || s.ko("결과말하기") -> SettingChange.Speech(!off)
-            else -> null
+            else -> sureness(s)
         }
         return change?.let { VoiceCommand.ChangeSetting(it) }
+    }
+
+    private val tens = mapOf("thirty" to 30, "forty" to 40, "fifty" to 50, "sixty" to 60, "seventy" to 70)
+
+    /**
+     * "More sure" / "less sure" / "say more" / "sureness 50" / "confidence sixty percent"; "더 확실하게", "덜 확실하게",
+     * "확신 50". A sentence with "sure" and no "more", "less" or number ("are you sure") is not one.
+     */
+    private fun sureness(s: Said): SettingChange.Sureness? {
+        val sure = s.has("sure", "sureness", "certain", "confidence", "careful") || s.ko("확신", "확실")
+        val number = s.words.firstNotNullOfOrNull { w -> w.toIntOrNull() ?: tens[w] }
+        return when {
+            sure && number != null -> SettingChange.Sureness(to = number)
+            s.ko("덜확실", "덜확신") -> SettingChange.Sureness(by = -10)
+            s.ko("더확실", "더확신") -> SettingChange.Sureness(by = 10)
+            sure && s.has("more") -> SettingChange.Sureness(by = 10)
+            sure && s.has("less") -> SettingChange.Sureness(by = -10)
+            s.seq("say", "more") || s.seq("tell", "me", "more") -> SettingChange.Sureness(by = -10)
+            else -> null
+        }
     }
 
     /** "Clock directions on / off", "use clock directions", "directions in words"; "시계 방향 켜 / 꺼". */
