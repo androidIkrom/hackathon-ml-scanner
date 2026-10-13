@@ -517,7 +517,8 @@ class ScanFragment : Fragment(), CameraScreen {
      * frame. Queued, findings were said seconds after they were true (the logs).
      */
     private fun announceInView(inView: List<ScanSession.LiveObject>) {
-        val notices = inView.map { Notice("obj:${it.key}", it.text, 0, ahead = abs(it.bearing) <= Bearings.AHEAD_DEG) }
+        // The count is in the key: one more of a thing in view is news ("2 bottles at 12 o'clock").
+        val notices = inView.map { Notice("obj:${it.key}:${it.count}", it.text, 0, ahead = abs(it.bearing) <= Bearings.AHEAD_DEG) }
         val chosen = announcer.choose(SystemClock.elapsedRealtime(), notices) ?: return
         log.add(chosen.text)
         Log.i(TAG, "Live: \"${chosen.text}\"")

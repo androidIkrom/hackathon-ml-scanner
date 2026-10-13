@@ -19,6 +19,12 @@ class ObjectClusterer(val mergeDeg: Float = MERGE_DEG, val confirmFrames: Int = 
         var count = 0
         val colorVotes = LinkedHashMap<ColorName, Int>()
 
+        /** [atLeast][n]: frames that had n or more of it (index 0 unused). */
+        val atLeast = IntArray(MAX_STEADY + 1)
+
+        /** How many there are, seen in [STEADY_FRAMES] frames at least: one frame with a doubled box is not 2. */
+        fun steadyCount(): Int = (MAX_STEADY downTo 1).firstOrNull { atLeast[it] >= STEADY_FRAMES } ?: 1
+
         /** The winning colour: at least [MIN_COLOR_VOTES] votes and strictly more than any other colour. */
         fun color(): ColorName? {
             val sorted = colorVotes.entries.sortedByDescending { it.value }
@@ -56,14 +62,18 @@ class ObjectClusterer(val mergeDeg: Float = MERGE_DEG, val confirmFrames: Int = 
         for ((cluster, n) in inThisFrame) {
             cluster.framesSeen++
             cluster.count = max(cluster.count, n)
+            for (k in 1..minOf(n, MAX_STEADY)) cluster.atLeast[k]++
             if (cluster.framesSeen == confirmFrames) newlyConfirmed += cluster.summary()
         }
         return newlyConfirmed
     }
 
-    /** The confirmed clusters seen in the last frame, by a key that stays the same for the thing (the announcer's). */
+    /**
+     * The confirmed clusters seen in the last frame, by a key that stays the same for the thing (the announcer's), each
+     * with its steady count: Live says it again when that grows (a blue bottle next to the white one, 2026-10-13).
+     */
     fun inView(): List<Pair<Int, ObjectSummary>> =
-        lastFrame.filter { it.framesSeen >= confirmFrames }.map { it.id to it.summary() }
+        lastFrame.filter { it.framesSeen >= confirmFrames }.map { it.id to it.summary().copy(count = it.steadyCount()) }
 
     /** Every cluster seen in at least [confirmFrames] frames. Unconfirmed clusters are never spoken. */
     fun confirmed(): List<ObjectSummary> = clusters.filter { it.framesSeen >= confirmFrames }.map { it.summary() }
@@ -72,5 +82,7 @@ class ObjectClusterer(val mergeDeg: Float = MERGE_DEG, val confirmFrames: Int = 
         const val MERGE_DEG = 20f
         const val CONFIRM_FRAMES = 3
         const val MIN_COLOR_VOTES = 2
+        const val STEADY_FRAMES = 2
+        const val MAX_STEADY = 9
     }
 }

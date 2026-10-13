@@ -38,7 +38,8 @@ class ScanSession(
     )
 
     /** A confirmed thing in view: [key] stays the same for the thing; [bearing] is from where the user faces. */
-    data class LiveObject(val key: Int, val text: String, val bearing: Float)
+    /** One thing in view for Live; [count] grows when more of it are seen together (it is then said again). */
+    data class LiveObject(val key: Int, val text: String, val bearing: Float, val count: Int = 1)
 
     /**
      * [phrases] are notices to say in turn. [inView]: the confirmed things in view in a live scan, every frame; the
@@ -87,7 +88,7 @@ class ScanSession(
         clusterer.addFrame(detections)
         val inView = if (!announcesLive) emptyList() else clusterer.inView().map { (key, o) ->
             val bearing = AngleMath.diff(o.angle, rel)
-            LiveObject(key, SummaryBuilder.livePhrase(o.copy(angle = bearing), lang, style(), colorsOn), bearing)
+            LiveObject(key, SummaryBuilder.livePhrase(o.copy(angle = bearing), lang, style(), colorsOn), bearing, o.count)
         }
         if (!done && mode == ScanMode.FULL && !noCompass && startHeading != null) {
             done = coverage.isComplete() || nowMs - startedAtMs >= timeoutMs

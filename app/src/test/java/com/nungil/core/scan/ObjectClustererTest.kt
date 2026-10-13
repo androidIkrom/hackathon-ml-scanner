@@ -30,6 +30,19 @@ class ObjectClustererTest {
         assertEquals(2, c.confirmed().single().count)
     }
 
+    @Test fun inViewCountsASecondThingOnlyOnceItWasSeenTwice() {
+        // A blue bottle beside the white one joined its cluster and was never said (the logs, 2026-10-13). Live says
+        // the count when it grows, so one frame with a doubled box must not make it 2.
+        val c = ObjectClusterer()
+        repeat(3) { c.addFrame(listOf(chair(0f))) }
+        c.addFrame(listOf(chair(0f), chair(6f)))
+        assertEquals(1, c.inView().single().second.count)
+        c.addFrame(listOf(chair(0f)))
+        assertEquals(1, c.inView().single().second.count)
+        c.addFrame(listOf(chair(0f), chair(6f)))
+        assertEquals(2, c.inView().single().second.count)
+    }
+
     @Test fun unconfirmedClustersAreNeverReturned() {
         val c = ObjectClusterer()
         c.addFrame(listOf(chair(0f)))

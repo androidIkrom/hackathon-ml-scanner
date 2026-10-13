@@ -50,7 +50,8 @@ object SummaryBuilder {
      * user faces.
      */
     fun livePhrase(o: ObjectSummary, lang: Lang, style: DirectionStyle, colorsOn: Boolean = true): String {
-        val group = Group(o.label, o.isName, o.count, mutableListOf(o.color))
+        // More than one: they share one colour vote (a white and a blue bottle), so no colour is said.
+        val group = Group(o.label, o.isName, o.count, mutableListOf(o.color.takeIf { o.count == 1 }))
         val w = Bearings.say(AngleMath.diff(o.angle, 0f), style, lang)
         return if (lang == Lang.KO) {
             "$w ${groupText(group, lang, colorsOn, liveKo = true)}"
@@ -115,7 +116,8 @@ object SummaryBuilder {
 
     private fun groupText(g: Group, lang: Lang, colorsOn: Boolean, liveKo: Boolean): String {
         if (g.isName) return g.label
-        val useColor = colorsOn && ColorPolicy.hasColor(g.label)
+        // "2 orange oranges" (the logs, 2026-10-13): a colour that is the thing's own name is not said.
+        val useColor = colorsOn && ColorPolicy.hasColor(g.label) && ColorName.entries.none { it.en == g.label }
         val distinct = if (useColor) g.colors.filterNotNull().distinct() else emptyList()
         val single = distinct.singleOrNull()?.takeIf { g.colors.all { c -> c == it } }
         val mixed = if (distinct.size >= 2) distinct else null

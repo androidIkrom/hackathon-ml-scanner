@@ -123,6 +123,18 @@ class SummaryBuilderTest {
         assertEquals("a book", SummaryBuilder.describe(ObjectSummary("book", 1, null, 0f), Lang.EN))
     }
 
+    @Test fun liveSaysTwoThingsWithoutOneColourForBoth() {
+        // A white and a blue bottle are one cluster with one colour vote: "2 white bottles" would be wrong.
+        val two = ObjectSummary("bottle", 2, ColorName.WHITE, 0f)
+        assertEquals("2 bottles ahead", SummaryBuilder.livePhrase(two, Lang.EN, DirectionStyle.WORDS))
+    }
+
+    @Test fun aColourThatIsTheThingsNameIsNotSaid() {
+        // "2 orange oranges at 12 o'clock" (the logs, 2026-10-13).
+        assertEquals("2 oranges ahead", SummaryBuilder.livePhrase(ObjectSummary("orange", 2, ColorName.ORANGE, 0f), Lang.EN, DirectionStyle.WORDS))
+        assertEquals("an orange ahead", SummaryBuilder.livePhrase(ObjectSummary("orange", 1, ColorName.ORANGE, 0f), Lang.EN, DirectionStyle.WORDS))
+    }
+
     @Test fun livePhrases() {
         val blueChair = ObjectSummary("chair", 1, ColorName.BLUE, 0f)
         val chairsLeft = ObjectSummary("chair", 3, null, 270f)

@@ -187,3 +187,16 @@ waits until the old one has closed its tasks.
 - Stage 4: spec `docs/superpowers/specs/2026-10-13-shared-models-design.md`. 4a built 2026-10-13 (shared models,
   kept 30 s; `SharedModelsTest` on the phone: no crash in ten hand-overs, a screen 2.1 s cold and 0.55 s warm). Live
   check left. 4b after the numbers.
+- Reader on a laptop screen (2026-10-13, c6b4875): only the big model name was read. The reader now asks the camera
+  for 1440 x 1920 (screen text was 2-4 px at 640 x 480) and drops text under 8 px instead of a share of the frame.
+  Replay "laptop screen": 0 of 10 lines before, 10 of 10 after. Live check left.
+- Live, a second thing beside the first (2026-10-13): a blue bottle next to the white one joined its cluster
+  (same label within 20°) and was never said. Now the announcer's key holds the cluster's steady count (seen in 2
+  frames), so "2 bottles at 12 o'clock" is said when it grows; with more than one no colour is said (one vote for
+  both), and a colour that is the thing's name is not said ("2 orange oranges"). Unit-tested; live check left.
+
+### After the plan: YOLO26 (user, 2026-10-13)
+When this plan is done, add Ultralytics YOLO26 to the project as a detector. To look at first: its licence (Ultralytics
+models are AGPL-3.0 unless an Enterprise licence is bought; the app's licence and distribution), the export to
+TFLite / LiteRT that MediaPipe's ObjectDetector or a plain Interpreter can run, its classes (COCO 80, as now), speed
+and memory on the Infinix next to EfficientDet-Lite2, and where it fits (`DetectorPlan`, `SharedModels` key by file).
