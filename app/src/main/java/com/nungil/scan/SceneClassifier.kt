@@ -14,7 +14,7 @@ import java.io.Closeable
 /**
  * Fallback namer: EfficientNet-Lite0 (1000 ImageNet classes) on the middle half of the frame.
  * Its names are English only, so Korean speech says the English word ("keyboard 같아요").
- * Create and use it on one worker thread; it is slow to load (about 18 MB).
+ * Shared by the screens (SharedModels), one call at a time; it is slow to load (about 18 MB).
  */
 class SceneClassifier(context: Context) : Closeable {
     private val classifier: ImageClassifier = ModelLock.shared.load {
@@ -29,6 +29,7 @@ class SceneClassifier(context: Context) : Closeable {
     }
 
     /** The best guess for the middle of [bitmap], or null below [SceneRules.MIN_SCORE] (checked here: [guesses] wants the low ones too). */
+    @Synchronized
     fun nameCenter(bitmap: Bitmap): String? {
         val c = SceneRules.centerCrop(bitmap.width, bitmap.height)
         val crop = Bitmap.createBitmap(bitmap, c[0], c[1], c[2], c[3])
@@ -39,6 +40,15 @@ class SceneClassifier(context: Context) : Closeable {
     }
 
     /** The classifier's top names and scores for the part of [bitmap] in [box] (LaptopCheck). */
+    /** The best guess for the whole of [crop], with its score; null when there is none. */
+    @Synchronized
+    fun top(crop: Bitmap): Pair<String, Float>? {
+        val result = ModelLock.shared.run { classifier.classify(BitmapImageBuilder(crop).build()) }
+        val best = result.classificationResult().classifications().firstOrNull()?.categories()?.firstOrNull() ?: return null
+        return best.displayName().ifBlank { best.categoryName() } to best.score()
+    }
+
+    @Synchronized
     fun guesses(bitmap: Bitmap, box: Box): List<Pair<String, Float>> {
         val l = (box.left * bitmap.width).toInt().coerceIn(0, bitmap.width - 1)
         val t = (box.top * bitmap.height).toInt().coerceIn(0, bitmap.height - 1)

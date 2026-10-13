@@ -1,6 +1,6 @@
 # Shared models and one frame source (stage 4 of the shared scanner modules)
 
-Status: draft for the user's decision, 2026-10-13. Nothing built yet.
+Status: 4a built 2026-10-13 (user: keep 30 s, 4a now, 4b after the numbers). 4b not started.
 
 ## Why
 
@@ -52,7 +52,22 @@ Leave 4b until the numbers after 4a are in.
 
 Size of 4a: about 11 files, one to two sessions. Risk: a model closed while a screen still uses it. The pool closes a model only when its count is 0, and only after 30 s.
 
-## Open questions for the user
+## Built (4a)
+
+- `core/scan/ModelShelf` (pure, unit-tested): one instance per kind and key, leases, kept 30 s after the last user
+  (closed 30-35 s on; swept every 5 s on a thread of its own), another key of a kind closes the kind's idle ones,
+  models built and closed outside the shelf's lock.
+- `scan/SharedModels`: detector (by file and processor), classifier, item embedder, item segmenter, face embedder.
+- `scan/SharedDetector`: the detector has a thread of its own; it is built, used and closed there (the GPU delegate
+  is used on one thread), and callers wait for it. `detect` must not be called inside `ModelLock.run`.
+- Each model lets one call in at a time (`@Synchronized`), since screens now share it.
+- Owners moved: `CameraSession`, `WalkVision` (its classifier is the shared one, `SceneClassifier.top`),
+  `ScanFragment`, `FrameAnswers`, `FaceIdentifier`, `EnrollFragment`, `ItemFinder`, `ItemSight`.
+- On the phone (androidTest `SharedModelsTest`): two threads use one GPU detector at once and hand over ten times,
+  no crash, the detector loaded once; first screen 2.1 s with the loads, a screen later 0.55 s.
+- Left: a live check (Live, Find, reader, Live by voice, and model changes in Settings).
+
+## Open questions (answered)
 
 1. Keep a model loaded 30 s after the last screen leaves it (faster switching), or close it at once (less memory)?
 2. 4a only now, and 4b decided after the measurements?

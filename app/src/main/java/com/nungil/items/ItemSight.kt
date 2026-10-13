@@ -11,6 +11,7 @@ import com.nungil.core.items.ItemMask
 import com.nungil.core.items.ItemWindows
 import com.nungil.scan.ColorSampler
 import java.io.Closeable
+import com.nungil.scan.SharedModels
 
 /**
  * Everything one frame tells about the thing at one point of it: its outline (ItemSegmenter), what it looks
@@ -35,8 +36,11 @@ class ItemSight(context: Context) : Closeable {
     var filled = false
         private set
 
-    private val segmenter = ItemSegmenter(context)
-    private val embedder = ItemEmbedder(context)
+    // Shared models (SharedModels), given back on close.
+    private val segmenterLease = SharedModels.itemSegmenter(context)
+    private val embedderLease = SharedModels.itemEmbedder(context)
+    private val segmenter get() = segmenterLease.model
+    private val embedder get() = embedderLease.model
 
     /**
      * The thing at ([x], [y]) (0..1) of [frame], or null when there is nothing usable there (nothing, the whole
@@ -82,7 +86,7 @@ class ItemSight(context: Context) : Closeable {
     }
 
     override fun close() {
-        segmenter.close()
-        embedder.close()
+        segmenterLease.close()
+        embedderLease.close()
     }
 }

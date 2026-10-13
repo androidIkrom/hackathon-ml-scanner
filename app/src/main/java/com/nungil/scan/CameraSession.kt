@@ -36,7 +36,7 @@ import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
 import com.nungil.core.scan.FrameMath
 import com.nungil.core.scan.InferenceStats
-import com.nungil.core.scan.ModelLock
+import com.nungil.core.scan.ModelShelf
 import com.nungil.data.SettingsStore
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -122,7 +122,8 @@ class CameraSession(
     private var stopListening: (() -> Unit)? = null
 
     // Touched only on the analysis thread.
-    private var detector: DetectorFactory.Built? = null
+    /** The shared detector (SharedModels): kept loaded for the next screen when this one stops. */
+    private var detector: ModelShelf.Lease<SharedDetector>? = null
     private var detectorFailed = false
     private val stats = InferenceStats()
 
@@ -184,13 +185,9 @@ class CameraSession(
         provider = null
         val ex = executor ?: return
         executor = null
-        // Close the detector on its own thread: the GPU delegate must be used and closed on one thread.
+        // The detector goes back to SharedModels after the last frame (it is closed there, on its own thread, later).
         ex.execute {
-            try {
-                detector?.detector?.let { d -> ModelLock.shared.load { d.close() } }
-            } catch (t: Throwable) {
-                Log.i(TAG, "Closing the detector threw: ${t.message}")
-            }
+            detector?.close()
             detector = null
         }
         ex.shutdown()
@@ -246,7 +243,7 @@ class CameraSession(
             val inferenceMs = SystemClock.uptimeMillis() - started
             if (options.detect) {
                 stats.add(inferenceMs)?.let { average ->
-                    val built = detector
+                    val built = detector?.model?.built
                     Log.i(TAG, "Inference $average ms average on ${built?.compute} (${built?.modelFile})")
                 }
             }
@@ -281,15 +278,16 @@ class CameraSession(
 
     private fun detect(bitmap: Bitmap): List<Detection> {
         if (detectorFailed) return emptyList()
-        val built = detector ?: try {
+        val shared = detector?.model ?: try {
             val context = appContext ?: return emptyList()
-            DetectorFactory(context).create(DetectorPlan.modelFile(settings.model), settings.compute).also { detector = it }
+            SharedModels.detector(context, DetectorPlan.modelFile(settings.model), settings.compute).also { detector = it }.model
         } catch (t: Throwable) {
             detectorFailed = true
             main.post { onError(t) }
             return emptyList()
         }
-        val result = ModelLock.shared.run { built.detector.detect(BitmapImageBuilder(bitmap).build()) }
+        // Not inside ModelLock.run: the detector's own thread takes it (SharedDetector).
+        val result = shared.detect(BitmapImageBuilder(bitmap).build())
         val raw = result.detections().mapNotNull { d ->
             val category = d.categories().firstOrNull() ?: return@mapNotNull null
             val r = d.boundingBox()

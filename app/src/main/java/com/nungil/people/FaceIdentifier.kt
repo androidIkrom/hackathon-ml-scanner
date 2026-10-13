@@ -6,13 +6,15 @@ import com.nungil.core.people.FaceHit
 import com.nungil.core.people.FaceQuality
 import java.io.Closeable
 import kotlin.math.min
+import com.nungil.scan.SharedModels
 
 /**
  * Finds faces, skips the unusable ones (under 64 px, turned more than 35° or tilted more than 25°), embeds the
  * rest and matches them against saved people. Worker thread only; loads the model and the people on creation.
  */
 class FaceIdentifier(context: Context) : Closeable {
-    private val embedder = FaceEmbedder(context)
+    private val embedderLease = SharedModels.faceEmbedder(context)
+    private val embedder get() = embedderLease.model
     private val finder = FaceFinder()
     private val recognizer = FaceRecognizer(context).also { it.reload() }
 
@@ -47,6 +49,6 @@ class FaceIdentifier(context: Context) : Closeable {
 
     override fun close() {
         finder.close()
-        embedder.close()
+        embedderLease.close()
     }
 }

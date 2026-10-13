@@ -184,5 +184,6 @@ waits until the old one has closed its tasks.
   "덜 확실하게", "확신 50". Said back ("Sureness 60 percent: more things, some may be wrong."; at the end: "Already
   the most sure: 70 percent."). An open camera takes it at the next frame (`SettingsStore.onMinScore`, listened to
   by `CameraSession`). Unit tests 982; androidTest `SettingsStoreTest` on the phone. Not yet said live.
-- Stage 4: spec draft `docs/superpowers/specs/2026-10-13-shared-models-design.md` (4a one instance per model kind,
-  4b one camera pipeline later); waiting for the user's answers.
+- Stage 4: spec `docs/superpowers/specs/2026-10-13-shared-models-design.md`. 4a built 2026-10-13 (shared models,
+  kept 30 s; `SharedModelsTest` on the phone: no crash in ten hand-overs, a screen 2.1 s cold and 0.55 s warm). Live
+  check left. 4b after the numbers.

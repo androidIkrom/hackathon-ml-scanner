@@ -14,6 +14,8 @@ import com.nungil.core.items.ItemMask
 import com.nungil.core.items.ItemSearch
 import com.nungil.core.items.ItemWindows
 import com.nungil.core.items.Reach
+import com.nungil.core.scan.ModelShelf
+import com.nungil.scan.SharedModels
 
 /**
  * Saved items for every camera screen: ItemSearch over the MobileNet embedder, the saved samples and the
@@ -21,12 +23,13 @@ import com.nungil.core.items.Reach
  * squares near a found item for Walk. Loads the samples on creation; worker thread only.
  */
 class ItemFinder(private val context: Context, reach: Reach) : SavedFinder {
-    private val embedder = ItemEmbedder(context)
+    private val embedderLease = SharedModels.itemEmbedder(context)
+    private val embedder get() = embedderLease.model
     private val recognizer = ItemRecognizer(context).also { it.reload() }
     private val search = ItemSearch(recognizer.allNames, recognizer.learnedAlone(), reach)
 
     /** Made at the first look at a thing; null when it cannot load (the squares then decide alone). */
-    private var segmenter: ItemSegmenter? = null
+    private var segmenter: ModelShelf.Lease<ItemSegmenter>? = null
     private var segmenterTried = false
     private var lastLogMs = 0L
 
@@ -61,17 +64,17 @@ class ItemFinder(private val context: Context, reach: Reach) : SavedFinder {
         if (!segmenterTried) {
             segmenterTried = true
             segmenter = try {
-                ItemSegmenter(context)
+                SharedModels.itemSegmenter(context)
             } catch (e: Exception) {
                 Log.i(TAG, "Item search without outlines: ${e.message}")
                 null
             }
         }
-        return segmenter
+        return segmenter?.model
     }
 
     override fun close() {
-        embedder.close()
+        embedderLease.close()
         segmenter?.close()
     }
 

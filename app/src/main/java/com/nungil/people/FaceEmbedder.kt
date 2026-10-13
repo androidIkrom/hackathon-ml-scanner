@@ -32,6 +32,7 @@ class FaceEmbedder(context: Context) : Closeable {
     }
 
     /** Embedding of an already cut-out face. */
+    @Synchronized
     fun embedCrop(crop: Bitmap): FloatArray {
         val a = normalize(run(crop))
         val b = normalize(run(FaceCrops.mirror(crop)))
