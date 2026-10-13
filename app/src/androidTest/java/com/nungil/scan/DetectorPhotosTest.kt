@@ -10,12 +10,18 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.nungil.contract.Compute
 import com.nungil.contract.Detection
+import com.nungil.contract.DirectionStyle
+import com.nungil.contract.Facing
+import com.nungil.contract.Lang
 import com.nungil.contract.ModelChoice
+import com.nungil.contract.ScanMode
 import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
 import com.nungil.core.scan.FrameMath
+import com.nungil.core.scan.ScanSession
 import com.nungil.contract.ScanSettings
 import com.nungil.debug.ReplayHostActivity
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,6 +63,37 @@ class DetectorPhotosTest {
             lease.close()
         }
         Log.i(TAG, "Live would say, over ${names.size} frames: " + said.entries.sortedByDescending { it.value }.joinToString { "${it.key} ${it.value}" })
+    }
+
+    /**
+     * Three bottles side by side on a real desk (gfp-office-desk-area, middle view): Live joins them into one cluster
+     * and says how many once it has seen them together twice (fce1201), not "a bottle" alone.
+     */
+    @Test fun bottlesSideBySideAreCounted() {
+        val assets = InstrumentationRegistry.getInstrumentation().context.assets
+        val name = "gfp-office-desk-area-1.jpg"
+        if (name !in assets.list("desks").orEmpty()) return
+        val bitmap = assets.open("desks/$name").use { BitmapFactory.decodeStream(it) }
+        val lease = SharedModels.detector(context, DetectorPlan.modelFile(ModelChoice.ACCURATE), Compute.CPU)
+        val seen = try {
+            lease.model.detect(BitmapImageBuilder(bitmap).build()).detections().mapNotNull { d ->
+                val c = d.categories().firstOrNull() ?: return@mapNotNull null
+                val r = d.boundingBox()
+                Detection(c.categoryName(), c.score(), FrameMath.normalizeBox(r.left, r.top, r.right, r.bottom, bitmap.width, bitmap.height))
+            }
+        } finally {
+            lease.close()
+        }
+        val kept = DetectionFilter.keep(seen, ScanSettings.DEFAULT_MIN_SCORE)
+        val session = ScanSession(ScanMode.LIVE, 0L, Lang.EN, { DirectionStyle.CLOCK })
+        var said = emptyList<String>()
+        // The same view a few frames running, as when the phone is held still.
+        repeat(5) { i ->
+            said = session.onFrame(i * 250L, 0f, 65f, Facing.BACK, kept.map { ScanSession.Seen(it.label, it.box.centerX, null) })
+                .inView.map { it.text }
+        }
+        Log.i(TAG, "bottles: detector ${kept.map { it.label }}, Live says $said")
+        assertTrue("Live says $said", said.any { it.startsWith("3 bottles") })
     }
 
     private companion object {
