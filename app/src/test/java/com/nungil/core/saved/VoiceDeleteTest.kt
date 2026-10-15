@@ -11,6 +11,14 @@ class VoiceDeleteTest {
     private val ali = listOf(SavedName(3, "Ali", TargetType.PERSON, "person"))
     private val delete = VoiceDelete()
 
+    @Test fun theSecondDeleteMayComeAFewSecondsLater() {
+        // The logs, 2026-10-13: "Delete my charger test one", then "Delete" 6.6 s later was "not found": the question
+        // takes 3 s to say, and in a room the recognizer gives the word seconds after it was said.
+        assertEquals(15_000L, VoiceDelete.WINDOW_MS)
+        delete.heard(charger, 0L)
+        assertEquals(VoiceDelete.Result.Delete(charger), delete.heard(emptyList(), 6_600L))
+    }
+
     @Test fun theFirstDeleteAsksTheSecondDeletes() {
         assertEquals(VoiceDelete.Result.Ask(charger), delete.heard(charger, 0L))
         assertEquals(VoiceDelete.Result.Delete(charger), delete.heard(emptyList(), 2_000L))
@@ -45,7 +53,7 @@ class VoiceDeleteTest {
 
     @Test fun nothingNamedNothingAsked() = assertEquals(VoiceDelete.Result.NotFound, delete.heard(emptyList(), 0L))
 
-    @Test fun tunedNumbers() = assertEquals(5_000L, VoiceDelete.WINDOW_MS)
+    @Test fun tunedNumbers() = assertEquals(15_000L, VoiceDelete.WINDOW_MS)
 
     @Test fun phrases() {
         assertEquals("Delete My charger test one? Say delete again.", SavedVoicePhrases.ask(charger, Lang.EN))

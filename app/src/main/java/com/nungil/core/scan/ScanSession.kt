@@ -55,7 +55,7 @@ class ScanSession(
 
     private val clusterer = ObjectClusterer()
     private val coverage = CoverageTracker()
-    private val spin = SpinGuard()
+    private val spin = SpinGuard(repeatMs = if (mode == ScanMode.LIVE) SpinGuard.LIVE_REPEAT_MS else SpinGuard.REPEAT_MS)
     private var startHeading: Float? = null
     private var lastRel: Float? = null
     private var done = false

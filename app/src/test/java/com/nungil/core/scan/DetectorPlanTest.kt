@@ -3,7 +3,6 @@ package com.nungil.core.scan
 import com.nungil.contract.Compute
 import com.nungil.contract.ModelChoice
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
 class DetectorPlanTest {
@@ -25,13 +24,5 @@ class DetectorPlanTest {
     @Test fun tenResultsAndA64PixelTrial() {
         assertEquals(10, DetectorPlan.MAX_RESULTS)
         assertEquals(64, DetectorPlan.TRIAL_SIZE_PX)
-    }
-
-    @Test fun inferenceIsReportedEveryThirtyFrames() {
-        val stats = InferenceStats()
-        assertEquals(30, InferenceStats.EVERY_FRAMES)
-        repeat(29) { assertNull(stats.add(10)) }
-        assertEquals(20L, stats.add(310))
-        assertNull(stats.add(10))
     }
 }

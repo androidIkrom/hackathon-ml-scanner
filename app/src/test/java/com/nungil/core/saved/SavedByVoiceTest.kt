@@ -35,5 +35,12 @@ class SavedByVoiceTest {
 
     @Test fun deleteAloneNamesNothing() = assertTrue(named("Delete").isEmpty())
 
+    @Test fun theNameWithoutMyIsFound() {
+        // The logs, 2026-10-13: "Delete charger test one" was "not found in Saved"; the name is "My charger test one".
+        assertEquals(listOf(charger), named("Delete charger test one"))
+        assertEquals(listOf(charger), named("Open charger"))
+        assertEquals(setOf(bottle, bottle2), named("Delete new white bottle").toSet())
+    }
+
     @Test fun aWordThatIsOnlyAThingsKindIsNotASavedName() = assertTrue(named("Delete bottle").isEmpty())
 }

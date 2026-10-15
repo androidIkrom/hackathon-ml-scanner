@@ -33,7 +33,7 @@ import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.VisionFrame
 import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
-import com.nungil.core.scan.InferenceStats
+import com.nungil.core.scan.FrameStats
 import com.nungil.core.scan.ModelShelf
 import com.nungil.data.SettingsStore
 import java.util.concurrent.ExecutorService
@@ -62,6 +62,11 @@ class CameraSession(
         val minScore: Float? = null,
         /** The analysis frame asked of the camera (landscape, 4:3); the camera gives the nearest it has. */
         val analysisSize: Size = Size(ANALYSIS_WIDTH, ANALYSIS_HEIGHT),
+        /**
+         * Asked on the analysis thread before each frame is made upright; false drops the frame unmade. The reader
+         * reads one big frame in 600 ms or more, and making each of the others took the processor from it.
+         */
+        val wants: (() -> Boolean)? = null,
     )
 
     override var facing: Facing = options.facing
@@ -125,7 +130,10 @@ class CameraSession(
     /** The shared detector (SharedModels): kept loaded for the next screen when this one stops. */
     private var detector: ModelShelf.Lease<SharedDetector>? = null
     private var detectorFailed = false
-    private val stats = InferenceStats()
+    private val stats = FrameStats()
+
+    /** The screen in the Perf log lines: "ScanFragment", "ReaderFragment". */
+    private val screen = fragment.javaClass.simpleName
 
     /** Call from onViewCreated after the camera permission is granted. */
     fun start() {
@@ -140,6 +148,7 @@ class CameraSession(
         heading = HeadingProvider(context).also { it.start() }
         fov = FovReader.read(context, facing)
         running = true
+        stats.started(SystemClock.uptimeMillis())
         val future = ProcessCameraProvider.getInstance(context)
         future.addListener({
             if (!running) return@addListener
@@ -236,17 +245,13 @@ class CameraSession(
 
     private fun analyze(image: ImageProxy) {
         try {
-            if (!running) return
+            if (!running || options.wants?.invoke() == false) return
+            val arrived = SystemClock.uptimeMillis()
             val upright = upright(image)
             val started = SystemClock.uptimeMillis()
             val detections = if (options.detect) detect(upright) else emptyList()
             val inferenceMs = SystemClock.uptimeMillis() - started
-            if (options.detect) {
-                stats.add(inferenceMs)?.let { average ->
-                    val shared = detector?.model
-                    Log.i(TAG, "Inference $average ms average on ${shared?.compute} (${shared?.modelFile})")
-                }
-            }
+            stats.firstFrame(arrived)?.let { Log.i(TAG, "Perf ${screen}: first frame $it ms after start, detect $inferenceMs ms") }
             val frame = VisionFrame(
                 detections = detections,
                 bitmap = if (options.keepBitmap) upright else null,
@@ -258,7 +263,17 @@ class CameraSession(
                 timestampMs = System.currentTimeMillis(),
                 inferenceMs = inferenceMs,
             )
+            val handed = SystemClock.uptimeMillis()
             onFrame(frame)
+            stats.add(arrived, started - arrived, inferenceMs, SystemClock.uptimeMillis() - handed)?.let { w ->
+                val shared = detector?.model
+                val model = if (options.detect) " on ${shared?.compute} (${shared?.modelFile})" else ""
+                Log.i(
+                    TAG,
+                    "Perf $screen: ${"%.1f".format(w.fps)} fps ${upright.width}x${upright.height}, convert ${w.convertMs} ms, " +
+                        "detect ${w.detectMs} ms, after ${w.afterMs} ms, total ${w.totalMs} ms$model",
+                )
+            }
         } catch (t: Throwable) {
             // A bad frame must never stop the session or disable the screen's buttons.
             Log.i(TAG, "Frame failed: ${t.message}")
@@ -273,7 +288,8 @@ class CameraSession(
         val rotation = image.imageInfo.rotationDegrees
         if (rotation == 0) return raw
         val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
-        return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+        // A quarter turn moves whole pixels: no filtering, half the time (TurnBench, 2026-10-15).
+        return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, false)
     }
 
     private fun detect(bitmap: Bitmap): List<Detection> {

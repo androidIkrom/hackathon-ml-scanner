@@ -95,7 +95,11 @@ class SavedFragment : Fragment(), VoiceHandler {
 
     private fun loadNames() {
         val context = requireContext().applicationContext
-        viewLifecycleOwner.lifecycleScope.launch { names = SavedNames.load(context) }
+        viewLifecycleOwner.lifecycleScope.launch {
+            names = SavedNames.load(context)
+            // "Delete <name>" said on another screen brought us here.
+            (activity as? MainActivity)?.takePendingSavedDelete()?.let { deleteByVoice(it) }
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -136,8 +140,8 @@ class SavedFragment : Fragment(), VoiceHandler {
     }
 
     /** "Delete <name>" asks; "delete" again within a few seconds deletes (VoiceDelete). */
-    private fun deleteByVoice() {
-        val targets = SavedByVoice.named(heard(), names, lang)
+    private fun deleteByVoice(guesses: List<String> = heard()) {
+        val targets = SavedByVoice.named(guesses, names, lang)
         when (val result = voiceDelete.heard(targets, SystemClock.elapsedRealtime())) {
             VoiceDelete.Result.NotFound -> services.speaker.say(SavedVoicePhrases.notFound(lang))
             is VoiceDelete.Result.Ask -> services.speaker.say(SavedVoicePhrases.ask(result.targets, lang))

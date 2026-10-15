@@ -346,6 +346,34 @@ class ReaderPolicyTest {
     @Test fun linesAreJoinedIntoSentences() =
         assertEquals("EXIT. Push the door. Is it open? A line seen twice, goes on.", ReaderPolicy.sentence(listOf("EXIT", "Push the door.", "Is it open?", "A line seen twice,", "goes on")))
 
+    @Test fun marksAreSaidAsWords() {
+        // The user, 2026-10-13: brackets, quotes, commas, dots and dashes were not read.
+        assertEquals(
+            "Exit open bracket push close bracket comma, quote Do not quote dash enter dot.",
+            ReaderPolicy.spoken("Exit (push), \"Do not\" - enter.", Lang.EN),
+        )
+        assertEquals("Wait question mark. Go exclamation mark. Note colon, see dot dot dot.", ReaderPolicy.spoken("Wait? Go! Note: see...", Lang.EN))
+        assertEquals("well dash known example dot com", ReaderPolicy.spoken("well-known example.com", Lang.EN))
+        assertEquals("quote EXIT quote", ReaderPolicy.spoken("“EXIT”", Lang.EN))
+    }
+
+    @Test fun marksInsideNumbersAndWordsStay() {
+        // The voice says these right: "3.5", "1,000", "10:30", "don't".
+        assertEquals("3.5 kg comma, 1,000 at 10:30 don't", ReaderPolicy.spoken("3.5 kg, 1,000 at 10:30 don't", Lang.EN))
+        assertEquals("Price 3.5 dot.", ReaderPolicy.spoken("Price 3.5.", Lang.EN))
+    }
+
+    @Test fun marksInKorean() =
+        assertEquals("괄호 열고 출구 괄호 닫고 마침표.", ReaderPolicy.spoken("(출구).", Lang.KO))
+
+    @Test fun aFrameIsMadeOnlyWhenItCanBeRead() {
+        // The emulator, 2026-10-15: every 1440 x 1920 frame was made upright, 0.8-1.3 s each, though one in 600 ms
+        // was read: the rest only took the processor from the reading.
+        assertTrue(ReaderPolicy.wantsFrame(nowMs = 600, lastFrameMs = 0, reading = false))
+        assertFalse(ReaderPolicy.wantsFrame(nowMs = 599, lastFrameMs = 0, reading = false))
+        assertFalse(ReaderPolicy.wantsFrame(nowMs = 5_000, lastFrameMs = 0, reading = true))
+    }
+
     @Test fun aCodeIsNotSaidAgainWithinTenSeconds() {
         val p = ReaderPolicy()
         assertTrue(p.shouldSpeak("Code: abc", 0))

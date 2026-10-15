@@ -36,6 +36,7 @@ import com.google.android.material.snackbar.Snackbar
 import com.nungil.R
 import com.nungil.contract.Buzz
 import com.nungil.contract.Dest
+import com.nungil.contract.SavedTab
 import com.nungil.contract.DirectionStyle
 import com.nungil.contract.Lang
 import com.nungil.contract.ScanMode
@@ -97,6 +98,8 @@ import com.nungil.speech.VoiceInput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.nungil.scan.SharedModels
+import com.nungil.core.scan.DetectorPlan
 
 /**
  * Owner I. The single activity: theme (light, dark or high contrast), toolbar, nav host, caption bar,
@@ -157,6 +160,28 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
 
     /** The recognizer's guesses for the last phrase, the one it trusts most first (Find: a misheard saved name). */
     fun heardGuesses(): List<String> = lastGuesses
+
+    /** "Delete <name>" said on another screen, for the Saved list once its names are loaded. */
+    private var pendingSavedDelete: List<String>? = null
+
+    fun takePendingSavedDelete(): List<String>? = pendingSavedDelete.also { pendingSavedDelete = null }
+
+    /**
+     * The first Live after an install waited 9 s while the GPU detector was compiled (the logs, 2026-10-13). It is
+     * loaded once in the background when the app opens: the compiled detector is kept on disk for the next time, and
+     * the loaded one for the first camera screen opened within 30 s (SharedModels).
+     */
+    private fun warmDetector() {
+        val app = applicationContext
+        Thread({
+            runCatching {
+                val settings = SettingsStore(app).load()
+                val started = SystemClock.elapsedRealtime()
+                SharedModels.detector(app, DetectorPlan.modelFile(settings.model), settings.compute).close()
+                Log.i(TAG, "Detector warmed up in ${SystemClock.elapsedRealtime() - started} ms")
+            }.onFailure { Log.i(TAG, "Detector warm-up failed: ${it.message}") }
+        }, "detector warm-up").start()
+    }
 
     /**
      * What [place] may have been: the recognizer's other guesses for the same phrase, as places
@@ -283,6 +308,7 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             onProblem = ::onVoiceProblem,
         )
         tts.onQuiet = { voice.freshSession() }
+        warmDetector()
         // Leaving a screen by any back (toolbar, gesture, button) silences what it was still saying.
         binding.toolbar.setNavigationOnClickListener {
             silenceAll()
@@ -555,6 +581,15 @@ class MainActivity : AppCompatActivity(), AppServices, AppNavigator {
             }
             val screen = currentScreen() as? VoiceHandler
             if (screen?.onVoiceCommand(command) == true) return
+        }
+        // "Delete charger" in Live was "That does not work on this screen" (the logs, 2026-10-13): with a name, the
+        // Saved list takes it and asks.
+        if (command == VoiceCommand.Delete && (lastGuesses.firstOrNull()?.trim()?.split(' ')?.size ?: 0) > 1) {
+            Log.i(TAG, "Delete with a name on another screen: the Saved list takes it")
+            pendingSavedDelete = lastGuesses
+            silenceAll()
+            open(Dest.Saved(SavedTab.OBJECTS))
+            return
         }
         perform(CommandRouter.route(command))
     }

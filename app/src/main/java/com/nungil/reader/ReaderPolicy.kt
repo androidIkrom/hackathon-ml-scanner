@@ -129,6 +129,14 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
         const val READ_EVERY_MS = 600L
         const val REPEAT_MS = 10_000L
 
+        /**
+         * The camera's frame is made into a picture only when it can be read: none is being read, and the last was
+         * [READ_EVERY_MS] ago. Making every 1440 x 1920 frame upright took 0.8-1.3 s each on the emulator, the
+         * processor the reading needed (2026-10-15).
+         */
+        fun wantsFrame(nowMs: Long, lastFrameMs: Long, reading: Boolean): Boolean =
+            !reading && nowMs - lastFrameMs >= READ_EVERY_MS
+
         /** Two reads of one line agree on at least this share of their letters (OCR changes a few each time). */
         const val SAME_LINE_SHARE = 0.8f
 
@@ -399,6 +407,56 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
          */
         fun sentence(lines: List<String>): String =
             lines.joinToString(" ") { if (it.last().isLetterOrDigit()) "$it." else it }
+
+        /**
+         * [line] as it is said, each mark said as a word: the voice only paused at them, and the user wanted brackets,
+         * quotes, commas, dots and dashes read too (2026-10-13). A mark the voice says right stays: the dot in "3.5",
+         * the comma in "1,000", the colon in "10:30", the apostrophe in "don't". After a sentence's end the word gets a
+         * full stop and after a comma, colon or semicolon a comma, so the voice still pauses there.
+         */
+        fun spoken(line: String, lang: Lang): String {
+            val names = if (lang == Lang.KO) MARKS_KO else MARKS_EN
+            val out = StringBuilder()
+            val text = line.replace("...", "…")
+            for ((i, c) in text.withIndex()) {
+                val name = names[c]
+                val before = text.getOrNull(i - 1)
+                val after = text.getOrNull(i + 1)
+                val inNumber = c in ".,:" && before?.isDigit() == true && after?.isDigit() == true
+                val inWord = c in "'’" && before?.isLetter() == true && after?.isLetter() == true
+                if (name == null || inNumber || inWord) {
+                    out.append(c)
+                    continue
+                }
+                // No pause inside a word: "example dot com".
+                val pause = when {
+                    after?.isLetterOrDigit() == true -> ""
+                    c in ".!?…" -> "."
+                    c in ",;:" -> ","
+                    else -> ""
+                }
+                out.append(' ').append(name).append(pause).append(' ')
+            }
+            return out.toString().trim().replace(Regex("\\s+"), " ")
+        }
+
+        private val MARKS_EN: Map<Char, String> = marks(
+            "open bracket", "close bracket", "quote", "comma", "dot", "dot dot dot", "dash", "colon", "semicolon",
+            "exclamation mark", "question mark", "slash",
+        )
+
+        private val MARKS_KO: Map<Char, String> = marks(
+            "괄호 열고", "괄호 닫고", "따옴표", "쉼표", "마침표", "말줄임표", "대시", "콜론", "세미콜론", "느낌표", "물음표", "빗금",
+        )
+
+        private fun marks(
+            open: String, close: String, quote: String, comma: String, dot: String, dots: String, dash: String,
+            colon: String, semicolon: String, exclamation: String, question: String, slash: String,
+        ): Map<Char, String> =
+            "([{".associateWith { open } + ")]}".associateWith { close } +
+                "\"'“”‘’«»".associateWith { quote } +
+                mapOf(',' to comma, '.' to dot, '…' to dots, ':' to colon, ';' to semicolon, '!' to exclamation, '?' to question, '/' to slash) +
+                "-–—".associateWith { dash }
 
         /** "Another text", "next": not this text, other text. */
         fun wantsAnother(text: String): Boolean {

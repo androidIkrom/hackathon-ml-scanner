@@ -94,4 +94,23 @@ class ModelShelfTest {
         assertEquals(1, a.model.closed)
         assertEquals(1, b.model.closed)
     }
+
+    @Test fun twoTakersAtOnceGetOneBuild() {
+        // The detector warmed up at start while Live opened: one load, not two.
+        val shelf = ModelShelf({ now })
+        val builds = java.util.concurrent.atomic.AtomicInteger()
+        val start = java.util.concurrent.CountDownLatch(1)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        val leases = List(2) {
+            pool.submit<ModelShelf.Lease<Fake>> {
+                start.await()
+                shelf.take("detector", "lite2") { Thread.sleep(200); builds.incrementAndGet(); Fake("d") }
+            }
+        }
+        start.countDown()
+        val models = leases.map { it.get().model }
+        pool.shutdown()
+        assertEquals(1, builds.get())
+        assertSame(models[0], models[1])
+    }
 }

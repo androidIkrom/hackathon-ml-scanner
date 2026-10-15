@@ -39,7 +39,12 @@ class VoiceDelete(private val windowMs: Long = WINDOW_MS) {
     }
 
     companion object {
-        const val WINDOW_MS = 5_000L
+        /**
+         * The second "delete" may come this long after the first. It was 5 s: the question takes 3 s to say, and in a
+         * room the recognizer gives the word seconds after it was said, so "delete" 6.6 s on was "not found" (the logs,
+         * 2026-10-13).
+         */
+        const val WINDOW_MS = 15_000L
     }
 }
 

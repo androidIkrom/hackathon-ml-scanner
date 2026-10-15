@@ -3,6 +3,11 @@
 Makes app/src/main/assets/yolo26n.tflite (not in git, like the other models), input 640 high and 480 wide and prints the model's input and output
 shapes and its first rows on a test picture, so the app's reading of them (core/scan/YoloOutput) can be checked.
 
+A smaller model to try: `export.py w8a32` (INT8 weights, float work, no calibration) makes yolo26n_w8a32.tflite
+(2.8 MB, but 260 ms against 144 ms on the CPU, benchmark_model on the emulator, 2026-10-15);
+`export.py 8` (INT8 throughout, calibrated on coco128) makes yolo26n_int8.tflite. Full INT8 has no end-to-end head:
+its output is the raw 84 x N, which needs NMS.
+
 The LiteRT export runs on Linux or macOS only; on Windows, in WSL:
   curl -LsSf https://astral.sh/uv/install.sh | sh
   cd ~ && mkdir -p yolo26 && cd yolo26 && ~/.local/bin/uv venv -p 3.12 .venv
@@ -13,26 +18,35 @@ The LiteRT export runs on Linux or macOS only; on Windows, in WSL:
 import glob
 import os
 import shutil
+import sys
 
 import numpy as np
 from ultralytics import YOLO
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ASSET = os.path.join(HERE, "..", "..", "app", "src", "main", "assets", "yolo26n.tflite")
+ASSETS = os.path.join(HERE, "..", "..", "app", "src", "main", "assets")
 WORK = os.path.expanduser("~/yolo26/out")
 
 
 def main():
+    quantize = sys.argv[1] if len(sys.argv) > 1 else None
+    tag = {None: "", "w8a32": "_w8a32", "8": "_int8"}[quantize]
+    asset = os.path.join(ASSETS, f"yolo26n{tag}.tflite")
     os.makedirs(WORK, exist_ok=True)
     os.chdir(WORK)
     model = YOLO("yolo26n.pt")
     # nms=False keeps the end-to-end head: one row per thing, no NMS in the app (left out, the raw 84 x 8400 comes out).
     # 640 high, 480 wide: Live's upright frame as it is, no grey bars and a quarter less work than 640 x 640.
-    path = str(model.export(format="litert", imgsz=[640, 480], nms=False))
+    extra = {}
+    if quantize == "w8a32":
+        extra = {"quantize": "w8a32"}
+    elif quantize == "8":
+        extra = {"quantize": 8, "data": "coco128.yaml", "fraction": 1.0}
+    path = str(model.export(format="litert", imgsz=[640, 480], nms=False, **extra))
     print("exported:", path)
     tflite = path if path.endswith(".tflite") else sorted(glob.glob(os.path.join(path, "*.tflite")))[0]
-    shutil.copyfile(tflite, ASSET)
-    print("asset:", os.path.abspath(ASSET), os.path.getsize(ASSET), "bytes")
+    shutil.copyfile(tflite, asset)
+    print("asset:", os.path.abspath(asset), os.path.getsize(asset), "bytes")
     check(tflite)
 
 

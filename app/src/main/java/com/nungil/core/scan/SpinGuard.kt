@@ -31,6 +31,13 @@ class SpinGuard(val maxDegPerSec: Float = MAX_DEG_PER_SEC, val repeatMs: Long = 
     companion object {
         const val MAX_DEG_PER_SEC = 60f
         const val REPEAT_MS = 5_000L
+
+        /**
+         * Live: "Slow down" at most this often. Every 5 s it was said four times in a minute and a half while the
+         * user looked around, and talked over what was found (the logs, 2026-10-13). Look around keeps [REPEAT_MS]:
+         * there turning too fast leaves gaps in the scan.
+         */
+        const val LIVE_REPEAT_MS = 20_000L
         const val MIN_WINDOW_MS = 100L
     }
 }
