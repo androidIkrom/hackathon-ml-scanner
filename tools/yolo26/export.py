@@ -1,6 +1,7 @@
 """Export Ultralytics YOLO26n to TFLite (LiteRT) for the app (AGPL-3.0, like the app since 2026-10-13).
 
-Makes app/src/main/assets/yolo26n.tflite (not in git, like the other models), input 640 high and 480 wide and prints the model's input and output
+Makes app/src/main/assets/yolo26n.tflite (not in git, like the other models), input 640 high and 480 wide, marked for
+FP16 on the CPU (hint_fp16), and prints the model's input and output
 shapes and its first rows on a test picture, so the app's reading of them (core/scan/YoloOutput) can be checked.
 
 A smaller model to try: `export.py w8a32` (INT8 weights, float work, no calibration) makes yolo26n_w8a32.tflite
@@ -46,8 +47,29 @@ def main():
     print("exported:", path)
     tflite = path if path.endswith(".tflite") else sorted(glob.glob(os.path.join(path, "*.tflite")))[0]
     shutil.copyfile(tflite, asset)
+    if quantize is None:
+        hint_fp16(asset)
     print("asset:", os.path.abspath(asset), os.path.getsize(asset), "bytes")
     check(tflite)
+
+
+def hint_fp16(path):
+    """Marks the model for FP16 work on the CPU (XNNPACK's reduced_precision_support metadata). On the phone (LiteRT
+    1.4.2, 2026-10-15): 240 -> 118 ms a frame on the CPU, the same things on 42 desk photos, scores within 0.01.
+    TFLite 2.17 left the mark unread. The GPU works in FP16 anyway. Drops Ultralytics' appended metadata (unused)."""
+    from ai_edge_litert import schema_py_generated as schema
+    from ai_edge_litert.tools import flatbuffer_utils
+
+    model = flatbuffer_utils.read_model(path)
+    buffer = schema.BufferT()
+    buffer.data = list(b"fp16accfp16")
+    model.buffers.append(buffer)
+    meta = schema.MetadataT()
+    meta.name = "reduced_precision_support"
+    meta.buffer = len(model.buffers) - 1
+    model.metadata = (model.metadata or []) + [meta]
+    flatbuffer_utils.write_model(model, path)
+    print("FP16 hint:", path)
 
 
 def check(tflite):

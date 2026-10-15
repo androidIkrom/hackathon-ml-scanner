@@ -33,17 +33,20 @@ import com.nungil.contract.app.SwitchableCamera
 import com.nungil.contract.app.VisionFrame
 import com.nungil.core.scan.DetectionFilter
 import com.nungil.core.scan.DetectorPlan
+import com.nungil.core.scan.FrameSlots
 import com.nungil.core.scan.FrameStats
 import com.nungil.core.scan.ModelShelf
 import com.nungil.data.SettingsStore
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 
 /**
  * Binds CameraX preview + analysis to [fragment]'s view lifecycle, runs the object detector chosen in
  * SettingsStore and delivers one [VisionFrame] per analysed frame to [onFrame] on the analysis thread.
- * Frames that arrive while [onFrame] is still running are dropped. [onError] runs on the main thread.
+ * Frames are made upright on a thread of their own: with the detector, the next frame is made while the detector
+ * works on this one ([FrameSlots]); frames that find no slot are dropped. [onError] runs on the main thread.
  */
 class CameraSession(
     private val fragment: Fragment,
@@ -124,6 +127,9 @@ class CameraSession(
     private val main = Handler(Looper.getMainLooper())
     private var appContext: Context? = null
     private var executor: ExecutorService? = null
+    /** Makes the camera's frames upright, ahead of the analysis thread. */
+    private var converter: ExecutorService? = null
+    private val slots = FrameSlots(if (options.detect) 2 else 1)
     private var provider: ProcessCameraProvider? = null
     private var preview: Preview? = null
     private var analysis: ImageAnalysis? = null
@@ -151,6 +157,7 @@ class CameraSession(
         // "More sure" / "less sure" said while the camera runs: taken at the next frame.
         stopListening = store.onMinScore { score -> settings = settings.copy(minScore = score) }
         executor = Executors.newSingleThreadExecutor()
+        converter = Executors.newSingleThreadExecutor()
         heading = HeadingProvider(context).also { it.start() }
         fov = FovReader.read(context, facing)
         running = true
@@ -198,6 +205,8 @@ class CameraSession(
         preview = null
         analysis = null
         provider = null
+        converter?.shutdown()
+        converter = null
         val ex = executor ?: return
         executor = null
         // The detector goes back to SharedModels after the last frame (it is closed there, on its own thread, later).
@@ -216,7 +225,7 @@ class CameraSession(
     @OptIn(ExperimentalCamera2Interop::class)
     private fun bind() {
         val p = provider ?: return
-        val ex = executor ?: return
+        val conv = converter ?: return
         if (fragment.view == null) return
         val owner = fragment.viewLifecycleOwner
         val fourByThree = AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
@@ -236,7 +245,7 @@ class CameraSession(
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
         Camera2Interop.Extender(analysisBuilder).setSessionCaptureCallback(focusReader)
         val newAnalysis = analysisBuilder.build()
-        newAnalysis.setAnalyzer(ex) { image -> analyze(image) }
+        newAnalysis.setAnalyzer(conv) { image -> analyze(image) }
         val selector = if (facing == Facing.FRONT) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
         try {
             val old = listOfNotNull(preview, analysis)
@@ -249,39 +258,78 @@ class CameraSession(
         }
     }
 
+    /** A frame made upright, on its way to the analysis thread. */
+    private class Made(
+        val bitmap: Bitmap, val width: Int, val height: Int, val rotation: Int, val arrived: Long, val convertMs: Long,
+    )
+
+    /** Converter thread: the frame made upright, then handed to the analysis thread. */
     private fun analyze(image: ImageProxy) {
+        val made = try {
+            if (!running || options.wants?.invoke() == false || !slots.take()) return
+            try {
+                val arrived = SystemClock.uptimeMillis()
+                val turn = image.imageInfo.rotationDegrees
+                val keepTurn = !options.upright && !options.detect && turn != 0
+                val bitmap = if (keepTurn) image.toBitmap() else upright(image)
+                val width = if (turn % 180 != 0) image.height else image.width
+                val height = if (turn % 180 != 0) image.width else image.height
+                Made(bitmap, width, height, if (keepTurn) turn else 0, arrived, SystemClock.uptimeMillis() - arrived)
+            } catch (t: Throwable) {
+                slots.free()
+                throw t
+            }
+        } catch (t: Throwable) {
+            // A bad frame must never stop the session or disable the screen's buttons.
+            Log.i(TAG, "Frame failed: ${t.message}")
+            main.post { onError(t) }
+            return
+        } finally {
+            image.close()
+        }
         try {
-            if (!running || options.wants?.invoke() == false) return
-            val arrived = SystemClock.uptimeMillis()
-            val turn = image.imageInfo.rotationDegrees
-            val keepTurn = !options.upright && !options.detect && turn != 0
-            val bitmap = if (keepTurn) image.toBitmap() else upright(image)
-            val width = if (turn % 180 != 0) image.height else image.width
-            val height = if (turn % 180 != 0) image.width else image.height
+            val ex = executor ?: throw RejectedExecutionException("stopped")
+            ex.execute {
+                try {
+                    handle(made)
+                } finally {
+                    slots.free()
+                }
+            }
+        } catch (e: RejectedExecutionException) {
+            slots.free()
+        }
+    }
+
+    /** Analysis thread: the detector, then the screen's own work. */
+    private fun handle(made: Made) {
+        // Stopping: the detector has gone back to SharedModels; a late frame must not take it again.
+        if (!running) return
+        try {
             val started = SystemClock.uptimeMillis()
-            val detections = if (options.detect) detect(bitmap) else emptyList()
+            val detections = if (options.detect) detect(made.bitmap) else emptyList()
             val inferenceMs = SystemClock.uptimeMillis() - started
-            stats.firstFrame(arrived)?.let { Log.i(TAG, "Perf ${screen}: first frame $it ms after start, detect $inferenceMs ms") }
+            stats.firstFrame(made.arrived)?.let { Log.i(TAG, "Perf ${screen}: first frame $it ms after start, detect $inferenceMs ms") }
             val frame = VisionFrame(
                 detections = detections,
-                bitmap = if (options.keepBitmap) bitmap else null,
-                imageWidth = width,
-                imageHeight = height,
+                bitmap = if (options.keepBitmap) made.bitmap else null,
+                imageWidth = made.width,
+                imageHeight = made.height,
                 facing = currentFacing,
                 headingDeg = heading?.headingDeg,
                 hfovDeg = fov,
                 timestampMs = System.currentTimeMillis(),
                 inferenceMs = inferenceMs,
-                rotation = if (keepTurn) turn else 0,
+                rotation = made.rotation,
             )
             val handed = SystemClock.uptimeMillis()
             onFrame(frame)
-            stats.add(arrived, started - arrived, inferenceMs, SystemClock.uptimeMillis() - handed)?.let { w ->
+            stats.add(made.arrived, made.convertMs, inferenceMs, SystemClock.uptimeMillis() - handed)?.let { w ->
                 val shared = detector?.model
                 val model = if (options.detect) " on ${shared?.compute} (${shared?.modelFile})" else ""
                 Log.i(
                     TAG,
-                    "Perf $screen: ${"%.1f".format(w.fps)} fps ${width}x$height, convert ${w.convertMs} ms, " +
+                    "Perf $screen: ${"%.1f".format(w.fps)} fps ${made.width}x${made.height}, convert ${w.convertMs} ms, " +
                         "detect ${w.detectMs} ms, after ${w.afterMs} ms, total ${w.totalMs} ms$model",
                 )
             }
@@ -289,8 +337,6 @@ class CameraSession(
             // A bad frame must never stop the session or disable the screen's buttons.
             Log.i(TAG, "Frame failed: ${t.message}")
             main.post { onError(t) }
-        } finally {
-            image.close()
         }
     }
 
