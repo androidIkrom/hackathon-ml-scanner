@@ -4,6 +4,7 @@ plugins {
     id 'org.jetbrains.kotlin.kapt'
     id 'androidx.navigation.safeargs.kotlin'
     id 'de.undercouch.download'
+    id 'androidx.baselineprofile'
 }
 
 // Walk-mode routing key (openrouteservice). Read from the git-ignored local.properties; empty = beacon only.
@@ -29,6 +30,9 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Signed with the debug key so it installs over the debug build on the user's own phone (not for a store):
+            // a debug build runs with ART's debugging on and never uses a Baseline Profile.
+            signingConfig signingConfigs.debug
         }
     }
     compileOptions {
@@ -81,6 +85,9 @@ if (!project.hasProperty('skipModels')) {
 }
 
 dependencies {
+    // Installs the Baseline Profile (made by :baselineprofile) on phones that do not get it from a store.
+    implementation 'androidx.profileinstaller:profileinstaller:1.4.1'
+    baselineProfile project(':baselineprofile')
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.1.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
     implementation 'androidx.core:core-ktx:1.13.1'
