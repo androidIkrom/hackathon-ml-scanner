@@ -131,7 +131,8 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
         if (_binding == null) return
         startReading()
         // The line the stop cut: "stop" here, or a bare "stop" that only silenced the voice.
-        ReaderPolicy.resumeAt(reading, (services.speaker as? TtsSpeaker)?.cutLine)?.let { readLines(reading, it) }
+        ReaderPolicy.resumeAt(reading.map { ReaderPolicy.spoken(it, lang) }, (services.speaker as? TtsSpeaker)?.cutLine)
+            ?.let { readLines(reading, it) }
     }
 
     private fun startCamera() {
@@ -249,7 +250,8 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
     /** The text, line by line from [from], so "stop" knows where it was and "continue" goes on from there. */
     private fun readLines(lines: List<String>, from: Int) {
         reading = lines
-        val rest = lines.drop(from)
+        // Marks said as words ("open bracket", "comma"); the screen keeps the text as written.
+        val rest = lines.drop(from).map { ReaderPolicy.spoken(it, lang) }
         Log.i("Nungil", "Reader reads ${rest.size} lines from line $from: \"${rest.firstOrNull()?.take(60)}\"")
         services.speaker.sayLines(rest)
         engine.reading(SystemClock.elapsedRealtime(), rest.sumOf { it.length })
