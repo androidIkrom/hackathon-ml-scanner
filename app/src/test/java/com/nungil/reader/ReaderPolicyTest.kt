@@ -219,6 +219,30 @@ class ReaderPolicyTest {
         )
     }
 
+    /**
+     * A table is read row by row, not column by column (the phone, 2026-10-15: "Read text: kadrni tayyorlash. Read
+     * text: CPU. 11.8 kadr/s. 22-32 ms. …"): a column of short cells with numbers, its rows level with the others'.
+     */
+    @Test fun aTableIsReadRowByRow() {
+        fun l(text: String, x: Float, y: Float, block: Int, w: Float = 0.15f) = SeenLine(text, 0.9f, 0.03f, x, y, width = w, block = block)
+        val table = listOf(
+            l("Read text: kadrni tayyorlash", 0.2f, 0.2f, 0, w = 0.3f), l("Read text: CPU", 0.15f, 0.3f, 0, w = 0.2f), l("Live", 0.08f, 0.4f, 0, w = 0.06f),
+            l("Oldin", 0.55f, 0.1f, 1), l("272-378 ms", 0.55f, 0.2f, 1), l("93-131%", 0.55f, 0.3f, 1), l("11.8 kadr/s", 0.55f, 0.4f, 1),
+            l("Hozir", 0.8f, 0.1f, 2), l("22-32 ms", 0.8f, 0.2f, 2), l("80%", 0.8f, 0.3f, 2), l("11.3 kadr/s", 0.8f, 0.4f, 2),
+        )
+        assertEquals(
+            listOf(
+                "Oldin", "Hozir", "Read text: kadrni tayyorlash", "272-378 ms", "22-32 ms",
+                "Read text: CPU", "93-131%", "80%", "Live", "11.8 kadr/s", "11.3 kadr/s",
+            ),
+            ReaderPolicy.inOrder(table).map { it.text },
+        )
+        assertEquals(
+            listOf("Oldin Hozir.", "Read text: kadrni tayyorlash 272-378 ms 22-32 ms.", "Read text: CPU 93-131% 80%", "Live 11.8 kadr/s 11.3 kadr/s."),
+            ReaderPolicy.Offer(ReaderPolicy.inOrder(table)).sentences,
+        )
+    }
+
     @Test fun piecesOfOneLineAreOneSentence() {
         // Replay, 2026-10-13: "Prices start at. dollars for a cup of tea." (a big word between them, cut in two).
         val lines = listOf(

@@ -191,6 +191,29 @@ class ReaderReplayTest {
         assertEquals("order in \"$heard\"", at.sorted(), at)
     }
 
+    /** A table of numbers is read row by row (the phone, 2026-10-15: it was read column by column). */
+    @Test fun aTableIsReadRowByRow() {
+        val rows = listOf(
+            listOf("", "Before", "Now"), listOf("Frame ready", "300 ms", "25 ms"),
+            listOf("Each second", "1.1", "1.5"), listOf("Processor", "120%", "80%"),
+        )
+        val reads = replay("table", List(10) { shift ->
+            val b = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
+            val c = Canvas(b)
+            c.drawColor(Color.rgb(250, 250, 250))
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(20, 20, 20); textSize = 20f; typeface = Typeface.SANS_SERIF }
+            rows.forEachIndexed { r, row ->
+                row.forEachIndexed { col, cell -> c.drawText(cell, 20f + col * 170f + shift % 3, 150f + r * 40f, paint) }
+            }
+            b
+        })
+        val heard = reads.firstNotNullOf { it.full }
+        val cells = rows.flatten().filter { it.isNotEmpty() }
+        val at = cells.map { found(heard, it) }
+        assertTrue("not read: ${cells.filterIndexed { i, _ -> at[i] < 0 }} in \"$heard\"", at.all { it >= 0 })
+        assertEquals("order in \"$heard\"", at.sorted(), at)
+    }
+
     /**
      * Sizes that change inside a line, in the middle and at the end, line after line of one paragraph. ML Kit leaves
      * out a lone big "5" among small words (never in any frame, 2026-10-13); a big word it reads.

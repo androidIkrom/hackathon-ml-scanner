@@ -195,6 +195,9 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
             return
         }
         if (leaving) return
+        // Each read, so a slow offer can be told apart: no text, no readable text, or a slow read (an offer came
+        // 7 s after the screen opened, the phone, 2026-10-15).
+        if (read.code == null) Log.i("Nungil", "Reader read ${read.lines.size} lines, ${ReaderPolicy.inOrder(read.lines).size} readable, in ${read.ocrMs} ms")
         read.spoken?.let { code ->
             Log.i("Nungil", "Reader says \"$code\"")
             services.speaker.say(code)
