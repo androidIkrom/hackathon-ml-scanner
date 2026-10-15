@@ -129,6 +129,14 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
         const val READ_EVERY_MS = 600L
         const val REPEAT_MS = 10_000L
 
+        /**
+         * The camera's frame is made into a picture only when it can be read: none is being read, and the last was
+         * [READ_EVERY_MS] ago. Making every 1440 x 1920 frame upright took 0.8-1.3 s each on the emulator, the
+         * processor the reading needed (2026-10-15).
+         */
+        fun wantsFrame(nowMs: Long, lastFrameMs: Long, reading: Boolean): Boolean =
+            !reading && nowMs - lastFrameMs >= READ_EVERY_MS
+
         /** Two reads of one line agree on at least this share of their letters (OCR changes a few each time). */
         const val SAME_LINE_SHARE = 0.8f
 

@@ -62,6 +62,11 @@ class CameraSession(
         val minScore: Float? = null,
         /** The analysis frame asked of the camera (landscape, 4:3); the camera gives the nearest it has. */
         val analysisSize: Size = Size(ANALYSIS_WIDTH, ANALYSIS_HEIGHT),
+        /**
+         * Asked on the analysis thread before each frame is made upright; false drops the frame unmade. The reader
+         * reads one big frame in 600 ms or more, and making each of the others took the processor from it.
+         */
+        val wants: (() -> Boolean)? = null,
     )
 
     override var facing: Facing = options.facing
@@ -240,7 +245,7 @@ class CameraSession(
 
     private fun analyze(image: ImageProxy) {
         try {
-            if (!running) return
+            if (!running || options.wants?.invoke() == false) return
             val arrived = SystemClock.uptimeMillis()
             val upright = upright(image)
             val started = SystemClock.uptimeMillis()

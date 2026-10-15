@@ -65,6 +65,9 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
     @Volatile
     private var lastRunMs = 0L
 
+    /** When the camera's last frame was made upright (analysis thread). */
+    @Volatile private var lastFrameMs = 0L
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         _binding = ReaderFragmentBinding.inflate(inflater, container, false)
         return binding.root
@@ -142,6 +145,7 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
         val options = CameraSession.Options(
             facing = Facing.BACK, detect = false, keepBitmap = true,
             analysisSize = Size(ReaderEngine.FRAME_HEIGHT, ReaderEngine.FRAME_WIDTH),
+            wants = { ReaderPolicy.wantsFrame(SystemClock.elapsedRealtime(), lastFrameMs, busy.get()) },
         )
         camera = CameraSession(this, binding.readerPreview, options, ::onFrame, ::onCameraError).also { it.start() }
     }
@@ -160,6 +164,7 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
     /** Analysis thread. */
     private fun onFrame(frame: VisionFrame) {
         last = frame
+        lastFrameMs = SystemClock.elapsedRealtime()
         if (!running) return
         val bitmap = frame.bitmap ?: return
         val now = SystemClock.elapsedRealtime()

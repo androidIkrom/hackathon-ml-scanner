@@ -366,6 +366,14 @@ class ReaderPolicyTest {
     @Test fun marksInKorean() =
         assertEquals("괄호 열고 출구 괄호 닫고 마침표.", ReaderPolicy.spoken("(출구).", Lang.KO))
 
+    @Test fun aFrameIsMadeOnlyWhenItCanBeRead() {
+        // The emulator, 2026-10-15: every 1440 x 1920 frame was made upright, 0.8-1.3 s each, though one in 600 ms
+        // was read: the rest only took the processor from the reading.
+        assertTrue(ReaderPolicy.wantsFrame(nowMs = 600, lastFrameMs = 0, reading = false))
+        assertFalse(ReaderPolicy.wantsFrame(nowMs = 599, lastFrameMs = 0, reading = false))
+        assertFalse(ReaderPolicy.wantsFrame(nowMs = 5_000, lastFrameMs = 0, reading = true))
+    }
+
     @Test fun aCodeIsNotSaidAgainWithinTenSeconds() {
         val p = ReaderPolicy()
         assertTrue(p.shouldSpeak("Code: abc", 0))
