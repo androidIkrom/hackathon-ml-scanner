@@ -115,7 +115,7 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
 
     @Volatile private var last: VisionFrame? = null
 
-    override fun lastFrame(): VisionFrame? = last
+    override fun lastFrame(): VisionFrame? = last?.let { CameraSession.upright(it) }
 
     override val switchable: SwitchableCamera? get() = camera
 
@@ -143,7 +143,7 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
         // Text on a laptop screen was 2-4 px high in the 640 x 480 frame every other screen uses, and nothing of it
         // was read (the user, 2026-10-13): the reader asks for a bigger frame.
         val options = CameraSession.Options(
-            facing = Facing.BACK, detect = false, keepBitmap = true,
+            facing = Facing.BACK, detect = false, keepBitmap = true, upright = false,
             analysisSize = Size(ReaderEngine.FRAME_HEIGHT, ReaderEngine.FRAME_WIDTH),
             wants = { ReaderPolicy.wantsFrame(SystemClock.elapsedRealtime(), lastFrameMs, busy.get()) },
         )
@@ -167,6 +167,7 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
         lastFrameMs = SystemClock.elapsedRealtime()
         if (!running) return
         val bitmap = frame.bitmap ?: return
+        val rotation = frame.rotation
         val now = SystemClock.elapsedRealtime()
         if (now - lastRunMs < ReaderPolicy.READ_EVERY_MS) return
         val executor = extras ?: return
@@ -175,7 +176,7 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
         try {
             executor.execute {
                 try {
-                    read(bitmap)
+                    read(bitmap, rotation)
                 } finally {
                     busy.set(false)
                 }
@@ -186,9 +187,9 @@ class ReaderFragment : Fragment(), CameraScreen, VoiceHandler {
     }
 
     /** Extras thread: a code wins over text in the same frame; text is read top to bottom (ReaderEngine). */
-    private fun read(bitmap: Bitmap) {
+    private fun read(bitmap: Bitmap, rotation: Int) {
         val read = try {
-            engine.read(bitmap, SystemClock.elapsedRealtime(), lang)
+            engine.read(bitmap, rotation, SystemClock.elapsedRealtime(), lang)
         } catch (e: Exception) {
             Log.i("Nungil", "Reader failed: ${e.message}")
             return

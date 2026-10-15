@@ -54,7 +54,7 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
     }
 
     private val spokenAt = HashMap<String, Long>()
-    private var lastRead: List<String> = emptyList()
+    private var lastRead: List<SeenLine> = emptyList()
     private var waiting: Offer? = null
     private var waitingSince = 0L
 
@@ -66,7 +66,7 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
     val pending: Boolean get() = waiting != null
 
     /**
-     * Text to offer from one read's [lines], or null: only lines also seen in the read before (a one-frame
+     * Text to offer from one read's [lines], or null: only lines also seen in the read before, whole or in part (a one-frame
      * misreading is never offered), and not the text offered last within [offerAgainMs], nor anything while an
      * offer waits for its answer (up to [ANSWER_MS]; the waiting one gathers the lines of each new reading of the
      * same text, [merge]) or while accepted text is being read. Five offers in a minute queued up behind each other (the logs).
@@ -74,8 +74,10 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
      */
     fun found(lines: List<SeenLine>, nowMs: Long): Offer? {
         val now = inOrder(lines)
-        val steady = now.filter { line -> lastRead.any { sameLine(it, line.text) } }
-        lastRead = now.map { it.text }
+        // A piece of a line read whole the read before counts, and the whole of one read in pieces: ML Kit cuts one
+        // line differently from frame to frame (a frame told its turn, the phone, 2026-10-15).
+        val steady = now.filter { line -> lastRead.any { sameLine(it.text, line.text) || covers(it, line) || covers(line, it) } }
+        lastRead = now
         if (waiting != null && nowMs - waitingSince >= ANSWER_MS) waiting = null
         if (steady.isEmpty() || nowMs < quietUntil) return null
         val texts = steady.map { it.text }
@@ -221,6 +223,19 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
          * crooked made the lines' upright boxes taller than the gaps between them, and lines were read out of order
          * ("Tuesday" before "Monday", replay 2026-10-13).
          */
+        /**
+         * A line's corners in a frame of [width] x [height] lying on its side, turned into the upright frame that
+         * [rotation] degrees clockwise make of it. ML Kit, told the turn, gives its boxes upright but its corners in
+         * the frame as it lies (the phone, 2026-10-15).
+         */
+        fun uprightCorners(xs: FloatArray, ys: FloatArray, rotation: Int, width: Float, height: Float): Pair<FloatArray, FloatArray> =
+            when (rotation) {
+                90 -> FloatArray(xs.size) { height - ys[it] } to xs.copyOf()
+                180 -> FloatArray(xs.size) { width - xs[it] } to FloatArray(ys.size) { height - ys[it] }
+                270 -> ys.copyOf() to FloatArray(xs.size) { width - xs[it] }
+                else -> xs to ys
+            }
+
         fun straighten(lines: List<RawLine>, width: Float, height: Float): List<SeenLine> {
             if (lines.isEmpty()) return emptyList()
             val slant = lines.map { atan2(it.ys[1] - it.ys[0], it.xs[1] - it.xs[0]) }.sorted()[lines.size / 2]

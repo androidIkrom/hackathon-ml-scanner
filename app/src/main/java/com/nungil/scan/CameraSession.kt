@@ -67,6 +67,12 @@ class CameraSession(
          * reads one big frame in 600 ms or more, and making each of the others took the processor from it.
          */
         val wants: (() -> Boolean)? = null,
+        /**
+         * false: the kept bitmap stays as the camera gives it, on its side, with the turn that sets it upright in
+         * VisionFrame.rotation (the reader: ML Kit turns it itself; turning a 1920 x 2560 frame took 170-210 ms on the
+         * phone). Frames for the detector are always made upright.
+         */
+        val upright: Boolean = true,
     )
 
     override var facing: Facing = options.facing
@@ -247,21 +253,26 @@ class CameraSession(
         try {
             if (!running || options.wants?.invoke() == false) return
             val arrived = SystemClock.uptimeMillis()
-            val upright = upright(image)
+            val turn = image.imageInfo.rotationDegrees
+            val keepTurn = !options.upright && !options.detect && turn != 0
+            val bitmap = if (keepTurn) image.toBitmap() else upright(image)
+            val width = if (turn % 180 != 0) image.height else image.width
+            val height = if (turn % 180 != 0) image.width else image.height
             val started = SystemClock.uptimeMillis()
-            val detections = if (options.detect) detect(upright) else emptyList()
+            val detections = if (options.detect) detect(bitmap) else emptyList()
             val inferenceMs = SystemClock.uptimeMillis() - started
             stats.firstFrame(arrived)?.let { Log.i(TAG, "Perf ${screen}: first frame $it ms after start, detect $inferenceMs ms") }
             val frame = VisionFrame(
                 detections = detections,
-                bitmap = if (options.keepBitmap) upright else null,
-                imageWidth = upright.width,
-                imageHeight = upright.height,
+                bitmap = if (options.keepBitmap) bitmap else null,
+                imageWidth = width,
+                imageHeight = height,
                 facing = currentFacing,
                 headingDeg = heading?.headingDeg,
                 hfovDeg = fov,
                 timestampMs = System.currentTimeMillis(),
                 inferenceMs = inferenceMs,
+                rotation = if (keepTurn) turn else 0,
             )
             val handed = SystemClock.uptimeMillis()
             onFrame(frame)
@@ -270,7 +281,7 @@ class CameraSession(
                 val model = if (options.detect) " on ${shared?.compute} (${shared?.modelFile})" else ""
                 Log.i(
                     TAG,
-                    "Perf $screen: ${"%.1f".format(w.fps)} fps ${upright.width}x${upright.height}, convert ${w.convertMs} ms, " +
+                    "Perf $screen: ${"%.1f".format(w.fps)} fps ${width}x$height, convert ${w.convertMs} ms, " +
                         "detect ${w.detectMs} ms, after ${w.afterMs} ms, total ${w.totalMs} ms$model",
                 )
             }
@@ -283,14 +294,7 @@ class CameraSession(
         }
     }
 
-    private fun upright(image: ImageProxy): Bitmap {
-        val raw = image.toBitmap()
-        val rotation = image.imageInfo.rotationDegrees
-        if (rotation == 0) return raw
-        val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
-        // A quarter turn moves whole pixels: no filtering, half the time (TurnBench, 2026-10-15).
-        return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, false)
-    }
+    private fun upright(image: ImageProxy): Bitmap = upright(image.toBitmap(), image.imageInfo.rotationDegrees)
 
     private fun detect(bitmap: Bitmap): List<Detection> {
         if (detectorFailed) return emptyList()
@@ -316,5 +320,24 @@ class CameraSession(
         /** A focus distance older than this is no longer where the lens is. */
         private const val FOCUS_FRESH_MS = 1_500L
         private const val TAG = "Nungil"
+
+        /** [bitmap] turned by [rotation] degrees; [bitmap] itself when there is no turn. */
+        fun upright(bitmap: Bitmap, rotation: Int): Bitmap {
+            if (rotation == 0) return bitmap
+            val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+            // Filtered: on the phone faster than without (1920 x 2560: 168 against 213 ms, TurnBench, 2026-10-15),
+            // though not on the emulator.
+            return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        }
+
+        /** [frame] with its bitmap upright (CameraSession.Options.upright false keeps it on its side). */
+        fun upright(frame: VisionFrame): VisionFrame {
+            val bitmap = frame.bitmap
+            if (frame.rotation == 0 || bitmap == null) return frame
+            return VisionFrame(
+                frame.detections, upright(bitmap, frame.rotation), frame.imageWidth, frame.imageHeight, frame.facing,
+                frame.headingDeg, frame.hfovDeg, frame.timestampMs, frame.inferenceMs,
+            )
+        }
     }
 }

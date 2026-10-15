@@ -9,6 +9,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReaderPolicyTest {
+    /** ML Kit, told a frame's turn, gives a line's corners in the frame as it lies (the phone, 2026-10-15). */
+    @Test fun cornersOfASidewaysFrameAreTurnedUpright() {
+        // Upright 1920 x 2560: a line from (247, 862) to (557, 875); the camera's frame is 2560 x 1920, turn 90.
+        val (xs, ys) = ReaderPolicy.uprightCorners(
+            floatArrayOf(860f, 859f, 874f, 875f), floatArrayOf(1667f, 1361f, 1360f, 1666f), rotation = 90, width = 2560f, height = 1920f,
+        )
+        assertEquals(listOf(253f, 559f, 560f, 254f), xs.toList())
+        assertEquals(listOf(860f, 859f, 874f, 875f), ys.toList())
+        // Half a turn and three quarters: back where the corner was.
+        val (x2, y2) = ReaderPolicy.uprightCorners(floatArrayOf(10f), floatArrayOf(20f), rotation = 180, width = 100f, height = 50f)
+        assertEquals(90f to 30f, x2[0] to y2[0])
+        val (x3, y3) = ReaderPolicy.uprightCorners(floatArrayOf(10f), floatArrayOf(20f), rotation = 270, width = 100f, height = 50f)
+        assertEquals(20f to 90f, x3[0] to y3[0])
+        val (x0, y0) = ReaderPolicy.uprightCorners(floatArrayOf(10f), floatArrayOf(20f), rotation = 0, width = 100f, height = 50f)
+        assertEquals(10f to 20f, x0[0] to y0[0])
+    }
+
     @Test fun codesAreCutAtEightyCharacters() {
         assertEquals(80, ReaderPolicy.truncateCode("x".repeat(200)).length)
         assertEquals("short", ReaderPolicy.truncateCode("short"))
@@ -76,6 +93,21 @@ class ReaderPolicyTest {
         p.decline()
         assertNull(p.found(page, 600 + ReaderPolicy.OFFER_AGAIN_MS))
         assertNotNull(p.found(page, 1_200 + ReaderPolicy.OFFER_AGAIN_MS))
+    }
+
+    /**
+     * One line cut into pieces differently in each frame (ML Kit on a frame told its turn, the phone, 2026-10-15):
+     * whole, in two, in three. A piece of a line read whole the read before is seen twice, and the line is read whole.
+     */
+    @Test fun aLineCutDifferentlyEachReadIsStillReadWhole() {
+        fun piece(text: String, x: Float, w: Float) = SeenLine(text, 0.9f, 0.034f, x, 0.26f, width = w)
+        val top = SeenLine("Weekly Notes", 0.9f, 0.07f, 0.4f, 0.11f, width = 0.56f)
+        val whole = listOf(top, piece("Monday: buy fresh bread and milk", 0.40f, 0.68f))
+        val two = listOf(top, piece("Monday: buy fresh bread", 0.31f, 0.49f), piece("and milk", 0.66f, 0.16f))
+        val three = listOf(top, piece("Monday: buy", 0.19f, 0.24f), piece("fresh bread", 0.44f, 0.23f), piece("and milk", 0.67f, 0.18f))
+        val p = ReaderPolicy()
+        listOf(whole, two, three, whole, two, three).forEachIndexed { i, frame -> p.found(frame, i * 600L) }
+        assertEquals("Weekly Notes. Monday: buy fresh bread and milk.", p.accept(4_000)?.joinToString(" "))
     }
 
     @Test fun aLineMisreadOrMissingStillMakesTheSameText() {

@@ -27,9 +27,13 @@ class ReaderEngine(private val timeoutS: Long = TIMEOUT_S) : Closeable {
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val policy = ReaderPolicy()
 
-    /** Throws when ML Kit fails or takes over [timeoutS] seconds. [nowMs]: the time of the frame. */
-    fun read(bitmap: Bitmap, nowMs: Long, lang: Lang): Read {
-        val image = InputImage.fromBitmap(bitmap, 0)
+    /**
+     * Throws when ML Kit fails or takes over [timeoutS] seconds. [rotation]: the turn (0, 90, 180, 270) that sets
+     * [bitmap] upright; ML Kit turns it itself, as fast as reading an upright one, where turning a 1920 x 2560 frame
+     * first took 170-210 ms on the phone (2026-10-15). Lines come in the upright frame (ML Kit's corners do not: ReaderPolicy.uprightCorners). [nowMs]: the time of the frame.
+     */
+    fun read(bitmap: Bitmap, rotation: Int, nowMs: Long, lang: Lang): Read {
+        val image = InputImage.fromBitmap(bitmap, rotation)
         val started = System.nanoTime()
         val code = Tasks.await(scanner.process(image), timeoutS, TimeUnit.SECONDS)
             .firstNotNullOfOrNull { it.rawValue?.takeIf { v -> v.isNotBlank() } }
@@ -40,12 +44,17 @@ class ReaderEngine(private val timeoutS: Long = TIMEOUT_S) : Closeable {
         }
         val text = Tasks.await(recognizer.process(image), timeoutS, TimeUnit.SECONDS)
         val ms = (System.nanoTime() - started) / 1_000_000
-        val w = bitmap.width.toFloat()
-        val h = bitmap.height.toFloat()
+        val onSide = rotation % 180 != 0
+        val w = (if (onSide) bitmap.height else bitmap.width).toFloat()
+        val h = (if (onSide) bitmap.width else bitmap.height).toFloat()
         val raw = text.textBlocks.withIndex().flatMap { (b, block) ->
             block.lines.mapNotNull { line ->
                 val corners = line.cornerPoints?.takeIf { it.size == 4 } ?: return@mapNotNull null
-                ReaderPolicy.RawLine(line.text, line.confidence, FloatArray(4) { corners[it].x.toFloat() }, FloatArray(4) { corners[it].y.toFloat() }, b)
+                val (xs, ys) = ReaderPolicy.uprightCorners(
+                    FloatArray(4) { corners[it].x.toFloat() }, FloatArray(4) { corners[it].y.toFloat() },
+                    rotation, bitmap.width.toFloat(), bitmap.height.toFloat(),
+                )
+                ReaderPolicy.RawLine(line.text, line.confidence, xs, ys, b)
             }
         }
         // A page held crooked is set straight, so its lines keep their order.
