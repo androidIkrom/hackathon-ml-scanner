@@ -32,20 +32,30 @@ class ItemFinder(private val context: Context, reach: Reach) : SavedFinder {
     private var segmenter: ModelShelf.Lease<ItemSegmenter>? = null
     private var segmenterTried = false
     private var lastLogMs = 0L
+    /** Where a search's time goes, for the log: squares embedded, things cut out (segmenter and their own embedding). */
+    private var embeds = 0
+    private var embedMs = 0L
+    private var cuts = 0
+    private var cutMs = 0L
 
     override fun find(frame: VisionFrame, only: Long?): List<Found> {
         val bitmap = frame.bitmap ?: return emptyList()
         if (recognizer.isEmpty) return emptyList()
         val started = SystemClock.elapsedRealtime()
+        embeds = 0; embedMs = 0; cuts = 0; cutMs = 0
         val result = search.search(
             frame.detections, bitmap.width, bitmap.height, only,
-            match = { box -> embedder.embed(bitmap, box)?.let { recognizer.identify(it, 0f) } },
-            cut = { square -> cut(bitmap, square) },
+            match = { box -> timed({ embeds++; embedMs += it }) { embedder.embed(bitmap, box) }?.let { recognizer.identify(it, 0f) } },
+            cut = { square -> timed({ cuts++; cutMs += it }) { cut(bitmap, square) } },
         )
         val now = SystemClock.elapsedRealtime()
         if (now - lastLogMs >= LOG_EVERY_MS) {
             lastLogMs = now
-            Log.i(TAG, "Item search: ${result.looked} squares in ${now - started} ms, ${result.log}")
+            Log.i(
+                TAG,
+                "Item search: ${result.looked} squares in ${now - started} ms (embed $embeds x ${embedMs / maxOf(1, embeds)} ms, " +
+                    "cut $cuts x ${cutMs / maxOf(1, cuts)} ms), ${result.log}",
+            )
         }
         return result.hits.mapNotNull { hit ->
             recognizer.nameOf(hit.id)?.let { Found(TagKind.ITEM, hit.id, it, hit.box, hit.detectionIndex, hit.score, hit.outlined) }
@@ -58,6 +68,11 @@ class ItemFinder(private val context: Context, reach: Reach) : SavedFinder {
         val mask = ItemMask.of(answer.values, answer.width, answer.height, square.centerX, square.centerY) ?: return null
         val own = ItemWindows.square(mask.box, bitmap.width, bitmap.height)
         return CutThing(mask.box, own, embedder.embedAlone(bitmap, own, mask)?.let { recognizer.identify(it, 0f) })
+    }
+
+    private inline fun <T> timed(add: (Long) -> Unit, work: () -> T): T {
+        val t = SystemClock.elapsedRealtime()
+        return work().also { add(SystemClock.elapsedRealtime() - t) }
     }
 
     private fun segmenter(): ItemSegmenter? {
