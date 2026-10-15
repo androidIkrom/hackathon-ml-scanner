@@ -108,10 +108,12 @@ dependencies {
 
     implementation 'com.google.mediapipe:tasks-vision:1.0.0'
     implementation 'com.google.mlkit:face-detection:16.1.7'
-    implementation 'org.tensorflow:tensorflow-lite:2.17.0'
+    // LiteRT (TensorFlow Lite's new name), same org.tensorflow.lite API. TFLite 2.17 left out the FP16 hint in the
+    // YOLO model (benchmark_model 48 ms on the CPU with it, the app 132 ms, the phone, 2026-10-15).
+    implementation 'com.google.ai.edge.litert:litert:1.4.2'
     // YOLO26 on the GPU: on the CPU a frame took 379 ms on the phone against Lite2's 234 ms on the GPU.
-    implementation 'org.tensorflow:tensorflow-lite-gpu:2.17.0'
-    implementation 'org.tensorflow:tensorflow-lite-gpu-api:2.17.0'
+    implementation 'com.google.ai.edge.litert:litert-gpu:1.4.2'
+    implementation 'com.google.ai.edge.litert:litert-gpu-api:1.4.2'
     implementation 'com.google.mlkit:text-recognition:16.0.1'
     implementation 'com.google.mlkit:barcode-scanning:17.3.0'
     implementation 'com.google.ar:core:1.49.0'
