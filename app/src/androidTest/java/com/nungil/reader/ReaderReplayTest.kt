@@ -49,14 +49,17 @@ class ReaderReplayTest {
         val offer: String? = null, val full: String? = null,
     )
 
-    private fun replay(scene: String, frames: List<Bitmap>): List<Said> {
+    /** [turn]: each frame is given lying on its side, as the camera gives it, with the turn that sets it upright. */
+    private fun replay(scene: String, frames: List<Bitmap>, turn: Boolean = false): List<Said> {
         val out = mutableListOf<Said>()
         // The emulator has no GPU: a read takes many times longer than on the phone.
         ReaderEngine(timeoutS = 120).use { engine ->
             var t = 0L
             var offeredAt: Long? = null
-            for (frame in frames) {
-                val read = engine.read(frame, t, Lang.EN)
+            for (upright in frames) {
+                val frame = if (turn) sideways(upright) else upright
+                val read = engine.read(frame, if (turn) 90 else 0, t, Lang.EN)
+                if (turn) frame.recycle()
                 if (t == 0L || EVERY_FRAME) {
                     for (l in read.lines) {
                         Log.i(TAG, String.format(java.util.Locale.US, "  line h %.3f c %.2f b %d x %.2f w %.2f y %.2f %s \"%s\"", l.height, l.confidence, l.block, l.centerX, l.width, l.centerY, if (ReaderPolicy.readable(l)) "read" else "dropped", l.text))
@@ -142,6 +145,22 @@ class ReaderReplayTest {
     @Test fun mixedFontsCameraLike() = mixedFonts("page, mixed fonts, soft and noisy") { noisy(blur(styled(MIXED, shiftPx = it % 3)), seed = it) }
 
     /** Other families (handwriting-like, light, condensed, serif monospace) on a dark slide, light letters. */
+    /**
+     * The camera's frame lies on its side and ML Kit is told the turn (making a 1920 x 2560 frame upright took
+     * 170-210 ms on the phone, 2026-10-15): the same lines, in the same order, as from an upright frame.
+     */
+    @Test fun sidewaysFramesAreReadAsUpright() {
+        mixedFonts("page, mixed fonts, sideways", turn = true) { styled(MIXED, shiftPx = it % 3) }
+        mixedFonts("page, mixed fonts, tilted, sideways", turn = true) { tilt(styled(MIXED, shiftPx = it % 3), 7f) }
+        val (w, h) = ReaderEngine.FRAME_WIDTH to ReaderEngine.FRAME_HEIGHT
+        val reads = replay("laptop screen, sideways", List(10) { laptop(w, h, shift = it % 3) }, turn = true)
+        val heard = reads.firstNotNullOfOrNull { it.full }.orEmpty()
+        val at = SCREEN.map { found(heard, it) }
+        assertTrue("not read: ${SCREEN.filterIndexed { i, _ -> at[i] < 0 }} in \"$heard\"", at.count { it >= 0 } >= SCREEN.size * 8 / 10)
+        assertEquals("order in \"$heard\"", at.filter { it >= 0 }.sorted(), at.filter { it >= 0 })
+        assertEquals("code", "https://nungil.app/test", replay("QR code, sideways", List(2) { qr("https://nungil.app/test") }, turn = true).first().code)
+    }
+
     @Test fun otherFamiliesOnADarkSlide() =
         mixedFonts("slide, other families, light on dark", MORE, "Lesson Three") { styled(MORE, shiftPx = it % 3, dark = true) }
 
@@ -169,6 +188,29 @@ class ReaderReplayTest {
         val lines = listOf("Two Columns") + left + right
         val at = lines.map { found(heard, it) }
         assertTrue("not read: ${lines.filterIndexed { i, _ -> at[i] < 0 }} in \"$heard\"", at.all { it >= 0 })
+        assertEquals("order in \"$heard\"", at.sorted(), at)
+    }
+
+    /** A table of numbers is read row by row (the phone, 2026-10-15: it was read column by column). */
+    @Test fun aTableIsReadRowByRow() {
+        val rows = listOf(
+            listOf("", "Before", "Now"), listOf("Frame ready", "300 ms", "25 ms"),
+            listOf("Each second", "1.1", "1.5"), listOf("Processor", "120%", "80%"),
+        )
+        val reads = replay("table", List(10) { shift ->
+            val b = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
+            val c = Canvas(b)
+            c.drawColor(Color.rgb(250, 250, 250))
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(20, 20, 20); textSize = 20f; typeface = Typeface.SANS_SERIF }
+            rows.forEachIndexed { r, row ->
+                row.forEachIndexed { col, cell -> c.drawText(cell, 20f + col * 170f + shift % 3, 150f + r * 40f, paint) }
+            }
+            b
+        })
+        val heard = reads.firstNotNullOf { it.full }
+        val cells = rows.flatten().filter { it.isNotEmpty() }
+        val at = cells.map { found(heard, it) }
+        assertTrue("not read: ${cells.filterIndexed { i, _ -> at[i] < 0 }} in \"$heard\"", at.all { it >= 0 })
         assertEquals("order in \"$heard\"", at.sorted(), at)
     }
 
@@ -209,6 +251,63 @@ class ReaderReplayTest {
         }
     }
 
+    /**
+     * The frame sizes the phone's camera can give near the asked 1440 x 1920 (it has no 1440 x 1920: CameraX gave
+     * 1920 x 2560, 0.3-0.7 s to make upright, 2026-10-15): the laptop screens and the real photos at each, lines read
+     * and OCR time. Measured, not asserted.
+     */
+    @Test fun frameSizesThePhoneCanGive() {
+        val dense = List(36) { SCREEN[it % SCREEN.size] }
+        val assets = InstrumentationRegistry.getInstrumentation().context.assets
+        for ((w, h) in listOf(1200 to 1600, 1440 to 1920, 1920 to 2560)) {
+            for ((name, lines) in listOf("laptop" to SCREEN, "dense" to dense)) {
+                val reads = replay("$name ${w}x$h", List(6) { laptop(w, h, shift = it % 3, lines = lines) })
+                val heard = reads.firstNotNullOfOrNull { it.full }.orEmpty()
+                Log.i(TAG, "size $name ${w}x$h: ${lines.count { found(heard, it) >= 0 }} of ${lines.size} lines read, " +
+                    "OCR ${reads.map { it.ocrMs }.sorted().let { it[it.size / 2] }} ms median")
+            }
+            for (scene in assets.list("photos").orEmpty().sorted()) {
+                val frames = assets.list("photos/$scene").orEmpty().sorted().filter { it.endsWith(".jpg") }.mapNotNull { n ->
+                    assets.open("photos/$scene/$n").use { BitmapFactory.decodeStream(it) }
+                        ?.let { b -> Bitmap.createScaledBitmap(b, w, h, true).also { if (it !== b) b.recycle() } }
+                }
+                val expect = assets.open("photos/$scene/expect.txt").bufferedReader().readLines().filter { it.isNotBlank() }
+                val reads = replay("photo $scene ${w}x$h", List(8) { frames[it % frames.size] })
+                val heard = reads.firstNotNullOfOrNull { it.full }.orEmpty()
+                Log.i(TAG, "size photo $scene ${w}x$h: ${expect.count { found(heard, it) >= 0 }} of ${expect.size} phrases read, " +
+                    "OCR ${reads.map { it.ocrMs }.sorted().let { it[it.size / 2] }} ms median")
+                frames.forEach { it.recycle() }
+            }
+        }
+    }
+
+    /**
+     * The camera's frame lies on its side (1920 x 2560 comes as 2560 x 1920, turned 90°); turning it upright took
+     * 170-210 ms on the phone. ML Kit can be told the turn instead: the time of a read both ways, and the lines read.
+     * Measured, not asserted.
+     */
+    @Test fun mlKitTurnsTheFrameItself() {
+        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
+            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS,
+        )
+        val upright = laptop(1920, 2560, shift = 0)
+        val side = Bitmap.createBitmap(upright, 0, 0, upright.width, upright.height, android.graphics.Matrix().apply { postRotate(-90f) }, true)
+        for (round in 0 until 4) {
+            for ((name, image) in listOf(
+                "upright" to com.google.mlkit.vision.common.InputImage.fromBitmap(upright, 0),
+                "turned by ML Kit" to com.google.mlkit.vision.common.InputImage.fromBitmap(side, 90),
+            )) {
+                val t = System.nanoTime()
+                val text = com.google.android.gms.tasks.Tasks.await(recognizer.process(image))
+                val ms = (System.nanoTime() - t) / 1_000_000
+                val line = text.textBlocks.firstOrNull()?.lines?.firstOrNull()
+                Log.i(TAG, "turn $name round $round: $ms ms, ${SCREEN.count { found(text.text, it) >= 0 }} of ${SCREEN.size} lines, " +
+                    "first line ${line?.boundingBox} corners ${line?.cornerPoints?.joinToString { "${it.x},${it.y}" }} angle ${line?.angle}")
+            }
+        }
+        recognizer.close()
+    }
+
     private fun laptop(w: Int, h: Int, shift: Int, lines: List<String> = SCREEN): Bitmap {
         val screen = Bitmap.createBitmap(1920, 1080, Bitmap.Config.ARGB_8888)
         val c = Canvas(screen)
@@ -228,8 +327,10 @@ class ReaderReplayTest {
         return Bitmap.createScaledBitmap(soft, w, h, true)
     }
 
-    private fun mixedFonts(scene: String, page: List<List<Run>> = MIXED, title: String = "Weekly Notes", frame: (Int) -> Bitmap) {
-        val reads = replay(scene, List(10) { frame(it) })
+    private fun mixedFonts(
+        scene: String, page: List<List<Run>> = MIXED, title: String = "Weekly Notes", turn: Boolean = false, frame: (Int) -> Bitmap,
+    ) {
+        val reads = replay(scene, List(10) { frame(it) }, turn)
         assertTrue("titled ${reads.firstNotNullOfOrNull { it.offer }}", reads.firstNotNullOfOrNull { it.offer }?.contains("'$title'") == true)
         val offer = reads.firstOrNull { it.offer != null }
         assertNotNull("never offered", offer)
@@ -274,6 +375,8 @@ class ReaderReplayTest {
         val missing = mutableListOf<String>()
         // -e scene <name>: that scene only.
         val only = InstrumentationRegistry.getArguments().getString("scene")
+        // -e turn true: each frame lying on its side, as the camera gives it, with the turn told to ML Kit.
+        val turn = InstrumentationRegistry.getArguments().getString("turn") == "true"
         for (scene in assets.list("photos").orEmpty().sorted().filter { only == null || it == only }) {
             val names = assets.list("photos/$scene").orEmpty().sorted()
             // RGB_565: half the memory; six 1440 x 1920 frames in ARGB ran the emulator out of it.
@@ -283,7 +386,7 @@ class ReaderReplayTest {
             }
             val expect = assets.open("photos/$scene/expect.txt").bufferedReader().readLines().filter { it.isNotBlank() }
             // The user says "read" a few reads after the offer: the frames go round until then.
-            val reads = replay("photo: $scene", List(12) { frames[it % frames.size] })
+            val reads = replay("photo: $scene${if (turn) ", sideways" else ""}", List(12) { frames[it % frames.size] }, turn)
             val heard = reads.firstNotNullOfOrNull { it.full }.orEmpty()
             val lost = expect.filter { found(heard, it) < 0 }
             Log.i(TAG, "photo $scene: ${expect.size - lost.size} of ${expect.size} phrases read" + if (lost.isEmpty()) "" else ", not: $lost")
@@ -356,6 +459,10 @@ class ReaderReplayTest {
         for (x in 0 until size) for (y in 0 until size) if (matrix[x, y]) b.setPixel(left + x, top + y, Color.BLACK)
         return b
     }
+
+    /** An upright frame as the back camera gives it: turned a quarter against the clock. */
+    private fun sideways(b: Bitmap): Bitmap =
+        Bitmap.createBitmap(b, 0, 0, b.width, b.height, android.graphics.Matrix().apply { postRotate(-90f) }, true)
 
     private fun tilt(b: Bitmap, degrees: Float): Bitmap {
         val out = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)

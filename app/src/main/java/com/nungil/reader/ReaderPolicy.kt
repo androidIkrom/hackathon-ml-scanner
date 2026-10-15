@@ -54,7 +54,7 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
     }
 
     private val spokenAt = HashMap<String, Long>()
-    private var lastRead: List<String> = emptyList()
+    private var lastRead: List<SeenLine> = emptyList()
     private var waiting: Offer? = null
     private var waitingSince = 0L
 
@@ -66,7 +66,7 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
     val pending: Boolean get() = waiting != null
 
     /**
-     * Text to offer from one read's [lines], or null: only lines also seen in the read before (a one-frame
+     * Text to offer from one read's [lines], or null: only lines also seen in the read before, whole or in part (a one-frame
      * misreading is never offered), and not the text offered last within [offerAgainMs], nor anything while an
      * offer waits for its answer (up to [ANSWER_MS]; the waiting one gathers the lines of each new reading of the
      * same text, [merge]) or while accepted text is being read. Five offers in a minute queued up behind each other (the logs).
@@ -74,8 +74,10 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
      */
     fun found(lines: List<SeenLine>, nowMs: Long): Offer? {
         val now = inOrder(lines)
-        val steady = now.filter { line -> lastRead.any { sameLine(it, line.text) } }
-        lastRead = now.map { it.text }
+        // A piece of a line read whole the read before counts, and the whole of one read in pieces: ML Kit cuts one
+        // line differently from frame to frame (a frame told its turn, the phone, 2026-10-15).
+        val steady = now.filter { line -> lastRead.any { sameLine(it.text, line.text) || covers(it, line) || covers(line, it) } }
+        lastRead = now
         if (waiting != null && nowMs - waitingSince >= ANSWER_MS) waiting = null
         if (steady.isEmpty() || nowMs < quietUntil) return null
         val texts = steady.map { it.text }
@@ -214,6 +216,8 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
 
         /** The words of the first line said when there is no title. */
         const val BEGINNING_WORDS = 6
+        /** A table cell is a few words at most ("272-378 ms", "11.8 kadr/s"). */
+        private const val TABLE_CELL_WORDS = 3
 
         /**
          * The lines of a [width] x [height] frame as on a page held straight: each line's height measured along its
@@ -221,6 +225,19 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
          * crooked made the lines' upright boxes taller than the gaps between them, and lines were read out of order
          * ("Tuesday" before "Monday", replay 2026-10-13).
          */
+        /**
+         * A line's corners in a frame of [width] x [height] lying on its side, turned into the upright frame that
+         * [rotation] degrees clockwise make of it. ML Kit, told the turn, gives its boxes upright but its corners in
+         * the frame as it lies (the phone, 2026-10-15).
+         */
+        fun uprightCorners(xs: FloatArray, ys: FloatArray, rotation: Int, width: Float, height: Float): Pair<FloatArray, FloatArray> =
+            when (rotation) {
+                90 -> FloatArray(xs.size) { height - ys[it] } to xs.copyOf()
+                180 -> FloatArray(xs.size) { width - xs[it] } to FloatArray(ys.size) { height - ys[it] }
+                270 -> ys.copyOf() to FloatArray(xs.size) { width - xs[it] }
+                else -> xs to ys
+            }
+
         fun straighten(lines: List<RawLine>, width: Float, height: Float): List<SeenLine> {
             if (lines.isEmpty()) return emptyList()
             val slant = lines.map { atan2(it.ys[1] - it.ys[0], it.xs[1] - it.xs[0]) }.sorted()[lines.size / 2]
@@ -282,8 +299,35 @@ class ReaderPolicy(private val repeatMs: Long = REPEAT_MS, private val offerAgai
                         right = maxOf(right, box.right)
                     }
                 }
-                columns.flatMap { column -> column.sortedBy { it.top }.flatMap { it.lines } }
+                val cells = columns.map { column -> column.sortedBy { it.top }.flatMap { it.lines } }
+                if (isTable(cells)) levels(cells.flatten()).flatten() else cells.flatten()
             }
+        }
+
+        /**
+         * Columns that are a table, read row by row: a column of short cells with numbers ("272-378 ms", "80%"), and
+         * at least two rows level across columns. A table was read column by column (the phone, 2026-10-15); text in
+         * two columns has long lines and is read one column after the other.
+         */
+        private fun isTable(columns: List<List<SeenLine>>): Boolean {
+            if (columns.size < 2) return false
+            val numbers = columns.any { column ->
+                column.size >= 2 && column.count { wordCount(it.text) <= TABLE_CELL_WORDS && it.text.any(Char::isDigit) } * 3 >= column.size * 2
+            }
+            if (!numbers) return false
+            val column = columns.withIndex().flatMap { (i, c) -> c.map { it to i } }.toMap()
+            return levels(columns.flatten()).count { row -> row.map { column[it] }.distinct().size >= 2 } >= 2
+        }
+
+        /** Lines at one height together, top to bottom; on one height, left to right. */
+        private fun levels(lines: List<SeenLine>): List<List<SeenLine>> {
+            val rows = mutableListOf<MutableList<SeenLine>>()
+            for (line in lines.sortedBy { it.centerY }) {
+                val first = rows.lastOrNull()?.first()
+                if (first != null && abs(line.centerY - first.centerY) < minOf(line.height, first.height) / 2) rows.last() += line
+                else rows += mutableListOf(line)
+            }
+            return rows.map { row -> row.sortedBy { it.centerX } }
         }
 
         /**

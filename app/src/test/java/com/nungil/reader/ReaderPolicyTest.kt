@@ -9,6 +9,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReaderPolicyTest {
+    /** ML Kit, told a frame's turn, gives a line's corners in the frame as it lies (the phone, 2026-10-15). */
+    @Test fun cornersOfASidewaysFrameAreTurnedUpright() {
+        // Upright 1920 x 2560: a line from (247, 862) to (557, 875); the camera's frame is 2560 x 1920, turn 90.
+        val (xs, ys) = ReaderPolicy.uprightCorners(
+            floatArrayOf(860f, 859f, 874f, 875f), floatArrayOf(1667f, 1361f, 1360f, 1666f), rotation = 90, width = 2560f, height = 1920f,
+        )
+        assertEquals(listOf(253f, 559f, 560f, 254f), xs.toList())
+        assertEquals(listOf(860f, 859f, 874f, 875f), ys.toList())
+        // Half a turn and three quarters: back where the corner was.
+        val (x2, y2) = ReaderPolicy.uprightCorners(floatArrayOf(10f), floatArrayOf(20f), rotation = 180, width = 100f, height = 50f)
+        assertEquals(90f to 30f, x2[0] to y2[0])
+        val (x3, y3) = ReaderPolicy.uprightCorners(floatArrayOf(10f), floatArrayOf(20f), rotation = 270, width = 100f, height = 50f)
+        assertEquals(20f to 90f, x3[0] to y3[0])
+        val (x0, y0) = ReaderPolicy.uprightCorners(floatArrayOf(10f), floatArrayOf(20f), rotation = 0, width = 100f, height = 50f)
+        assertEquals(10f to 20f, x0[0] to y0[0])
+    }
+
     @Test fun codesAreCutAtEightyCharacters() {
         assertEquals(80, ReaderPolicy.truncateCode("x".repeat(200)).length)
         assertEquals("short", ReaderPolicy.truncateCode("short"))
@@ -76,6 +93,21 @@ class ReaderPolicyTest {
         p.decline()
         assertNull(p.found(page, 600 + ReaderPolicy.OFFER_AGAIN_MS))
         assertNotNull(p.found(page, 1_200 + ReaderPolicy.OFFER_AGAIN_MS))
+    }
+
+    /**
+     * One line cut into pieces differently in each frame (ML Kit on a frame told its turn, the phone, 2026-10-15):
+     * whole, in two, in three. A piece of a line read whole the read before is seen twice, and the line is read whole.
+     */
+    @Test fun aLineCutDifferentlyEachReadIsStillReadWhole() {
+        fun piece(text: String, x: Float, w: Float) = SeenLine(text, 0.9f, 0.034f, x, 0.26f, width = w)
+        val top = SeenLine("Weekly Notes", 0.9f, 0.07f, 0.4f, 0.11f, width = 0.56f)
+        val whole = listOf(top, piece("Monday: buy fresh bread and milk", 0.40f, 0.68f))
+        val two = listOf(top, piece("Monday: buy fresh bread", 0.31f, 0.49f), piece("and milk", 0.66f, 0.16f))
+        val three = listOf(top, piece("Monday: buy", 0.19f, 0.24f), piece("fresh bread", 0.44f, 0.23f), piece("and milk", 0.67f, 0.18f))
+        val p = ReaderPolicy()
+        listOf(whole, two, three, whole, two, three).forEachIndexed { i, frame -> p.found(frame, i * 600L) }
+        assertEquals("Weekly Notes. Monday: buy fresh bread and milk.", p.accept(4_000)?.joinToString(" "))
     }
 
     @Test fun aLineMisreadOrMissingStillMakesTheSameText() {
@@ -184,6 +216,30 @@ class ReaderPolicyTest {
         assertEquals(
             listOf("Two Columns", "Left column one", "goes on in two", "and ends in three", "Right column one", "goes on in two", "and ends in three", "A footer under both"),
             ReaderPolicy.inOrder(page).map { it.text },
+        )
+    }
+
+    /**
+     * A table is read row by row, not column by column (the phone, 2026-10-15: "Read text: kadrni tayyorlash. Read
+     * text: CPU. 11.8 kadr/s. 22-32 ms. …"): a column of short cells with numbers, its rows level with the others'.
+     */
+    @Test fun aTableIsReadRowByRow() {
+        fun l(text: String, x: Float, y: Float, block: Int, w: Float = 0.15f) = SeenLine(text, 0.9f, 0.03f, x, y, width = w, block = block)
+        val table = listOf(
+            l("Read text: kadrni tayyorlash", 0.2f, 0.2f, 0, w = 0.3f), l("Read text: CPU", 0.15f, 0.3f, 0, w = 0.2f), l("Live", 0.08f, 0.4f, 0, w = 0.06f),
+            l("Oldin", 0.55f, 0.1f, 1), l("272-378 ms", 0.55f, 0.2f, 1), l("93-131%", 0.55f, 0.3f, 1), l("11.8 kadr/s", 0.55f, 0.4f, 1),
+            l("Hozir", 0.8f, 0.1f, 2), l("22-32 ms", 0.8f, 0.2f, 2), l("80%", 0.8f, 0.3f, 2), l("11.3 kadr/s", 0.8f, 0.4f, 2),
+        )
+        assertEquals(
+            listOf(
+                "Oldin", "Hozir", "Read text: kadrni tayyorlash", "272-378 ms", "22-32 ms",
+                "Read text: CPU", "93-131%", "80%", "Live", "11.8 kadr/s", "11.3 kadr/s",
+            ),
+            ReaderPolicy.inOrder(table).map { it.text },
+        )
+        assertEquals(
+            listOf("Oldin Hozir.", "Read text: kadrni tayyorlash 272-378 ms 22-32 ms.", "Read text: CPU 93-131% 80%", "Live 11.8 kadr/s 11.3 kadr/s."),
+            ReaderPolicy.Offer(ReaderPolicy.inOrder(table)).sentences,
         )
     }
 
