@@ -32,7 +32,8 @@ class YoloDetector(context: Context, modelFile: String, wantGpu: Boolean) : Clos
     private var gpu: GpuDelegate? = null
     /** The GPU's compiled model is kept here between starts (3 s a start without it on the phone). */
     private val gpuCache = java.io.File(context.codeCacheDir, "gpu-" + modelFile.substringBeforeLast('.')).apply { mkdirs() }
-    private val gpuToken = modelFile.substringBeforeLast('.') + "-" + modelFileSize(context, modelFile)
+    // "-sustained": the GPU build made for the other preference is not used again.
+    private val gpuToken = modelFile.substringBeforeLast('.') + "-" + modelFileSize(context, modelFile) + "-sustained"
     private val interpreter: Interpreter = open(map(context, modelFile), wantGpu)
 
     /** The model runs on the GPU. */
@@ -67,7 +68,11 @@ class YoloDetector(context: Context, modelFile: String, wantGpu: Boolean) : Clos
             try {
                 val list = CompatibilityList()
                 if (list.isDelegateSupportedOnThisDevice) {
-                    val delegate = GpuDelegate(list.bestOptionsForThisDevice.setSerializationParams(gpuCache.path, gpuToken))
+                    // Sustained speed: a frame after frame, not one answer (64 -> 58 ms, benchmark_model, the phone, 2026-10-15).
+                    val options = list.bestOptionsForThisDevice
+                        .setInferencePreference(GpuDelegate.Options.INFERENCE_PREFERENCE_SUSTAINED_SPEED)
+                        .setSerializationParams(gpuCache.path, gpuToken)
+                    val delegate = GpuDelegate(options)
                     val onGpu = Interpreter(model, Interpreter.Options().addDelegate(delegate))
                     try {
                         // A first frame proves it: some GPUs take the model and fail on it.
