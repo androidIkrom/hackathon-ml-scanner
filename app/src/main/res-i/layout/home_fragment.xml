@@ -25,7 +25,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/ng_gap"
+                android:layout_marginTop="4dp"
                 android:baselineAligned="false"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
@@ -53,15 +53,35 @@
             </LinearLayout>
 
             <!-- Y's clock right under the header; tap to hear the time and date. -->
-            <com.nungil.weather.ClockLabel
-                android:id="@+id/home_clock"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <com.nungil.weather.ClockLabel
+                    android:id="@+id/home_clock"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="start|center_vertical" />
+
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/home_saved"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/home_saved_title"
+                    android:padding="12dp"
+                    android:src="@drawable/ng_ic_saved"
+                    android:tooltipText="@string/home_saved_title"
+                    app:tint="?attr/ngAccentText" />
+            </LinearLayout>
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/ng_gap"
+                android:layout_marginTop="4dp"
                 android:text="@string/home_greeting"
                 android:textAppearance="@style/TextAppearance.Nungil.Body"
                 android:textColor="?attr/ngTextSub" />
@@ -74,7 +94,7 @@
                 android:text="@string/home_headline"
                 android:textAppearance="@style/TextAppearance.Nungil.Display" />
 
-            <!-- The brand picture sits on top of the main card; the two share one rounded outline. -->
+            <!-- Standalone banner below the greeting, separate from the action cards. -->
             <com.google.android.material.imageview.ShapeableImageView
                 android:layout_width="match_parent"
                 android:layout_height="140dp"
@@ -82,17 +102,16 @@
                 android:importantForAccessibility="no"
                 android:scaleType="centerCrop"
                 android:src="@drawable/ng_brand_hero"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.Nungil.TopCorners" />
+                app:shapeAppearanceOverlay="@style/ShapeAppearance.Nungil.Card" />
 
             <com.nungil.design.BigCardView
                 android:id="@+id/home_full_scan"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:ngEmphasis="true"
+                android:layout_marginTop="@dimen/ng_gap"
                 app:ngIcon="@drawable/ng_ic_explore"
                 app:ngSubtitle="@string/home_full_scan_subtitle"
-                app:ngTitle="@string/home_full_scan_title"
-                app:shapeAppearanceOverlay="@style/ShapeAppearance.Nungil.BottomCorners" />
+                app:ngTitle="@string/home_full_scan_title" />
 
             <com.nungil.design.BigCardView
                 android:id="@+id/home_search"
@@ -104,15 +123,6 @@
                 app:ngTitle="@string/home_search_title" />
 
             <com.nungil.design.BigCardView
-                android:id="@+id/home_saved"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="@dimen/ng_gap"
-                app:ngIcon="@drawable/ng_ic_saved"
-                app:ngSubtitle="@string/home_saved_subtitle"
-                app:ngTitle="@string/home_saved_title" />
-
-            <com.nungil.design.BigCardView
                 android:id="@+id/home_live"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -121,6 +131,7 @@
                 app:ngSubtitle="@string/home_live_subtitle"
                 app:ngTitle="@string/home_live_title" />
 
+            <!-- Go somewhere is temporarily disabled on Home.
             <com.nungil.design.BigCardView
                 android:id="@+id/home_go"
                 android:layout_width="match_parent"
@@ -129,6 +140,7 @@
                 app:ngIcon="@drawable/walking_ic_navigation"
                 app:ngSubtitle="@string/home_go_subtitle"
                 app:ngTitle="@string/home_go_title" />
+            -->
 
             <com.nungil.design.BigCardView
                 android:id="@+id/home_walk"
